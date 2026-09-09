@@ -4288,3 +4288,363 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V21 - APPOINTMENT CONFIRMATION & REMINDER CENTER
+   Confirmation statuses + WhatsApp-ready message templates.
+   ========================================================= */
+(function(){
+  const S = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  const REMINDER_STATES = ['Not Sent','Reminder Sent','Confirmed','Patient Replied','Reschedule Requested','No Response'];
+
+  function ensureV21(){
+    if(!Array.isArray(S().appointments)) S().appointments = [];
+    if(!Array.isArray(S().patients)) S().patients = [];
+    S().appointments.forEach(a=>{
+      if(!a.reminderStatus) a.reminderStatus='Not Sent';
+      if(!a.reminderLanguage) a.reminderLanguage='EN';
+      if(!a.lastReminderAt) a.lastReminderAt='';
+    });
+    save();
+  }
+
+  function pname(a){
+    const id=a.patientId||a.patient;
+    const p=(S().patients||[]).find(x=>String(x.id)===String(id));
+    return p ? (p.name||p.fullName||p.patientName||'Patient') : 'Patient';
+  }
+
+  function phone(a){
+    const id=a.patientId||a.patient;
+    const p=(S().patients||[]).find(x=>String(x.id)===String(id));
+    return p ? (p.phone||p.mobile||p.contact||'') : '';
+  }
+
+  function esc(s){
+    return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function formatDate(date){
+    if(!date) return '';
+    const d=new Date(date+'T00:00:00');
+    return d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
+  }
+
+  function reminderText(a,lang){
+    const name=pname(a);
+    const date=formatDate(a.date);
+    const time=a.time||'';
+    const therapist=a.therapist||'';
+    if(lang==='AR'){
+      return `مرحبًا ${name}، نود تذكيركم بموعدكم في مركز أهدافي للتأهيل يوم ${date} الساعة ${time}${therapist?` مع ${therapist}`:''}. يرجى تأكيد الحضور أو إبلاغنا في حال الحاجة إلى تغيير الموعد.`;
+    }
+    return `Hello ${name}, this is a reminder of your appointment at myAIMS Rehabilitation Center on ${date} at ${time}${therapist?` with ${therapist}`:''}. Please confirm your attendance or let us know if you need to reschedule.`;
+  }
+
+  function modalRoot(){
+    let r=document.getElementById('v21-modal');
+    if(!r){
+      r=document.createElement('div');
+      r.id='v21-modal';
+      document.body.appendChild(r);
+    }
+    return r;
+  }
+
+  window.openV21Reminder=function(id){
+    ensureV21();
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(id));
+    if(!a) return;
+    const r=modalRoot();
+    r.className='open';
+
+    r.innerHTML=`
+      <div class="v21-backdrop" onclick="closeV21Modal()"></div>
+      <section class="v21-dialog">
+        <div class="v21-head">
+          <div>
+            <small>APPOINTMENT REMINDER</small>
+            <h2>${esc(pname(a))}</h2>
+            <p>${esc(a.date)} · ${esc(a.time)} · ${esc(a.therapist||'')}</p>
+          </div>
+          <button onclick="closeV21Modal()">×</button>
+        </div>
+
+        <div class="v21-summary">
+          <div><small>Status</small><b>${esc(a.status||'Scheduled')}</b></div>
+          <div><small>Reminder</small><b>${esc(a.reminderStatus||'Not Sent')}</b></div>
+          <div><small>Phone</small><b>${esc(phone(a)||'—')}</b></div>
+        </div>
+
+        <div class="v21-lang">
+          <button class="${a.reminderLanguage!=='AR'?'active':''}" onclick="setV21Lang('${a.id}','EN')">English</button>
+          <button class="${a.reminderLanguage==='AR'?'active':''}" onclick="setV21Lang('${a.id}','AR')">العربية</button>
+        </div>
+
+        <label class="v21-message-label">
+          <span>Reminder Message</span>
+          <textarea id="v21-message" rows="6">${esc(reminderText(a,a.reminderLanguage||'EN'))}</textarea>
+        </label>
+
+        <div class="v21-status-grid">
+          ${REMINDER_STATES.map(s=>`
+            <button class="${a.reminderStatus===s?'active':''}" onclick="setV21ReminderStatus('${a.id}','${s}')">${s}</button>
+          `).join('')}
+        </div>
+
+        <div class="v21-footer">
+          <button class="secondary" onclick="copyV21Message()">Copy Message</button>
+          <button class="primary" onclick="markV21Sent('${a.id}')">Mark Reminder Sent</button>
+        </div>
+      </section>`;
+  };
+
+  window.closeV21Modal=function(){
+    const r=document.getElementById('v21-modal');
+    if(r) r.className='';
+  };
+
+  window.setV21Lang=function(id,lang){
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(id));
+    if(!a) return;
+    a.reminderLanguage=lang;
+    save();
+    openV21Reminder(id);
+  };
+
+  window.setV21ReminderStatus=function(id,status){
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(id));
+    if(!a || !REMINDER_STATES.includes(status)) return;
+    a.reminderStatus=status;
+    if(status==='Confirmed' && a.status==='Scheduled') a.status='Confirmed';
+    save();
+    if(typeof window.logAudit==='function'){
+      window.logAudit('Reminder Status','Appointments',`${pname(a)} — ${status}`);
+    }
+    openV21Reminder(id);
+    if(typeof window.renderV16Timeline==='function') try{window.renderV16Timeline();}catch(e){}
+    renderV21ReminderStrip();
+  };
+
+  window.markV21Sent=function(id){
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(id));
+    if(!a) return;
+    a.reminderStatus='Reminder Sent';
+    a.lastReminderAt=new Date().toISOString();
+    save();
+    if(typeof window.logAudit==='function'){
+      window.logAudit('Send Reminder','Appointments',`${pname(a)} — ${a.date} ${a.time}`);
+    }
+    openV21Reminder(id);
+    renderV21ReminderStrip();
+  };
+
+  window.copyV21Message=async function(){
+    const txt=document.getElementById('v21-message')?.value || '';
+    try{
+      await navigator.clipboard.writeText(txt);
+      alert('Reminder message copied.');
+    }catch(e){
+      const ta=document.getElementById('v21-message');
+      if(ta){ ta.select(); document.execCommand('copy'); alert('Reminder message copied.'); }
+    }
+  };
+
+  function todayPlus(days){
+    const d=new Date();
+    d.setDate(d.getDate()+days);
+    return d.toISOString().slice(0,10);
+  }
+
+  function upcoming(){
+    const dates=[todayPlus(0),todayPlus(1)];
+    return (S().appointments||[])
+      .filter(a=>dates.includes(a.date))
+      .filter(a=>!['Cancelled','Completed','No Show'].includes(a.status||'Scheduled'))
+      .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  }
+
+  window.openV21ReminderCenter=function(){
+    ensureV21();
+    const rows=upcoming();
+    const r=modalRoot();
+    r.className='open';
+    r.innerHTML=`
+      <div class="v21-backdrop" onclick="closeV21Modal()"></div>
+      <section class="v21-dialog wide">
+        <div class="v21-head">
+          <div>
+            <small>REMINDER CENTER</small>
+            <h2>Today & Tomorrow</h2>
+            <p>Track confirmations and reminder follow-up.</p>
+          </div>
+          <button onclick="closeV21Modal()">×</button>
+        </div>
+
+        <div class="v21-center-list">
+          ${rows.length ? rows.map(a=>`
+            <article class="v21-reminder-row">
+              <div class="v21-r-time">
+                <b>${esc(a.time||'')}</b>
+                <small>${a.date===todayPlus(0)?'Today':'Tomorrow'}</small>
+              </div>
+              <div class="v21-r-main">
+                <b>${esc(pname(a))}</b>
+                <small>${esc(a.therapist||'Unassigned')} · ${esc(a.visitType||'Session')}</small>
+              </div>
+              <span class="v21-rem-state ${String(a.reminderStatus||'Not Sent').toLowerCase().replace(/\s+/g,'-')}">${esc(a.reminderStatus||'Not Sent')}</span>
+              <button onclick="openV21Reminder('${a.id}')">Open</button>
+            </article>
+          `).join('') : `<div class="v21-empty">No upcoming appointments for today or tomorrow.</div>`}
+        </div>
+      </section>`;
+  };
+
+  function renderV21ReminderStrip(){
+    const page=document.getElementById('page-appointments');
+    if(!page) return;
+
+    let strip=document.getElementById('v21-reminder-strip');
+    if(!strip){
+      strip=document.createElement('div');
+      strip.id='v21-reminder-strip';
+      strip.className='v21-reminder-strip';
+      const wait=document.getElementById('v20-wait-strip');
+      if(wait) wait.insertAdjacentElement('afterend',strip);
+      else {
+        const timeline=document.getElementById('v16-timeline');
+        if(timeline) timeline.insertAdjacentElement('afterend',strip);
+      }
+    }
+
+    const rows=upcoming();
+    const notSent=rows.filter(a=>(a.reminderStatus||'Not Sent')==='Not Sent').length;
+    const requested=rows.filter(a=>a.reminderStatus==='Reschedule Requested').length;
+
+    if(!rows.length){
+      strip.style.display='none';
+      return;
+    }
+
+    strip.style.display='flex';
+    strip.innerHTML=`
+      <div>
+        <small>REMINDER CENTER</small>
+        <b>${rows.length}</b>
+        <span>${notSent} not sent${requested?` · ${requested} reschedule request${requested>1?'s':''}`:''}</span>
+      </div>
+      <button onclick="openV21ReminderCenter()">Open Reminder Center</button>`;
+  }
+
+  function installButtons(){
+    const controls=document.querySelector('#page-appointments #v16-timeline .v16-controls');
+    if(controls && !document.getElementById('v21-reminder-btn')){
+      const btn=document.createElement('button');
+      btn.id='v21-reminder-btn';
+      btn.className='v21-toolbar-btn';
+      btn.textContent='Reminders';
+      btn.onclick=openV21ReminderCenter;
+      controls.prepend(btn);
+    }
+  }
+
+  function enhanceEvents(){
+    document.querySelectorAll('#page-appointments .v16-event').forEach(btn=>{
+      if(btn.dataset.v21Badge==='1') return;
+      btn.dataset.v21Badge='1';
+
+      const onclick=btn.getAttribute('onclick')||'';
+      const m=onclick.match(/openV16Appointment\('([^']+)'\)/);
+      if(!m) return;
+      const a=(S().appointments||[]).find(x=>String(x.id)===String(m[1]));
+      if(!a) return;
+
+      const badge=document.createElement('span');
+      badge.className='v21-event-reminder '+String(a.reminderStatus||'Not Sent').toLowerCase().replace(/\s+/g,'-');
+      badge.textContent =
+        a.reminderStatus==='Confirmed' ? '✓ Confirmed' :
+        a.reminderStatus==='Reminder Sent' ? 'Reminder Sent' :
+        a.reminderStatus==='Reschedule Requested' ? 'Reschedule' :
+        '';
+      if(badge.textContent) btn.appendChild(badge);
+    });
+  }
+
+  function enhanceSidePanel(){
+    const panel=document.querySelector('#v16-shade.open .v16-panel');
+    if(!panel || panel.querySelector('.v21-side-reminder')) return;
+
+    const head=panel.querySelector('.v16-panel-head');
+    const text=panel.innerHTML;
+    const m=text.match(/updateAppointmentStatusPro\('([^']+)'/);
+    if(!m) return;
+    const id=m[1];
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(id));
+    if(!a) return;
+
+    const box=document.createElement('div');
+    box.className='v21-side-reminder';
+    box.innerHTML=`
+      <div>
+        <small>REMINDER</small>
+        <b>${esc(a.reminderStatus||'Not Sent')}</b>
+      </div>
+      <button onclick="openV21Reminder('${a.id}')">Reminder</button>`;
+    if(head) head.insertAdjacentElement('afterend',box);
+  }
+
+  function css(){
+    if(document.getElementById('v21-css')) return;
+    const st=document.createElement('style');
+    st.id='v21-css';
+    st.textContent=`
+      #v21-modal{display:none}
+      #v21-modal.open{display:block;position:fixed;inset:0;z-index:100003}
+      .v21-backdrop{position:absolute;inset:0;background:rgba(12,31,37,.46);backdrop-filter:blur(3px)}
+      .v21-dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(690px,95vw);max-height:92vh;overflow:auto;background:#fff;border-radius:19px;padding:22px;box-shadow:0 30px 90px rgba(0,0,0,.24)}
+      .v21-dialog.wide{width:min(860px,95vw)}
+      .v21-head{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid #e6edef;padding-bottom:15px;margin-bottom:16px}
+      .v21-head small{font-size:9px;letter-spacing:1.5px;font-weight:800;color:#b68a3b}.v21-head h2{margin:4px 0;color:#173f49}.v21-head p{margin:0;font-size:12px;color:#78898e}
+      .v21-head>button{border:0;background:#f1f5f6;width:34px;height:34px;border-radius:50%;font-size:22px;cursor:pointer}
+      .v21-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:13px}.v21-summary>div{border:1px solid #e3eaec;border-radius:10px;padding:10px}.v21-summary small,.v21-summary b{display:block}.v21-summary small{font-size:9px;color:#8a989d}.v21-summary b{font-size:11px;color:#31545c;margin-top:3px}
+      .v21-lang{display:flex;gap:6px;margin-bottom:10px}.v21-lang button{border:1px solid #d9e4e7;background:#fff;border-radius:8px;padding:7px 10px;cursor:pointer}.v21-lang button.active{background:#174f5b;color:#fff;border-color:#174f5b}
+      .v21-message-label{display:flex;flex-direction:column;gap:6px}.v21-message-label span{font-size:11px;font-weight:700;color:#536b72}.v21-message-label textarea{border:1px solid #d9e4e7;border-radius:10px;padding:11px;font:inherit;line-height:1.55}
+      .v21-status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px}.v21-status-grid button{border:1px solid #dfe7e9;background:#fff;border-radius:8px;padding:8px;font-size:10px;cursor:pointer}.v21-status-grid button.active{background:#e8f2f4;border-color:#174f5b;color:#174f5b;font-weight:800}
+      .v21-footer{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e8edef;margin-top:14px;padding-top:14px}.v21-footer button{border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}.v21-footer .secondary{border:1px solid #d9e3e6;background:#fff;color:#385961}.v21-footer .primary{border:1px solid #c99a42;background:#c99a42;color:#fff}
+      .v21-toolbar-btn{height:38px!important;border:1px solid #d9e4e7!important;background:#fff!important;color:#31545c!important;border-radius:9px!important;padding:0 12px!important;font-weight:700;cursor:pointer}
+      .v21-reminder-strip{display:flex;align-items:center;justify-content:space-between;gap:15px;background:#fff;border:1px solid #dfe8ea;border-radius:13px;padding:13px 15px;margin:0 0 16px}.v21-reminder-strip small,.v21-reminder-strip b,.v21-reminder-strip span{display:block}.v21-reminder-strip small{font-size:9px;color:#a17e3d;font-weight:800;letter-spacing:1px}.v21-reminder-strip b{font-size:20px;color:#173f49;margin:2px 0}.v21-reminder-strip span{font-size:10px;color:#7d8c91}.v21-reminder-strip button{border:1px solid #d9e4e7;background:#fff;border-radius:8px;padding:8px 11px;cursor:pointer}
+      .v21-center-list{display:grid;gap:8px}.v21-reminder-row{display:grid;grid-template-columns:75px 1fr auto 64px;gap:10px;align-items:center;border:1px solid #e2eaec;border-radius:11px;padding:10px}.v21-r-time b,.v21-r-time small,.v21-r-main b,.v21-r-main small{display:block}.v21-r-time b{font-size:14px}.v21-r-time small,.v21-r-main small{font-size:9px;color:#849397}.v21-r-main b{font-size:12px;color:#294d55}
+      .v21-rem-state{font-size:9px;border-radius:999px;padding:5px 8px;background:#f0f3f4;color:#61747a}.v21-rem-state.confirmed{background:#e9f7f0;color:#247055}.v21-rem-state.reminder-sent{background:#eef4ff;color:#4a69a9}.v21-rem-state.reschedule-requested{background:#fff2df;color:#9a6812}.v21-reminder-row>button{border:1px solid #d9e4e7;background:#fff;border-radius:8px;padding:7px;cursor:pointer}
+      .v21-event-reminder{display:block;margin-top:3px;font-size:7px;font-weight:800;color:#5a6d72}.v21-event-reminder.confirmed{color:#247055}.v21-event-reminder.reschedule-requested{color:#9a6812}
+      .v21-side-reminder{display:flex;align-items:center;justify-content:space-between;border:1px solid #e2eaec;background:#f8fbfb;border-radius:10px;padding:10px;margin:12px 0}.v21-side-reminder small,.v21-side-reminder b{display:block}.v21-side-reminder small{font-size:8px;color:#8a989d}.v21-side-reminder b{font-size:11px;color:#31545c;margin-top:2px}.v21-side-reminder button{border:1px solid #d9e4e7;background:#fff;border-radius:8px;padding:7px 9px;cursor:pointer}
+      .v21-empty{text-align:center;padding:35px;color:#8a989d}
+      @media(max-width:680px){.v21-dialog{padding:15px}.v21-summary{grid-template-columns:1fr}.v21-status-grid{grid-template-columns:1fr 1fr}.v21-reminder-row{grid-template-columns:60px 1fr}.v21-rem-state,.v21-reminder-row>button{grid-column:auto}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    installButtons();
+    renderV21ReminderStrip();
+    enhanceEvents();
+    enhanceSidePanel();
+  }
+
+  function init(){
+    ensureV21();
+    css();
+    setTimeout(repair,350);
+
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v21t);
+      window.__v21t=setTimeout(repair,40);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
