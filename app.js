@@ -4943,3 +4943,384 @@ render();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
 })();
+
+
+/* =========================================================
+   myAIMS V23 - SMART PATIENT PICKER + QUICK NEW PATIENT
+   Search existing patients by name/mobile or create a new
+   patient directly from the New Appointment window.
+   Also adds a safe bridge so V7+ modules use the real db.
+   ========================================================= */
+(function(){
+
+  /* ---------- Compatibility bridge for cumulative modules ---------- */
+  try{
+    Object.defineProperty(window,'state',{
+      configurable:true,
+      get:function(){ return db; },
+      set:function(v){ db=v||db; try{save();}catch(e){} }
+    });
+    Object.defineProperty(window,'appState',{
+      configurable:true,
+      get:function(){ return db; },
+      set:function(v){ db=v||db; try{save();}catch(e){} }
+    });
+    window.saveState=function(){ save(); };
+  }catch(e){
+    window.state=db;
+    window.appState=db;
+    window.saveState=save;
+  }
+
+  function pName(p){ return p ? (p.name||p.fullName||p.patientName||'Patient') : 'Patient'; }
+  function pPhone(p){ return p ? (p.phone||p.mobile||p.contact||'') : ''; }
+  function cleanPhone(s){ return String(s||'').replace(/[^\d+]/g,'').trim(); }
+  function esc23(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function nextPatientId(){
+    const nums=(db.patients||[]).map(p=>{
+      const m=String(p.id||'').match(/(\d+)$/);
+      return m?Number(m[1]):0;
+    });
+    return 'P-'+String(Math.max(1000,...nums)+1);
+  }
+
+  function patientById(id){
+    return (db.patients||[]).find(p=>String(p.id)===String(id));
+  }
+
+  function pickerHtml(){
+    return `
+      <div id="v23-picker" class="v23-picker">
+        <div class="v23-search-wrap">
+          <span class="v23-search-icon">⌕</span>
+          <input id="v23-patient-search"
+                 type="text"
+                 autocomplete="off"
+                 placeholder="Search patient name or mobile..."
+                 oninput="renderV23PatientResults()"
+                 onfocus="renderV23PatientResults()">
+          <button type="button" class="v23-add-mini" onclick="openV23QuickPatient()">+ New Patient</button>
+        </div>
+
+        <div id="v23-selected" class="v23-selected" style="display:none"></div>
+        <div id="v23-results" class="v23-results"></div>
+      </div>`;
+  }
+
+  function enhanceAppointmentModal(){
+    const select=document.getElementById('v18-patient');
+    if(!select || select.dataset.v23Enhanced==='1') return;
+
+    select.dataset.v23Enhanced='1';
+
+    const label=select.closest('label');
+    if(!label) return;
+
+    const selectedValue=select.value;
+    select.style.display='none';
+
+    const title=label.querySelector(':scope > span');
+    if(title) title.innerHTML='Patient <small class="v23-required">Required</small>';
+
+    const holder=document.createElement('div');
+    holder.innerHTML=pickerHtml();
+    label.appendChild(holder.firstElementChild);
+
+    if(selectedValue){
+      selectV23Patient(selectedValue);
+    }else{
+      renderV23PatientResults();
+    }
+  }
+
+  window.renderV23PatientResults=function(){
+    const input=document.getElementById('v23-patient-search');
+    const box=document.getElementById('v23-results');
+    if(!input || !box) return;
+
+    const q=input.value.trim().toLowerCase();
+    let list=(db.patients||[]).filter(p=>{
+      if(!q) return true;
+      return pName(p).toLowerCase().includes(q) ||
+             pPhone(p).toLowerCase().includes(q) ||
+             String(p.id||'').toLowerCase().includes(q);
+    }).slice(0,8);
+
+    if(!list.length){
+      box.innerHTML=`
+        <div class="v23-no-results">
+          <b>No patient found</b>
+          <span>Create a new patient without leaving this appointment.</span>
+          <button type="button" onclick="openV23QuickPatient('${esc23(input.value)}')">+ Add New Patient</button>
+        </div>`;
+      box.classList.add('open');
+      return;
+    }
+
+    box.innerHTML=list.map(p=>`
+      <button type="button" class="v23-result" onclick="selectV23Patient('${esc23(p.id)}')">
+        <span class="v23-avatar">${esc23(pName(p).split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase())}</span>
+        <span class="v23-result-copy">
+          <b>${esc23(pName(p))}</b>
+          <small>${esc23(pPhone(p)||'No mobile')} · ${esc23(p.id||'')}</small>
+        </span>
+        <span class="v23-arrow">›</span>
+      </button>`).join('');
+    box.classList.add('open');
+  };
+
+  window.selectV23Patient=function(id){
+    const p=patientById(id);
+    const select=document.getElementById('v18-patient');
+    const selected=document.getElementById('v23-selected');
+    const results=document.getElementById('v23-results');
+    const input=document.getElementById('v23-patient-search');
+    if(!p || !select || !selected) return;
+
+    // Ensure V18 hidden select contains the patient ID.
+    let opt=[...select.options].find(o=>String(o.value)===String(id));
+    if(!opt){
+      opt=document.createElement('option');
+      opt.value=id;
+      opt.textContent=pName(p);
+      select.appendChild(opt);
+    }
+    select.value=id;
+
+    selected.style.display='flex';
+    selected.innerHTML=`
+      <span class="v23-avatar large">${esc23(pName(p).split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase())}</span>
+      <div>
+        <small>SELECTED PATIENT</small>
+        <b>${esc23(pName(p))}</b>
+        <span>${esc23(pPhone(p)||'No mobile')} · ${esc23(p.id)}</span>
+      </div>
+      <button type="button" onclick="clearV23Patient()">Change</button>`;
+    if(input) input.value='';
+    if(results){ results.innerHTML=''; results.classList.remove('open'); }
+  };
+
+  window.clearV23Patient=function(){
+    const select=document.getElementById('v18-patient');
+    const selected=document.getElementById('v23-selected');
+    const input=document.getElementById('v23-patient-search');
+    if(select) select.value='';
+    if(selected) selected.style.display='none';
+    if(input){ input.value=''; input.focus(); }
+    renderV23PatientResults();
+  };
+
+  window.openV23QuickPatient=function(prefill){
+    let root=document.getElementById('v23-quick-patient');
+    if(!root){
+      root=document.createElement('div');
+      root.id='v23-quick-patient';
+      document.body.appendChild(root);
+    }
+
+    let namePrefill='';
+    let phonePrefill='';
+    const val=String(prefill||'').trim();
+    if(val){
+      if(/[0-9]{5,}/.test(val)) phonePrefill=val;
+      else namePrefill=val;
+    }
+
+    root.className='open';
+    root.innerHTML=`
+      <div class="v23-qp-back" onclick="closeV23QuickPatient()"></div>
+      <section class="v23-qp-card">
+        <div class="v23-qp-head">
+          <div>
+            <small>QUICK PATIENT</small>
+            <h3>Add New Patient</h3>
+            <p>Only essential information is required now. Complete the patient profile later.</p>
+          </div>
+          <button type="button" onclick="closeV23QuickPatient()">×</button>
+        </div>
+
+        <label>
+          <span>Patient Name *</span>
+          <input id="v23-new-name" type="text" value="${esc23(namePrefill)}" placeholder="Full name" autofocus>
+        </label>
+
+        <label>
+          <span>Mobile Number *</span>
+          <input id="v23-new-phone" type="tel" value="${esc23(phonePrefill)}" placeholder="+973 3XXX XXXX" oninput="checkV23Duplicate()">
+        </label>
+
+        <div id="v23-duplicate"></div>
+
+        <div class="v23-qp-actions">
+          <button type="button" class="secondary" onclick="closeV23QuickPatient()">Cancel</button>
+          <button type="button" class="primary" onclick="saveV23QuickPatient()">Save & Select Patient</button>
+        </div>
+      </section>`;
+
+    setTimeout(()=>{
+      document.getElementById(namePrefill?'v23-new-phone':'v23-new-name')?.focus();
+      checkV23Duplicate();
+    },50);
+  };
+
+  window.closeV23QuickPatient=function(){
+    const x=document.getElementById('v23-quick-patient');
+    if(x) x.className='';
+  };
+
+  window.checkV23Duplicate=function(){
+    const phone=cleanPhone(document.getElementById('v23-new-phone')?.value);
+    const box=document.getElementById('v23-duplicate');
+    if(!box) return;
+
+    if(!phone || phone.replace(/\D/g,'').length<6){
+      box.innerHTML='';
+      return;
+    }
+
+    const existing=(db.patients||[]).find(p=>cleanPhone(pPhone(p))===phone);
+    if(existing){
+      box.innerHTML=`
+        <div class="v23-dup-card">
+          <span>!</span>
+          <div>
+            <b>This mobile already exists</b>
+            <small>${esc23(pName(existing))} · ${esc23(existing.id)}</small>
+          </div>
+          <button type="button" onclick="useV23Existing('${esc23(existing.id)}')">Use Patient</button>
+        </div>`;
+    }else{
+      box.innerHTML=`<div class="v23-available">✓ Mobile number is available</div>`;
+    }
+  };
+
+  window.useV23Existing=function(id){
+    closeV23QuickPatient();
+    selectV23Patient(id);
+  };
+
+  window.saveV23QuickPatient=function(){
+    const name=document.getElementById('v23-new-name')?.value.trim();
+    const phoneRaw=document.getElementById('v23-new-phone')?.value.trim();
+    const phone=cleanPhone(phoneRaw);
+
+    if(!name || !phoneRaw){
+      alert('Please enter patient name and mobile number.');
+      return;
+    }
+
+    const duplicate=(db.patients||[]).find(p=>cleanPhone(pPhone(p))===phone);
+    if(duplicate){
+      if(confirm(`This mobile belongs to ${pName(duplicate)}. Use the existing patient instead?`)){
+        useV23Existing(duplicate.id);
+      }
+      return;
+    }
+
+    const patient={
+      id:nextPatientId(),
+      name:name,
+      phone:phoneRaw,
+      status:'Active',
+      createdAt:new Date().toISOString(),
+      createdFrom:'Appointment Quick Add'
+    };
+
+    db.patients.push(patient);
+    save();
+
+    try{ render(); }catch(e){}
+
+    // Restore the appointment modal enhancements after global render.
+    setTimeout(()=>{
+      enhanceAppointmentModal();
+      const select=document.getElementById('v18-patient');
+      if(select){
+        let opt=[...select.options].find(o=>String(o.value)===String(patient.id));
+        if(!opt){
+          opt=document.createElement('option');
+          opt.value=patient.id;
+          opt.textContent=patient.name;
+          select.appendChild(opt);
+        }
+      }
+      selectV23Patient(patient.id);
+    },40);
+
+    if(typeof window.logAudit==='function'){
+      try{window.logAudit('Quick Add Patient','Patients',patient.name);}catch(e){}
+    }
+
+    closeV23QuickPatient();
+  };
+
+  /* ---------- Replace V18 patient dropdown after opening modal ---------- */
+  const originalOpenV18=window.openV18Appointment;
+  if(typeof originalOpenV18==='function'){
+    window.openV18Appointment=function(){
+      originalOpenV18.apply(this,arguments);
+      setTimeout(enhanceAppointmentModal,30);
+    };
+  }
+
+  /* ---------- Also enhance any V18 modal already visible ---------- */
+  function repair(){
+    enhanceAppointmentModal();
+  }
+
+  function css(){
+    if(document.getElementById('v23-css')) return;
+    const st=document.createElement('style');
+    st.id='v23-css';
+    st.textContent=`
+      .v23-required{font-size:7px;color:#b58b43;font-weight:800;margin-left:5px}
+      .v23-picker{position:relative;width:100%;margin-top:2px}
+      .v23-search-wrap{position:relative;display:grid;grid-template-columns:28px 1fr auto;align-items:center;border:1px solid #d9e4e7;background:#fff;border-radius:11px;min-height:44px;overflow:hidden;transition:.18s}
+      .v23-search-wrap:focus-within{border-color:#174f5b;box-shadow:0 0 0 3px rgba(23,79,91,.07)}
+      .v23-search-icon{display:grid;place-items:center;font-size:18px;color:#7f9297}
+      .v23-search-wrap input{border:0!important;outline:0!important;box-shadow:none!important;padding:10px 4px!important;width:100%;min-width:0;background:transparent!important}
+      .v23-add-mini{height:32px;margin-right:5px;border:1px solid #d8e2e5;background:#f8fbfb;color:#31545c;border-radius:8px;padding:0 9px;font-size:9px;font-weight:800;cursor:pointer;white-space:nowrap}
+      .v23-add-mini:hover{border-color:#c99a42;color:#9a722d}
+      .v23-results{display:none;position:absolute;left:0;right:0;top:49px;z-index:100006;background:#fff;border:1px solid #dce6e8;border-radius:12px;box-shadow:0 16px 35px rgba(27,62,70,.14);padding:5px;max-height:275px;overflow:auto}
+      .v23-results.open{display:block}
+      .v23-result{width:100%;display:grid;grid-template-columns:34px 1fr 14px;align-items:center;gap:9px;border:0;background:#fff;border-radius:9px;padding:8px;text-align:left;cursor:pointer}
+      .v23-result:hover{background:#f4f8f9}
+      .v23-avatar{width:32px;height:32px;border-radius:9px;background:#174f5b;color:#fff;display:grid;place-items:center;font-size:8px;font-weight:900}
+      .v23-avatar.large{width:38px;height:38px;border-radius:11px}
+      .v23-result-copy b,.v23-result-copy small{display:block}.v23-result-copy b{font-size:10px;color:#294e57}.v23-result-copy small{font-size:8px;color:#89979b;margin-top:2px}
+      .v23-arrow{color:#a2adb0}
+      .v23-selected{margin-top:7px;border:1px solid #dce7e9;background:#f8fbfb;border-radius:11px;padding:8px;align-items:center;gap:9px}
+      .v23-selected>div{flex:1}.v23-selected small,.v23-selected b,.v23-selected span{display:block}.v23-selected small{font-size:7px;color:#b78c3e;font-weight:900;letter-spacing:.8px}.v23-selected b{font-size:10px;color:#31545c;margin:2px 0}.v23-selected span{font-size:8px;color:#87969a}
+      .v23-selected>button{border:1px solid #d9e4e7;background:#fff;border-radius:7px;padding:6px 8px;color:#49656d;font-size:8px;font-weight:800;cursor:pointer}
+      .v23-no-results{text-align:center;padding:18px 10px}.v23-no-results b,.v23-no-results span{display:block}.v23-no-results b{font-size:10px;color:#36565e}.v23-no-results span{font-size:8px;color:#8d9a9e;margin:4px 0 10px}.v23-no-results button{border:1px solid #c99a42;background:#fff8ea;color:#936c25;border-radius:8px;padding:7px 10px;font-size:9px;font-weight:800;cursor:pointer}
+
+      #v23-quick-patient{display:none}
+      #v23-quick-patient.open{display:block;position:fixed;inset:0;z-index:100020}
+      .v23-qp-back{position:absolute;inset:0;background:rgba(14,34,40,.43);backdrop-filter:blur(3px)}
+      .v23-qp-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(430px,94vw);background:#fff;border-radius:18px;padding:20px;box-shadow:0 28px 80px rgba(0,0,0,.22)}
+      .v23-qp-head{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e5ecee;padding-bottom:13px;margin-bottom:15px}
+      .v23-qp-head small{font-size:8px;color:#b78c3e;font-weight:900;letter-spacing:1.3px}.v23-qp-head h3{margin:3px 0;color:#294e57}.v23-qp-head p{margin:0;font-size:9px;line-height:1.45;color:#829196}
+      .v23-qp-head>button{border:0;background:#f1f4f5;width:31px;height:31px;border-radius:50%;font-size:19px;cursor:pointer}
+      .v23-qp-card>label{display:flex;flex-direction:column;gap:5px;margin:10px 0}.v23-qp-card>label span{font-size:9px;font-weight:800;color:#536c73}.v23-qp-card>label input{border:1px solid #d9e4e7;border-radius:9px;padding:10px;font:inherit}
+      .v23-qp-actions{display:flex;justify-content:flex-end;gap:7px;border-top:1px solid #e7edef;margin-top:14px;padding-top:13px}.v23-qp-actions button{border-radius:8px;padding:9px 11px;font-weight:800;font-size:9px;cursor:pointer}.v23-qp-actions .secondary{border:1px solid #d9e4e7;background:#fff;color:#48636a}.v23-qp-actions .primary{border:1px solid #c99a42;background:#c99a42;color:#fff}
+      .v23-dup-card{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;border:1px solid #f0d4b1;background:#fff8ed;border-radius:9px;padding:8px;margin-top:8px}.v23-dup-card>span{width:26px;height:26px;border-radius:50%;background:#e9a84d;color:#fff;display:grid;place-items:center;font-weight:900}.v23-dup-card b,.v23-dup-card small{display:block}.v23-dup-card b{font-size:9px;color:#845b22}.v23-dup-card small{font-size:8px;color:#9a7e5a;margin-top:2px}.v23-dup-card button{border:1px solid #e1be88;background:#fff;border-radius:7px;padding:6px 8px;color:#845b22;font-size:8px;font-weight:800;cursor:pointer}
+      .v23-available{font-size:8px;color:#29765a;background:#edf8f2;border-radius:8px;padding:7px 9px;margin-top:8px}
+      @media(max-width:620px){.v23-search-wrap{grid-template-columns:27px 1fr}.v23-add-mini{grid-column:1/-1;margin:0 6px 6px;height:30px}.v23-results{top:79px}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function init(){
+    css();
+    setTimeout(repair,250);
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v23repair);
+      window.__v23repair=setTimeout(repair,40);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
