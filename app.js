@@ -6301,3 +6301,535 @@ render();
   else init();
 
 })();
+
+
+/* =========================================================
+   myAIMS V26 - INTERACTIVE BODY MAP
+   Front / Back visual body map for clinical documentation.
+   Click a body region -> auto-select Right/Left area.
+   Supports pain severity per area and syncs with V24 notes.
+   ========================================================= */
+(function(){
+
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{ if(typeof window.saveState==='function') window.saveState(); };
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // Keeps local selection state while V24 modal is open.
+  window.__v26BodyMap = window.__v26BodyMap || {view:'front', areas:{}};
+
+  const REGION_LABELS = {
+    head:'Head',
+    neck:'Neck',
+    chest:'Chest',
+    abdomen:'Abdomen',
+    pelvis:'Pelvis',
+    upperBack:'Upper Back',
+    midBack:'Mid Back',
+    lowerBack:'Lower Back',
+    rShoulder:'Right Shoulder',
+    lShoulder:'Left Shoulder',
+    rArm:'Right Arm',
+    lArm:'Left Arm',
+    rElbow:'Right Elbow',
+    lElbow:'Left Elbow',
+    rWrist:'Right Wrist',
+    lWrist:'Left Wrist',
+    rHand:'Right Hand',
+    lHand:'Left Hand',
+    rHip:'Right Hip',
+    lHip:'Left Hip',
+    rThigh:'Right Thigh',
+    lThigh:'Left Thigh',
+    rKnee:'Right Knee',
+    lKnee:'Left Knee',
+    rCalf:'Right Calf',
+    lCalf:'Left Calf',
+    rAnkle:'Right Ankle',
+    lAnkle:'Left Ankle',
+    rFoot:'Right Foot',
+    lFoot:'Left Foot'
+  };
+
+  const SEVERITY_LABELS = ['Selected','Mild','Moderate','Severe'];
+  const SEVERITY_CLASS = ['selected','mild','moderate','severe'];
+
+  function selectedV24Areas(){
+    return [...document.querySelectorAll('#v24-tab-session [data-area].active')].map(x=>x.dataset.area);
+  }
+
+  function seedFromV24(){
+    const selected=selectedV24Areas();
+    const notePain=Number(document.getElementById('v24-pain')?.value||0);
+    const defaultSeverity=notePain>=8?3:notePain>=5?2:notePain>=1?1:0;
+
+    Object.entries(REGION_LABELS).forEach(([key,label])=>{
+      if(selected.includes(label) && window.__v26BodyMap.areas[key] == null){
+        window.__v26BodyMap.areas[key]=defaultSeverity;
+      }
+    });
+  }
+
+  function regionState(key){
+    const val=window.__v26BodyMap.areas[key];
+    return val == null ? -1 : Number(val);
+  }
+
+  function bodySvg(view){
+    const back=view==='back';
+    const selected=k=>{
+      const st=regionState(k);
+      return st>=0 ? `active ${SEVERITY_CLASS[st]}` : '';
+    };
+    const title=k=>`${REGION_LABELS[k]}${regionState(k)>=0?' · '+SEVERITY_LABELS[regionState(k)]:''}`;
+
+    // Neutral, simplified clinical silhouette. SVG regions are intentionally broad.
+    return `
+      <svg class="v26-body-svg" viewBox="0 0 320 620" aria-label="${back?'Back':'Front'} body map">
+        <defs>
+          <filter id="v26shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity=".08"/>
+          </filter>
+        </defs>
+
+        <g class="v26-silhouette" filter="url(#v26shadow)">
+          <!-- HEAD -->
+          <ellipse class="v26-region ${selected('head')}" data-region="head"
+            onclick="toggleV26Region('head')" cx="160" cy="52" rx="34" ry="40">
+            <title>${title('head')}</title>
+          </ellipse>
+
+          <!-- NECK -->
+          <rect class="v26-region ${selected('neck')}" data-region="neck"
+            onclick="toggleV26Region('neck')" x="143" y="88" width="34" height="30" rx="10">
+            <title>${title('neck')}</title>
+          </rect>
+
+          ${back ? `
+          <!-- BACK TORSO -->
+          <path class="v26-region ${selected('upperBack')}" data-region="upperBack"
+            onclick="toggleV26Region('upperBack')" d="M116 119 Q160 103 204 119 L213 195 Q160 205 107 195 Z">
+            <title>${title('upperBack')}</title>
+          </path>
+          <path class="v26-region ${selected('midBack')}" data-region="midBack"
+            onclick="toggleV26Region('midBack')" d="M108 196 Q160 205 212 196 L208 265 Q160 280 112 265 Z">
+            <title>${title('midBack')}</title>
+          </path>
+          <path class="v26-region ${selected('lowerBack')}" data-region="lowerBack"
+            onclick="toggleV26Region('lowerBack')" d="M112 265 Q160 280 208 265 L201 321 Q160 337 119 321 Z">
+            <title>${title('lowerBack')}</title>
+          </path>` : `
+          <!-- FRONT TORSO -->
+          <path class="v26-region ${selected('chest')}" data-region="chest"
+            onclick="toggleV26Region('chest')" d="M116 119 Q160 103 204 119 L212 202 Q160 212 108 202 Z">
+            <title>${title('chest')}</title>
+          </path>
+          <path class="v26-region ${selected('abdomen')}" data-region="abdomen"
+            onclick="toggleV26Region('abdomen')" d="M109 203 Q160 213 211 203 L207 274 Q160 288 113 274 Z">
+            <title>${title('abdomen')}</title>
+          </path>
+          <path class="v26-region ${selected('pelvis')}" data-region="pelvis"
+            onclick="toggleV26Region('pelvis')" d="M113 274 Q160 288 207 274 L201 326 Q160 344 119 326 Z">
+            <title>${title('pelvis')}</title>
+          </path>`}
+
+          <!-- SHOULDERS -->
+          <ellipse class="v26-region ${selected('rShoulder')}" data-region="rShoulder"
+            onclick="toggleV26Region('rShoulder')" cx="95" cy="142" rx="25" ry="28">
+            <title>${title('rShoulder')}</title>
+          </ellipse>
+          <ellipse class="v26-region ${selected('lShoulder')}" data-region="lShoulder"
+            onclick="toggleV26Region('lShoulder')" cx="225" cy="142" rx="25" ry="28">
+            <title>${title('lShoulder')}</title>
+          </ellipse>
+
+          <!-- UPPER ARMS -->
+          <path class="v26-region ${selected('rArm')}" data-region="rArm"
+            onclick="toggleV26Region('rArm')" d="M77 159 Q92 153 107 160 L94 245 Q80 252 66 242 Z">
+            <title>${title('rArm')}</title>
+          </path>
+          <path class="v26-region ${selected('lArm')}" data-region="lArm"
+            onclick="toggleV26Region('lArm')" d="M213 160 Q228 153 243 159 L254 242 Q240 252 226 245 Z">
+            <title>${title('lArm')}</title>
+          </path>
+
+          <!-- ELBOWS -->
+          <ellipse class="v26-region ${selected('rElbow')}" data-region="rElbow"
+            onclick="toggleV26Region('rElbow')" cx="80" cy="260" rx="16" ry="17">
+            <title>${title('rElbow')}</title>
+          </ellipse>
+          <ellipse class="v26-region ${selected('lElbow')}" data-region="lElbow"
+            onclick="toggleV26Region('lElbow')" cx="240" cy="260" rx="16" ry="17">
+            <title>${title('lElbow')}</title>
+          </ellipse>
+
+          <!-- FOREARM/WRISTS -->
+          <path class="v26-region ${selected('rWrist')}" data-region="rWrist"
+            onclick="toggleV26Region('rWrist')" d="M68 278 Q80 274 91 280 L82 357 Q72 361 62 354 Z">
+            <title>${title('rWrist')}</title>
+          </path>
+          <path class="v26-region ${selected('lWrist')}" data-region="lWrist"
+            onclick="toggleV26Region('lWrist')" d="M229 280 Q240 274 252 278 L258 354 Q248 361 238 357 Z">
+            <title>${title('lWrist')}</title>
+          </path>
+
+          <!-- HANDS -->
+          <ellipse class="v26-region ${selected('rHand')}" data-region="rHand"
+            onclick="toggleV26Region('rHand')" cx="69" cy="375" rx="15" ry="24">
+            <title>${title('rHand')}</title>
+          </ellipse>
+          <ellipse class="v26-region ${selected('lHand')}" data-region="lHand"
+            onclick="toggleV26Region('lHand')" cx="251" cy="375" rx="15" ry="24">
+            <title>${title('lHand')}</title>
+          </ellipse>
+
+          <!-- HIPS -->
+          <ellipse class="v26-region ${selected('rHip')}" data-region="rHip"
+            onclick="toggleV26Region('rHip')" cx="131" cy="337" rx="27" ry="26">
+            <title>${title('rHip')}</title>
+          </ellipse>
+          <ellipse class="v26-region ${selected('lHip')}" data-region="lHip"
+            onclick="toggleV26Region('lHip')" cx="189" cy="337" rx="27" ry="26">
+            <title>${title('lHip')}</title>
+          </ellipse>
+
+          <!-- THIGHS -->
+          <path class="v26-region ${selected('rThigh')}" data-region="rThigh"
+            onclick="toggleV26Region('rThigh')" d="M116 359 Q138 352 151 365 L143 447 Q126 454 111 444 Z">
+            <title>${title('rThigh')}</title>
+          </path>
+          <path class="v26-region ${selected('lThigh')}" data-region="lThigh"
+            onclick="toggleV26Region('lThigh')" d="M169 365 Q182 352 204 359 L209 444 Q194 454 177 447 Z">
+            <title>${title('lThigh')}</title>
+          </path>
+
+          <!-- KNEES -->
+          <ellipse class="v26-region ${selected('rKnee')}" data-region="rKnee"
+            onclick="toggleV26Region('rKnee')" cx="127" cy="462" rx="19" ry="18">
+            <title>${title('rKnee')}</title>
+          </ellipse>
+          <ellipse class="v26-region ${selected('lKnee')}" data-region="lKnee"
+            onclick="toggleV26Region('lKnee')" cx="193" cy="462" rx="19" ry="18">
+            <title>${title('lKnee')}</title>
+          </ellipse>
+
+          <!-- CALVES -->
+          <path class="v26-region ${selected('rCalf')}" data-region="rCalf"
+            onclick="toggleV26Region('rCalf')" d="M113 484 Q128 477 142 485 L137 552 Q126 558 116 551 Z">
+            <title>${title('rCalf')}</title>
+          </path>
+          <path class="v26-region ${selected('lCalf')}" data-region="lCalf"
+            onclick="toggleV26Region('lCalf')" d="M178 485 Q192 477 207 484 L204 551 Q194 558 183 552 Z">
+            <title>${title('lCalf')}</title>
+          </path>
+
+          <!-- ANKLES -->
+          <ellipse class="v26-region ${selected('rAnkle')}" data-region="rAnkle"
+            onclick="toggleV26Region('rAnkle')" cx="126" cy="563" rx="13" ry="12">
+            <title>${title('rAnkle')}</title>
+          </ellipse>
+          <ellipse class="v26-region ${selected('lAnkle')}" data-region="lAnkle"
+            onclick="toggleV26Region('lAnkle')" cx="194" cy="563" rx="13" ry="12">
+            <title>${title('lAnkle')}</title>
+          </ellipse>
+
+          <!-- FEET -->
+          <path class="v26-region ${selected('rFoot')}" data-region="rFoot"
+            onclick="toggleV26Region('rFoot')" d="M113 577 Q127 570 139 581 L145 603 Q126 613 106 599 Z">
+            <title>${title('rFoot')}</title>
+          </path>
+          <path class="v26-region ${selected('lFoot')}" data-region="lFoot"
+            onclick="toggleV26Region('lFoot')" d="M181 581 Q193 570 207 577 L214 599 Q194 613 175 603 Z">
+            <title>${title('lFoot')}</title>
+          </path>
+        </g>
+
+        <text x="160" y="615" text-anchor="middle" class="v26-view-label">${back?'BACK VIEW':'FRONT VIEW'}</text>
+      </svg>`;
+  }
+
+  function selectedList(){
+    const entries=Object.entries(window.__v26BodyMap.areas)
+      .filter(([_,v])=>v!=null && Number(v)>=0)
+      .map(([k,v])=>({key:k,label:REGION_LABELS[k],severity:Number(v)}));
+
+    if(!entries.length){
+      return `<div class="v26-none">No body area selected yet.</div>`;
+    }
+    return entries.map(x=>`
+      <div class="v26-area-row">
+        <span class="v26-severity-dot ${SEVERITY_CLASS[x.severity]}"></span>
+        <div><b>${esc(x.label)}</b><small>${SEVERITY_LABELS[x.severity]}</small></div>
+        <button type="button" onclick="cycleV26Severity('${x.key}')">Intensity</button>
+        <button type="button" class="remove" onclick="removeV26Region('${x.key}')">×</button>
+      </div>`).join('');
+  }
+
+  function syncToV24(){
+    const labels=Object.entries(window.__v26BodyMap.areas)
+      .filter(([_,v])=>v!=null && Number(v)>=0)
+      .map(([k])=>REGION_LABELS[k]);
+
+    document.querySelectorAll('#v24-tab-session [data-area]').forEach(btn=>{
+      btn.classList.toggle('active', labels.includes(btn.dataset.area));
+    });
+
+    // Set global pain score to the strongest selected body area if greater.
+    const severities=Object.values(window.__v26BodyMap.areas)
+      .filter(v=>v!=null && Number(v)>=0).map(Number);
+    if(severities.length){
+      const max=Math.max(...severities);
+      const suggested=[0,3,6,9][max];
+      const pain=document.getElementById('v24-pain');
+      const val=document.getElementById('v24-pain-val');
+      if(pain && Number(pain.value)<suggested){
+        pain.value=suggested;
+        if(val) val.textContent=String(suggested);
+      }
+    }
+  }
+
+  function renderBodyMap(){
+    const root=document.getElementById('v26-body-map');
+    if(!root) return;
+
+    root.innerHTML=`
+      <div class="v26-map-head">
+        <div>
+          <small>VISUAL BODY MAP</small>
+          <h3>Tap the pain or treatment area</h3>
+          <p>Right / Left is recorded automatically.</p>
+        </div>
+        <div class="v26-view-toggle">
+          <button type="button" class="${window.__v26BodyMap.view==='front'?'active':''}" onclick="setV26View('front')">Front</button>
+          <button type="button" class="${window.__v26BodyMap.view==='back'?'active':''}" onclick="setV26View('back')">Back</button>
+        </div>
+      </div>
+
+      <div class="v26-map-layout">
+        <div class="v26-figure">
+          ${bodySvg(window.__v26BodyMap.view)}
+          <div class="v26-legend">
+            <span><i class="selected"></i>Selected</span>
+            <span><i class="mild"></i>Mild</span>
+            <span><i class="moderate"></i>Moderate</span>
+            <span><i class="severe"></i>Severe</span>
+          </div>
+        </div>
+        <div class="v26-selection-panel">
+          <div class="v26-selection-title">
+            <div><small>SELECTED AREAS</small><b>${Object.values(window.__v26BodyMap.areas).filter(v=>v!=null && Number(v)>=0).length}</b></div>
+            <button type="button" onclick="clearV26BodyMap()">Clear All</button>
+          </div>
+          <div class="v26-selected-list">${selectedList()}</div>
+          <div class="v26-tip">
+            <b>Fast documentation</b>
+            <span>Click the same area again to increase pain intensity.</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  window.setV26View=function(view){
+    window.__v26BodyMap.view=view;
+    renderBodyMap();
+  };
+
+  window.toggleV26Region=function(key){
+    const current=regionState(key);
+    if(current<0) window.__v26BodyMap.areas[key]=0;
+    else if(current<3) window.__v26BodyMap.areas[key]=current+1;
+    else delete window.__v26BodyMap.areas[key];
+
+    syncToV24();
+    renderBodyMap();
+  };
+
+  window.cycleV26Severity=function(key){
+    const current=regionState(key);
+    if(current<0) window.__v26BodyMap.areas[key]=0;
+    else window.__v26BodyMap.areas[key]=(current+1)%4;
+    syncToV24();
+    renderBodyMap();
+  };
+
+  window.removeV26Region=function(key){
+    delete window.__v26BodyMap.areas[key];
+    syncToV24();
+    renderBodyMap();
+  };
+
+  window.clearV26BodyMap=function(){
+    window.__v26BodyMap.areas={};
+    syncToV24();
+    renderBodyMap();
+  };
+
+  function injectIntoV24(){
+    const tab=document.getElementById('v24-tab-session');
+    if(!tab || tab.querySelector('#v26-body-map')) return;
+
+    seedFromV24();
+
+    const firstTitle=tab.querySelector('.v24-section-title');
+    if(!firstTitle) return;
+
+    const section=document.createElement('section');
+    section.id='v26-body-map';
+    section.className='v26-body-map';
+    firstTitle.insertAdjacentElement('afterend',section);
+
+    renderBodyMap();
+
+    // Keep text chips as an alternate quick list, but visually secondary.
+    const title=firstTitle;
+    if(title){
+      title.querySelector('h3').textContent='Pain / Treatment Areas';
+      const span=title.querySelector(':scope > span');
+      if(span) span.textContent='Use body map or quick list below';
+    }
+  }
+
+  // Add body-map severity data to V24 session note after save.
+  const originalSaveV24=window.saveV24ClinicalSession;
+  if(typeof originalSaveV24==='function'){
+    window.saveV24ClinicalSession=function(appointmentId){
+      syncToV24();
+      const severityMap={};
+      Object.entries(window.__v26BodyMap.areas).forEach(([k,v])=>{
+        if(v!=null && Number(v)>=0) severityMap[REGION_LABELS[k]]=Number(v);
+      });
+
+      originalSaveV24.apply(this,arguments);
+
+      const state=S();
+      const note=(state.sessionNotes||[]).find(n=>String(n.appointmentId)===String(appointmentId));
+      if(note){
+        note.bodyMapView=window.__v26BodyMap.view;
+        note.bodyAreaSeverity=severityMap;
+        save();
+      }
+    };
+  }
+
+  // Reset body map when opening a different clinical session,
+  // and hydrate it from any previously saved session.
+  const originalOpenV24=window.openV24ClinicalNote;
+  if(typeof originalOpenV24==='function'){
+    window.openV24ClinicalNote=function(appointmentId){
+      window.__v26BodyMap={view:'front',areas:{}};
+
+      const state=S();
+      const note=(state.sessionNotes||[]).find(n=>String(n.appointmentId)===String(appointmentId));
+      if(note?.bodyAreaSeverity){
+        Object.entries(note.bodyAreaSeverity).forEach(([label,severity])=>{
+          const key=Object.keys(REGION_LABELS).find(k=>REGION_LABELS[k]===label);
+          if(key) window.__v26BodyMap.areas[key]=Number(severity);
+        });
+        if(note.bodyMapView) window.__v26BodyMap.view=note.bodyMapView;
+      }
+
+      originalOpenV24.apply(this,arguments);
+      setTimeout(injectIntoV24,40);
+    };
+  }
+
+  // Enhance report preview with a concise body map summary.
+  function enhanceReport(){
+    const report=document.querySelector('#v24-report-preview.open .v24-report');
+    if(!report || report.dataset.v26==='1') return;
+    report.dataset.v26='1';
+
+    const sections=[...report.querySelectorAll('section')];
+    const painSection=sections.find(s=>s.textContent.includes('PAIN / TREATMENT AREAS'));
+    if(!painSection) return;
+
+    const activeModal=document.getElementById('v24-clinical-modal');
+    let severityMap={};
+
+    // Try current session first; fallback to visible report patient/date matching.
+    if(activeModal){
+      Object.entries(window.__v26BodyMap.areas).forEach(([k,v])=>{
+        if(v!=null && Number(v)>=0) severityMap[REGION_LABELS[k]]=Number(v);
+      });
+    }
+
+    if(Object.keys(severityMap).length){
+      const wrap=document.createElement('div');
+      wrap.className='v26-report-severity';
+      wrap.innerHTML=Object.entries(severityMap).map(([label,v])=>`
+        <span class="${SEVERITY_CLASS[v]}">${esc(label)} · ${SEVERITY_LABELS[v]}</span>
+      `).join('');
+      painSection.appendChild(wrap);
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v26-css')) return;
+    const st=document.createElement('style');
+    st.id='v26-css';
+    st.textContent=`
+      .v26-body-map{
+        border:1px solid #dbe7e9;
+        background:linear-gradient(145deg,#f8fcfd,#f1f7f8);
+        border-radius:16px;
+        padding:14px;
+        margin:0 0 14px;
+      }
+      .v26-map-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:10px}
+      .v26-map-head small{font-size:7px;color:#b48637;font-weight:900;letter-spacing:1.2px}
+      .v26-map-head h3{margin:3px 0 2px;font-size:13px;color:#244e58}
+      .v26-map-head p{margin:0;font-size:8px;color:#849499}
+      .v26-view-toggle{display:flex;background:#e9f1f3;border-radius:9px;padding:3px}
+      .v26-view-toggle button{border:0;background:transparent;border-radius:7px;padding:7px 12px;font-size:8px;font-weight:800;color:#62777d;cursor:pointer}
+      .v26-view-toggle button.active{background:#174f5b;color:#fff;box-shadow:0 4px 12px rgba(23,79,91,.16)}
+      .v26-map-layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(240px,.75fr);gap:12px}
+      .v26-figure{background:#fff;border:1px solid #e0e8ea;border-radius:14px;padding:10px;display:flex;flex-direction:column;align-items:center}
+      .v26-body-svg{width:100%;max-width:335px;height:500px;display:block}
+      .v26-region{fill:#edf3f4;stroke:#b8c9cd;stroke-width:1.7;cursor:pointer;transition:.16s ease}
+      .v26-region:hover{fill:#dfecee;stroke:#6d9aa2;filter:brightness(.99)}
+      .v26-region.active.selected{fill:#d9eef4;stroke:#5d9eac}
+      .v26-region.active.mild{fill:#dff2e9;stroke:#55a67d}
+      .v26-region.active.moderate{fill:#ffe8ad;stroke:#d2a239}
+      .v26-region.active.severe{fill:#ffd6d9;stroke:#d85f6b}
+      .v26-view-label{font-size:9px;fill:#7d9096;font-weight:800;letter-spacing:1.2px}
+      .v26-legend{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;border-top:1px solid #edf1f2;padding-top:8px;width:100%}
+      .v26-legend span{display:flex;align-items:center;gap:4px;font-size:7px;color:#70848a}
+      .v26-legend i{width:8px;height:8px;border-radius:50%;display:block}
+      .v26-legend i.selected{background:#77b9c8}.v26-legend i.mild{background:#69b58b}.v26-legend i.moderate{background:#e1b54e}.v26-legend i.severe{background:#df6b75}
+      .v26-selection-panel{background:#fff;border:1px solid #e0e8ea;border-radius:14px;padding:11px;display:flex;flex-direction:column;min-height:360px}
+      .v26-selection-title{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #edf1f2;padding-bottom:9px}
+      .v26-selection-title>div{display:flex;align-items:center;gap:7px}.v26-selection-title small{font-size:7px;color:#8b999d;font-weight:900}.v26-selection-title b{min-width:23px;height:23px;border-radius:7px;background:#174f5b;color:#fff;display:grid;place-items:center;font-size:9px}
+      .v26-selection-title>button{border:1px solid #dce6e8;background:#fff;border-radius:7px;padding:5px 7px;font-size:7px;color:#667c82;cursor:pointer}
+      .v26-selected-list{display:grid;gap:6px;margin-top:9px;overflow:auto;max-height:335px}
+      .v26-area-row{display:grid;grid-template-columns:10px 1fr auto 24px;gap:7px;align-items:center;border:1px solid #e5ecee;border-radius:9px;padding:7px}
+      .v26-area-row .v26-severity-dot{width:8px;height:8px;border-radius:50%}.v26-severity-dot.selected{background:#77b9c8}.v26-severity-dot.mild{background:#69b58b}.v26-severity-dot.moderate{background:#e1b54e}.v26-severity-dot.severe{background:#df6b75}
+      .v26-area-row b,.v26-area-row small{display:block}.v26-area-row b{font-size:8px;color:#375860}.v26-area-row small{font-size:7px;color:#8a989d;margin-top:1px}
+      .v26-area-row button{border:1px solid #dbe5e7;background:#f8fbfb;border-radius:6px;padding:4px 6px;font-size:7px;color:#5e747a;cursor:pointer}.v26-area-row button.remove{padding:3px 0;font-size:13px;background:#fff}
+      .v26-tip{margin-top:auto;background:#fff7e8;border:1px solid #ead9b5;border-radius:9px;padding:8px}.v26-tip b,.v26-tip span{display:block}.v26-tip b{font-size:8px;color:#8e6725}.v26-tip span{font-size:7px;color:#9a835d;margin-top:2px;line-height:1.35}
+      .v26-none{text-align:center;color:#8a989d;font-size:8px;padding:22px 5px}
+      .v26-report-severity{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}.v26-report-severity span{font-size:7px;border-radius:99px;padding:4px 7px}.v26-report-severity .selected{background:#e4f2f5;color:#397885}.v26-report-severity .mild{background:#e7f6ed;color:#398160}.v26-report-severity .moderate{background:#fff3cf;color:#947023}.v26-report-severity .severe{background:#ffe6e8;color:#a54852}
+      @media(max-width:780px){.v26-map-layout{grid-template-columns:1fr}.v26-body-svg{height:430px}.v26-selection-panel{min-height:0}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    css();
+    injectIntoV24();
+    enhanceReport();
+  }
+
+  function init(){
+    css();
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v26repair);
+      window.__v26repair=setTimeout(repair,50);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+
+})();
