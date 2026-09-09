@@ -529,3 +529,161 @@ render();
     initV7();
   }
 })();
+
+
+/* =========================
+   myAIMS V8 - Insurance & Claims Demo
+   ========================= */
+(function () {
+  const getState = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  function ensureInsuranceFields() {
+    const s = getState();
+    if (Array.isArray(s.patients)) {
+      s.patients = s.patients.map(p => ({
+        ...p,
+        insuranceCompany: p.insuranceCompany || '',
+        policyNumber: p.policyNumber || '',
+        memberId: p.memberId || ''
+      }));
+    }
+    if (Array.isArray(s.invoices)) {
+      s.invoices = s.invoices.map(i => ({
+        ...i,
+        claimNumber: i.claimNumber || ('CLM-' + String(i.id || Date.now()).replace(/\D/g,'').slice(-6)),
+        claimStatus: i.claimStatus || (Number(i.insuranceCovered || 0) > 0 ? 'Pending' : 'N/A'),
+        insurancePaid: Number(i.insurancePaid || 0)
+      }));
+    }
+    save();
+  }
+
+  window.setClaimStatus = function(invoiceId, status) {
+    const s = getState();
+    const inv = (s.invoices || []).find(x => String(x.id) === String(invoiceId));
+    if (!inv) return;
+    inv.claimStatus = status;
+    save();
+    if (typeof window.renderBilling === 'function') window.renderBilling();
+    if (typeof window.renderReports === 'function') window.renderReports();
+  };
+
+  window.recordInsurancePayment = function(invoiceId) {
+    const s = getState();
+    const inv = (s.invoices || []).find(x => String(x.id) === String(invoiceId));
+    if (!inv) return;
+    const covered = Number(inv.insuranceCovered || 0);
+    const already = Number(inv.insurancePaid || 0);
+    const remaining = Math.max(0, covered - already);
+    if (!remaining) {
+      alert('No outstanding insurance amount.');
+      return;
+    }
+    const raw = prompt('Insurance payment amount (BHD):', remaining.toFixed(3));
+    if (raw === null) return;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > remaining + 0.0001) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+    inv.insurancePaid = already + amount;
+    inv.claimStatus = inv.insurancePaid + 0.0001 >= covered ? 'Paid' : 'Partially Paid';
+    save();
+    if (typeof window.renderBilling === 'function') window.renderBilling();
+    if (typeof window.renderDashboard === 'function') window.renderDashboard();
+    if (typeof window.renderReports === 'function') window.renderReports();
+  };
+
+  window.getInsuranceSummary = function() {
+    const invoices = getState().invoices || [];
+    return invoices.reduce((a, i) => {
+      const covered = Number(i.insuranceCovered || 0);
+      const paid = Number(i.insurancePaid || 0);
+      a.claimed += covered;
+      a.received += paid;
+      a.outstanding += Math.max(0, covered - paid);
+      if (covered > 0) a.claims += 1;
+      return a;
+    }, {claims:0, claimed:0, received:0, outstanding:0});
+  };
+
+  function injectInsurancePanel() {
+    const billing = document.querySelector('#billing, [data-page="billing"], .billing-page');
+    if (!billing || document.getElementById('insurance-claims-panel')) return;
+    const box = document.createElement('section');
+    box.id = 'insurance-claims-panel';
+    box.className = 'v8-panel';
+    const sm = window.getInsuranceSummary();
+    box.innerHTML = `
+      <div class="v8-head"><div><strong>Insurance Claims</strong><small>Claims & insurer receivables</small></div></div>
+      <div class="v8-cards">
+        <div><span>Claims</span><b>${sm.claims}</b></div>
+        <div><span>Claimed</span><b>${sm.claimed.toFixed(3)} BHD</b></div>
+        <div><span>Received</span><b>${sm.received.toFixed(3)} BHD</b></div>
+        <div><span>Outstanding</span><b>${sm.outstanding.toFixed(3)} BHD</b></div>
+      </div>`;
+    billing.prepend(box);
+  }
+
+  function enhanceInvoiceRows() {
+    const invoices = getState().invoices || [];
+    invoices.filter(i => Number(i.insuranceCovered || 0) > 0).forEach(inv => {
+      const row = document.querySelector(`[data-invoice-id="${inv.id}"], tr[data-id="${inv.id}"], #invoice-${inv.id}`);
+      if (!row || row.dataset.v8Insurance === '1') return;
+      row.dataset.v8Insurance = '1';
+      const wrap = document.createElement('div');
+      wrap.className = 'v8-claim-actions';
+      wrap.innerHTML = `
+        <span class="v8-claim-no">${inv.claimNumber}</span>
+        <select onchange="setClaimStatus('${inv.id}',this.value)">
+          ${['Pending','Submitted','Approved','Rejected','Partially Paid','Paid'].map(s =>
+            `<option ${s === inv.claimStatus ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+        <button type="button" class="btn btn-sm" onclick="recordInsurancePayment('${inv.id}')">Insurance Payment</button>`;
+      row.appendChild(wrap);
+    });
+  }
+
+  function injectStyles() {
+    if (document.getElementById('myaims-v8-style')) return;
+    const st = document.createElement('style');
+    st.id = 'myaims-v8-style';
+    st.textContent = `
+      .v8-panel{background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:16px;margin:0 0 18px}
+      .v8-head{display:flex;justify-content:space-between;margin-bottom:12px}
+      .v8-head small{display:block;opacity:.65;margin-top:3px}
+      .v8-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+      .v8-cards>div{border:1px solid #edf0f4;border-radius:11px;padding:12px}
+      .v8-cards span{display:block;font-size:12px;opacity:.65;margin-bottom:5px}
+      .v8-cards b{font-size:16px}
+      .v8-claim-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:8px}
+      .v8-claim-actions select{padding:7px;border:1px solid #d9dfe7;border-radius:8px;background:#fff}
+      .v8-claim-no{font-size:12px;font-weight:700;padding:5px 8px;border-radius:8px;background:#f3f6fa}
+      @media(max-width:760px){.v8-cards{grid-template-columns:1fr 1fr}.v8-claim-actions select,.v8-claim-actions .btn{width:100%}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function refreshV8() {
+    ensureInsuranceFields();
+    injectInsurancePanel();
+    enhanceInvoiceRows();
+  }
+
+  const oldBilling = window.renderBilling;
+  if (typeof oldBilling === 'function') {
+    window.renderBilling = function() {
+      oldBilling.apply(this, arguments);
+      setTimeout(() => { injectInsurancePanel(); enhanceInvoiceRows(); }, 30);
+    };
+  }
+
+  function init() {
+    injectStyles();
+    ensureInsuranceFields();
+    setTimeout(refreshV8, 250);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
