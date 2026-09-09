@@ -948,3 +948,171 @@ render();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+
+/* =========================
+   myAIMS V10 - Smart Alerts & Follow-up Center
+   ========================= */
+(function () {
+  const getState = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  function n(v){ const x = Number(v || 0); return Number.isFinite(x) ? x : 0; }
+  function dateOnly(v){ return String(v || '').slice(0,10); }
+  function today(){ return new Date().toISOString().slice(0,10); }
+  function daysBetween(a,b){
+    const da = new Date(a + 'T00:00:00'), db = new Date(b + 'T00:00:00');
+    return Math.round((db-da)/86400000);
+  }
+
+  function receipts(){
+    const s = getState();
+    return s.receipts || s.payments || [];
+  }
+
+  function patientName(id){
+    const s = getState();
+    const p = (s.patients || []).find(x => String(x.id) === String(id));
+    return p ? (p.name || p.fullName || p.patientName || 'Patient') : 'Patient';
+  }
+
+  window.getSmartAlerts = function(){
+    const s = getState();
+    const alerts = [];
+    const t = today();
+
+    (s.invoices || []).forEach(inv => {
+      const total = n(inv.patientShare || inv.amount || inv.total);
+      const paid = n(inv.paidAmount || inv.receivedAmount || 0);
+      const due = Math.max(0, total - paid);
+      const d = dateOnly(inv.date || inv.invoiceDate || inv.createdAt);
+      if (due > 0 && d && daysBetween(d, t) >= 7) {
+        alerts.push({
+          type:'overdue',
+          priority: daysBetween(d,t) >= 30 ? 'high' : 'medium',
+          title:'Overdue invoice',
+          text:`${patientName(inv.patientId || inv.patient)} — ${due.toFixed(3)} BHD outstanding`,
+          ref: inv.id
+        });
+      }
+
+      const covered = n(inv.insuranceCovered);
+      const insurerPaid = n(inv.insurancePaid);
+      if (covered > insurerPaid && ['Pending','Submitted','Approved','Partially Paid'].includes(inv.claimStatus || 'Pending')) {
+        alerts.push({
+          type:'insurance',
+          priority:'medium',
+          title:'Insurance follow-up',
+          text:`${inv.claimNumber || 'Claim'} — ${(covered-insurerPaid).toFixed(3)} BHD pending`,
+          ref: inv.id
+        });
+      }
+    });
+
+    (s.appointments || []).forEach(a => {
+      const d = dateOnly(a.date);
+      const diff = d ? daysBetween(t,d) : 999;
+      if (diff >= 0 && diff <= 1 && !['Completed','Cancelled','No Show'].includes(a.status || 'Scheduled')) {
+        alerts.push({
+          type:'appointment',
+          priority: diff === 0 ? 'high' : 'low',
+          title: diff === 0 ? 'Appointment today' : 'Appointment tomorrow',
+          text:`${patientName(a.patientId || a.patient)}${a.time ? ' — ' + a.time : ''}`,
+          ref: a.id
+        });
+      }
+    });
+
+    (s.cashClosings || []).forEach(c => {
+      if (Math.abs(n(c.variance)) > 0.001) {
+        alerts.push({
+          type:'cash',
+          priority:'high',
+          title:'Cash variance',
+          text:`${c.date} — variance ${n(c.variance).toFixed(3)} BHD`,
+          ref:c.id
+        });
+      }
+    });
+
+    return alerts.sort((a,b)=>{
+      const p = {high:0,medium:1,low:2};
+      return (p[a.priority]||9)-(p[b.priority]||9);
+    });
+  };
+
+  function renderAlerts(){
+    const dash = document.querySelector('#dashboard, [data-page="dashboard"], .dashboard-page');
+    if (!dash) return;
+
+    let panel = document.getElementById('smart-alerts-panel');
+    if (!panel){
+      panel = document.createElement('section');
+      panel.id = 'smart-alerts-panel';
+      panel.className = 'v10-panel';
+      dash.prepend(panel);
+    }
+
+    const alerts = window.getSmartAlerts();
+    panel.innerHTML = `
+      <div class="v10-head">
+        <div>
+          <strong>Smart Alerts & Follow-up</strong>
+          <small>Items that need attention</small>
+        </div>
+        <span class="v10-count">${alerts.length}</span>
+      </div>
+      <div class="v10-list">
+        ${alerts.length ? alerts.slice(0,8).map(a => `
+          <div class="v10-item ${a.priority}">
+            <div class="v10-dot"></div>
+            <div class="v10-copy">
+              <b>${a.title}</b>
+              <span>${a.text}</span>
+            </div>
+          </div>
+        `).join('') : `
+          <div class="v10-empty">No urgent follow-up items.</div>
+        `}
+      </div>
+    `;
+  }
+
+  function injectStyles(){
+    if (document.getElementById('myaims-v10-style')) return;
+    const st = document.createElement('style');
+    st.id = 'myaims-v10-style';
+    st.textContent = `
+      .v10-panel{background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:16px;margin-bottom:18px}
+      .v10-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+      .v10-head small{display:block;opacity:.65;margin-top:3px}
+      .v10-count{min-width:32px;height:32px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:#f3f6fa;font-weight:700}
+      .v10-list{display:grid;gap:8px}
+      .v10-item{display:flex;gap:10px;align-items:flex-start;border:1px solid #edf0f4;border-radius:11px;padding:11px}
+      .v10-dot{width:9px;height:9px;border-radius:999px;background:#999;margin-top:5px;flex:0 0 auto}
+      .v10-item.high .v10-dot{background:#c0392b}
+      .v10-item.medium .v10-dot{background:#d68910}
+      .v10-item.low .v10-dot{background:#2980b9}
+      .v10-copy b{display:block;font-size:13px;margin-bottom:2px}
+      .v10-copy span{font-size:12px;opacity:.75}
+      .v10-empty{padding:12px;border:1px dashed #d9dfe7;border-radius:10px;opacity:.65}
+    `;
+    document.head.appendChild(st);
+  }
+
+  const oldDashboard = window.renderDashboard;
+  if (typeof oldDashboard === 'function'){
+    window.renderDashboard = function(){
+      oldDashboard.apply(this, arguments);
+      setTimeout(renderAlerts, 30);
+    };
+  }
+
+  function init(){
+    injectStyles();
+    setTimeout(renderAlerts, 300);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
