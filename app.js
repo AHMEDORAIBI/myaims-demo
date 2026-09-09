@@ -2249,3 +2249,291 @@ render();
   if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V15 - APPOINTMENTS VISUAL UPGRADE
+   Premium day/week scheduler presentation for demos
+   ========================================================= */
+(function () {
+  const getState = () => window.state || window.appState || {};
+  const STATUS_COLORS = {
+    'Scheduled':'#5b8def',
+    'Confirmed':'#1fa97a',
+    'Checked In':'#d39a2c',
+    'In Session':'#8b5cf6',
+    'Completed':'#2f855a',
+    'Cancelled':'#d35d6e',
+    'No Show':'#6b7280'
+  };
+
+  function today(){ return new Date().toISOString().slice(0,10); }
+  function addDays(dateStr, n){
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate()+n);
+    return d.toISOString().slice(0,10);
+  }
+  function dayLabel(dateStr){
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'});
+  }
+  function patientName(id){
+    const s=getState();
+    const p=(s.patients||[]).find(x=>String(x.id)===String(id));
+    return p ? (p.name || p.fullName || p.patientName || 'Patient') : 'Patient';
+  }
+  function initials(name){
+    return String(name||'P').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+  }
+  function getAppointments(){
+    const s=getState();
+    return Array.isArray(s.appointments) ? s.appointments : [];
+  }
+
+  window.__v15View = window.__v15View || 'day';
+  window.__v15Date = window.__v15Date || today();
+
+  window.setV15View = function(view){
+    window.__v15View = view === 'week' ? 'week' : 'day';
+    renderVisualScheduler();
+  };
+
+  window.shiftV15Date = function(days){
+    window.__v15Date = addDays(window.__v15Date, days);
+    renderVisualScheduler();
+  };
+
+  window.goV15Today = function(){
+    window.__v15Date = today();
+    renderVisualScheduler();
+  };
+
+  function dayAppointments(date){
+    return getAppointments()
+      .filter(a=>a.date===date)
+      .sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+  }
+
+  function quickActions(a){
+    return `
+      <div class="v15-card-actions">
+        <button onclick="updateAppointmentStatusPro('${a.id}','Checked In')">Check In</button>
+        <button onclick="updateAppointmentStatusPro('${a.id}','In Session')">Start</button>
+        <button onclick="updateAppointmentStatusPro('${a.id}','Completed')">Complete</button>
+        <button onclick="editAppointmentPro('${a.id}')">Edit</button>
+      </div>`;
+  }
+
+  function appointmentCard(a){
+    const name=patientName(a.patientId||a.patient);
+    const color=STATUS_COLORS[a.status||'Scheduled'] || '#5b8def';
+    return `
+      <article class="v15-appt-card" style="--status:${color}">
+        <div class="v15-time-col">
+          <b>${a.time||'—'}</b>
+          <small>${Number(a.duration||60)} min</small>
+        </div>
+        <div class="v15-appt-body">
+          <div class="v15-appt-top">
+            <div class="v15-patient">
+              <span class="v15-avatar">${initials(name)}</span>
+              <div>
+                <b>${name}</b>
+                <small>${a.visitType||'Physiotherapy Session'}</small>
+              </div>
+            </div>
+            <span class="v15-status" style="color:${color};border-color:${color}33;background:${color}12">${a.status||'Scheduled'}</span>
+          </div>
+          <div class="v15-meta">
+            <span>Therapist: <b>${a.therapist||'Not assigned'}</b></span>
+            <span>Room: <b>${a.room||'—'}</b></span>
+            ${a.followUpNeeded?'<span class="v15-follow-badge">Follow-up needed</span>':''}
+          </div>
+          ${a.notes ? `<div class="v15-note">${a.notes}</div>` : ''}
+          ${quickActions(a)}
+        </div>
+      </article>`;
+  }
+
+  function dayView(date){
+    const rows=dayAppointments(date);
+    const active=rows.filter(a=>!['Cancelled','No Show','Completed'].includes(a.status||'Scheduled')).length;
+    const completed=rows.filter(a=>a.status==='Completed').length;
+    return `
+      <div class="v15-day-header">
+        <div><small>SELECTED DAY</small><h3>${dayLabel(date)}</h3></div>
+        <div class="v15-day-kpis">
+          <span><b>${rows.length}</b> Total</span>
+          <span><b>${active}</b> Active</span>
+          <span><b>${completed}</b> Completed</span>
+        </div>
+      </div>
+      <div class="v15-day-list">
+        ${rows.length ? rows.map(appointmentCard).join('') :
+          `<div class="v15-empty-state">
+            <div class="v15-empty-icon">○</div>
+            <h4>No appointments</h4>
+            <p>No appointments are scheduled for this date.</p>
+          </div>`}
+      </div>`;
+  }
+
+  function weekView(startDate){
+    const dates=Array.from({length:7},(_,i)=>addDays(startDate,i));
+    return `
+      <div class="v15-week-grid">
+        ${dates.map(date=>{
+          const rows=dayAppointments(date);
+          return `
+            <section class="v15-week-day">
+              <div class="v15-week-head ${date===today()?'today':''}">
+                <small>${new Date(date+'T00:00:00').toLocaleDateString(undefined,{weekday:'short'}).toUpperCase()}</small>
+                <b>${new Date(date+'T00:00:00').getDate()}</b>
+                <span>${rows.length} appt${rows.length===1?'':'s'}</span>
+              </div>
+              <div class="v15-week-cards">
+                ${rows.length ? rows.map(a=>{
+                  const name=patientName(a.patientId||a.patient);
+                  const color=STATUS_COLORS[a.status||'Scheduled'] || '#5b8def';
+                  return `
+                    <button class="v15-mini-card" onclick="window.__v15Date='${date}';window.__v15View='day';renderVisualScheduler()" style="--status:${color}">
+                      <span class="v15-mini-time">${a.time||'—'}</span>
+                      <b>${name}</b>
+                      <small>${a.therapist||'Unassigned'}</small>
+                      <i style="background:${color}"></i>
+                    </button>`;
+                }).join('') : `<div class="v15-week-empty">Free</div>`}
+              </div>
+            </section>`;
+        }).join('')}
+      </div>`;
+  }
+
+  function statusLegend(){
+    const statuses=['Scheduled','Confirmed','Checked In','In Session','Completed','No Show','Cancelled'];
+    return `
+      <div class="v15-legend">
+        ${statuses.map(s=>`<span><i style="background:${STATUS_COLORS[s]}"></i>${s}</span>`).join('')}
+      </div>`;
+  }
+
+  function renderVisualScheduler(){
+    const page=document.querySelector('#appointments, [data-page="appointments"], .appointments-page');
+    if(!page) return;
+
+    let box=document.getElementById('v15-visual-scheduler');
+    if(!box){
+      box=document.createElement('section');
+      box.id='v15-visual-scheduler';
+      box.className='v15-shell';
+      page.prepend(box);
+    }
+
+    box.innerHTML=`
+      <div class="v15-toolbar">
+        <div>
+          <small>APPOINTMENT EXPERIENCE</small>
+          <h2>Clinic Schedule</h2>
+          <p>A clearer visual view of the day's patient flow.</p>
+        </div>
+        <div class="v15-toolbar-actions">
+          <div class="v15-segment">
+            <button class="${window.__v15View==='day'?'active':''}" onclick="setV15View('day')">Day</button>
+            <button class="${window.__v15View==='week'?'active':''}" onclick="setV15View('week')">Week</button>
+          </div>
+          <div class="v15-date-nav">
+            <button onclick="shiftV15Date(${window.__v15View==='week'?-7:-1})">‹</button>
+            <button class="today-btn" onclick="goV15Today()">Today</button>
+            <button onclick="shiftV15Date(${window.__v15View==='week'?7:1})">›</button>
+          </div>
+        </div>
+      </div>
+
+      ${statusLegend()}
+
+      <div class="v15-content">
+        ${window.__v15View==='week' ? weekView(window.__v15Date) : dayView(window.__v15Date)}
+      </div>
+    `;
+  }
+
+  window.renderVisualScheduler=renderVisualScheduler;
+
+  function css(){
+    if(document.getElementById('myaims-v15-css')) return;
+    const st=document.createElement('style');
+    st.id='myaims-v15-css';
+    st.textContent=`
+      .v15-shell{background:linear-gradient(180deg,#f8fbfc 0%,#f3f7f8 100%);border:1px solid #dce7ea;border-radius:18px;padding:20px;margin-bottom:20px}
+      .v15-toolbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:14px}
+      .v15-toolbar>div:first-child small{letter-spacing:1.5px;color:#b58734;font-weight:800}
+      .v15-toolbar h2{margin:5px 0 4px;font-size:30px;color:#163e48}
+      .v15-toolbar p{margin:0;color:#6b7b80}
+      .v15-toolbar-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+      .v15-segment,.v15-date-nav{display:flex;background:#fff;border:1px solid #dbe5e8;border-radius:10px;padding:3px}
+      .v15-segment button,.v15-date-nav button{border:0;background:transparent;padding:8px 12px;border-radius:7px;cursor:pointer;color:#294a52}
+      .v15-segment button.active{background:#174f5b;color:#fff}
+      .v15-date-nav .today-btn{font-weight:700}
+      .v15-legend{display:flex;gap:14px;flex-wrap:wrap;margin:12px 0 16px;font-size:11px;color:#607277}
+      .v15-legend span{display:flex;align-items:center;gap:5px}
+      .v15-legend i{width:8px;height:8px;border-radius:50%}
+      .v15-content{background:#fff;border:1px solid #e2eaec;border-radius:15px;padding:16px}
+      .v15-day-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #edf2f3;padding-bottom:13px;margin-bottom:12px}
+      .v15-day-header small{font-size:10px;letter-spacing:1.2px;color:#9a7b42;font-weight:800}
+      .v15-day-header h3{margin:3px 0 0;font-size:21px}
+      .v15-day-kpis{display:flex;gap:18px;color:#687a7f;font-size:12px}
+      .v15-day-kpis b{display:block;color:#163e48;font-size:17px}
+      .v15-day-list{display:grid;gap:10px}
+      .v15-appt-card{position:relative;display:grid;grid-template-columns:84px 1fr;border:1px solid #e3eaec;border-radius:13px;background:#fff;overflow:hidden;box-shadow:0 3px 10px rgba(20,65,75,.04)}
+      .v15-appt-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--status)}
+      .v15-time-col{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafb;border-right:1px solid #edf2f3;padding:14px}
+      .v15-time-col b{font-size:17px;color:#183e47}.v15-time-col small{font-size:10px;color:#829095;margin-top:4px}
+      .v15-appt-body{padding:13px 15px}
+      .v15-appt-top{display:flex;justify-content:space-between;gap:12px;align-items:center}
+      .v15-patient{display:flex;align-items:center;gap:10px}
+      .v15-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#e8f2f4;color:#174f5b;font-size:12px;font-weight:800}
+      .v15-patient b,.v15-patient small{display:block}.v15-patient small{font-size:11px;color:#79898e;margin-top:2px}
+      .v15-status{border:1px solid;border-radius:999px;padding:5px 9px;font-size:10px;font-weight:800;white-space:nowrap}
+      .v15-meta{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 8px;font-size:11px;color:#738389}
+      .v15-meta b{color:#37565e}
+      .v15-follow-badge{color:#9b6c17;background:#fff6dd;padding:3px 7px;border-radius:999px}
+      .v15-note{background:#f7fafb;border-radius:8px;padding:8px 10px;font-size:11px;color:#607277;margin-bottom:8px}
+      .v15-card-actions{display:flex;gap:6px;flex-wrap:wrap}
+      .v15-card-actions button{border:1px solid #dbe5e8;background:#fff;color:#355860;border-radius:7px;padding:6px 9px;font-size:10px;cursor:pointer}
+      .v15-card-actions button:nth-child(3){background:#174f5b;color:#fff;border-color:#174f5b}
+      .v15-week-grid{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:8px;overflow:auto;padding-bottom:4px}
+      .v15-week-day{border:1px solid #e3eaec;border-radius:12px;background:#fbfdfd;min-width:150px}
+      .v15-week-head{padding:11px;text-align:center;border-bottom:1px solid #e6edef}
+      .v15-week-head.today{background:#eaf5f6}
+      .v15-week-head small,.v15-week-head b,.v15-week-head span{display:block}
+      .v15-week-head small{font-size:10px;color:#809095}.v15-week-head b{font-size:23px;color:#194b56;margin:2px 0}.v15-week-head span{font-size:10px;color:#87979b}
+      .v15-week-cards{padding:8px;display:grid;gap:7px}
+      .v15-mini-card{position:relative;border:1px solid #e1e9eb;border-radius:9px;background:#fff;padding:9px;text-align:left;cursor:pointer;overflow:hidden}
+      .v15-mini-card i{position:absolute;left:0;top:0;bottom:0;width:3px}
+      .v15-mini-card span,.v15-mini-card b,.v15-mini-card small{display:block}
+      .v15-mini-time{font-size:10px;color:#8a989c}.v15-mini-card b{font-size:11px;margin:3px 0;color:#294a52}.v15-mini-card small{font-size:9px;color:#8a989c}
+      .v15-week-empty,.v15-empty-state{text-align:center;color:#9aa7aa}
+      .v15-week-empty{padding:18px 6px;font-size:11px}
+      .v15-empty-state{padding:45px 20px}.v15-empty-icon{font-size:32px}.v15-empty-state h4{margin:8px 0 4px;color:#567078}.v15-empty-state p{margin:0;font-size:12px}
+      @media(max-width:900px){.v15-toolbar{align-items:flex-start;flex-direction:column}.v15-appt-card{grid-template-columns:70px 1fr}}
+      @media(max-width:650px){.v15-shell{padding:12px}.v15-toolbar-actions{width:100%}.v15-segment,.v15-date-nav{flex:1}.v15-appt-card{grid-template-columns:1fr}.v15-time-col{align-items:flex-start;border-right:0;border-bottom:1px solid #edf2f3}.v15-appt-top{align-items:flex-start}.v15-day-header{align-items:flex-start;flex-direction:column;gap:9px}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  const oldRenderAppointments = window.renderAppointments;
+  if(typeof oldRenderAppointments==='function'){
+    window.renderAppointments = function(){
+      oldRenderAppointments.apply(this,arguments);
+      setTimeout(renderVisualScheduler,50);
+    };
+  }
+
+  function init(){
+    css();
+    setTimeout(renderVisualScheduler,300);
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
