@@ -5324,3 +5324,571 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V24 - TREATMENT PLAN + CLINICAL SESSION NOTES
+   Professional treatment-plan workflow with:
+   - Fast pain/treatment area picker
+   - Clinical comments
+   - Goals / interventions / home advice
+   - Pain score and progress score
+   - Session report shown per appointment
+   - Patient treatment history
+   ========================================================= */
+(function(){
+
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{ if(typeof window.saveState==='function') window.saveState(); };
+
+  const BODY_AREAS = [
+    {group:'Head & Neck', items:['Head','Neck','Jaw','Upper Cervical']},
+    {group:'Shoulder & Arm', items:['Right Shoulder','Left Shoulder','Right Arm','Left Arm','Right Elbow','Left Elbow','Right Wrist','Left Wrist','Right Hand','Left Hand']},
+    {group:'Back & Spine', items:['Upper Back','Mid Back','Lower Back','Thoracic Spine','Lumbar Spine','Sacrum']},
+    {group:'Hip & Leg', items:['Right Hip','Left Hip','Right Thigh','Left Thigh','Right Knee','Left Knee','Right Calf','Left Calf','Right Ankle','Left Ankle','Right Foot','Left Foot']},
+    {group:'Other', items:['Chest','Abdomen','Pelvis','General Mobility','Post-operative Area']}
+  ];
+
+  const INTERVENTIONS = [
+    'Assessment',
+    'Manual Therapy',
+    'Soft Tissue Therapy',
+    'Joint Mobilisation',
+    'Stretching',
+    'Strengthening',
+    'Balance Training',
+    'Gait Training',
+    'Range of Motion',
+    'Neuromuscular Re-education',
+    'Functional Training',
+    'Posture Education',
+    'Home Exercise Education'
+  ];
+
+  function ensure(){
+    if(!Array.isArray(S().treatmentPlans)) S().treatmentPlans=[];
+    if(!Array.isArray(S().sessionNotes)) S().sessionNotes=[];
+    save();
+  }
+
+  function esc(s){
+    return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function appt(id){ return (S().appointments||[]).find(a=>String(a.id)===String(id)); }
+  function patient(id){ return (S().patients||[]).find(p=>String(p.id)===String(id)); }
+  function patientName(id){
+    const p=patient(id);
+    return p?(p.name||p.fullName||p.patientName||'Patient'):'Patient';
+  }
+
+  function noteForAppointment(id){
+    return (S().sessionNotes||[]).find(n=>String(n.appointmentId)===String(id));
+  }
+
+  function planForPatient(patientId){
+    return (S().treatmentPlans||[])
+      .filter(p=>String(p.patientId)===String(patientId) && p.status!=='Closed')
+      .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0];
+  }
+
+  function selectedAreasHtml(selected=[]){
+    return BODY_AREAS.map(g=>`
+      <div class="v24-area-group">
+        <b>${esc(g.group)}</b>
+        <div class="v24-chip-wrap">
+          ${g.items.map(item=>`
+            <button type="button"
+              class="v24-chip ${selected.includes(item)?'active':''}"
+              data-area="${esc(item)}"
+              onclick="toggleV24Area(this)">
+              ${esc(item)}
+            </button>`).join('')}
+        </div>
+      </div>`).join('');
+  }
+
+  function interventionHtml(selected=[]){
+    return `
+      <div class="v24-chip-wrap interventions">
+        ${INTERVENTIONS.map(item=>`
+          <button type="button"
+            class="v24-chip ${selected.includes(item)?'active':''}"
+            data-intervention="${esc(item)}"
+            onclick="toggleV24Intervention(this)">
+            ${esc(item)}
+          </button>`).join('')}
+      </div>`;
+  }
+
+  window.toggleV24Area=function(btn){ btn.classList.toggle('active'); };
+  window.toggleV24Intervention=function(btn){ btn.classList.toggle('active'); };
+
+  function collectAreas(root){
+    return [...root.querySelectorAll('[data-area].active')].map(x=>x.dataset.area);
+  }
+  function collectInterventions(root){
+    return [...root.querySelectorAll('[data-intervention].active')].map(x=>x.dataset.intervention);
+  }
+
+  function modalRoot(){
+    let root=document.getElementById('v24-clinical-modal');
+    if(!root){
+      root=document.createElement('div');
+      root.id='v24-clinical-modal';
+      document.body.appendChild(root);
+    }
+    return root;
+  }
+
+  window.openV24ClinicalNote=function(appointmentId){
+    ensure();
+    const a=appt(appointmentId);
+    if(!a) return;
+
+    const old=noteForAppointment(appointmentId)||{};
+    const plan=planForPatient(a.patientId)||{};
+    const root=modalRoot();
+    root.className='open';
+
+    root.innerHTML=`
+      <div class="v24-backdrop" onclick="closeV24ClinicalNote()"></div>
+      <section class="v24-dialog">
+        <header class="v24-head">
+          <div>
+            <small>CLINICAL SESSION</small>
+            <h2>${esc(patientName(a.patientId))}</h2>
+            <p>${esc(a.date)} · ${esc(a.time||'')} · ${esc(a.therapist||'Therapist')}</p>
+          </div>
+          <button onclick="closeV24ClinicalNote()">×</button>
+        </header>
+
+        <div class="v24-tabs">
+          <button class="active" onclick="switchV24Tab('session',this)">Session Note</button>
+          <button onclick="switchV24Tab('plan',this)">Treatment Plan</button>
+          <button onclick="switchV24Tab('history',this)">Patient History</button>
+        </div>
+
+        <div id="v24-tab-session" class="v24-tab active">
+          <div class="v24-section-title">
+            <div><small>01</small><h3>Pain / Treatment Areas</h3></div>
+            <span>Select all relevant areas</span>
+          </div>
+          ${selectedAreasHtml(old.areas||plan.areas||[])}
+
+          <div class="v24-metrics">
+            <label>
+              <span>Pain Score</span>
+              <div class="v24-range-row">
+                <input id="v24-pain" type="range" min="0" max="10" value="${Number(old.painScore??0)}" oninput="document.getElementById('v24-pain-val').textContent=this.value">
+                <b id="v24-pain-val">${Number(old.painScore??0)}</b><small>/10</small>
+              </div>
+            </label>
+            <label>
+              <span>Session Progress</span>
+              <div class="v24-range-row">
+                <input id="v24-progress" type="range" min="0" max="100" step="5" value="${Number(old.progressScore??50)}" oninput="document.getElementById('v24-progress-val').textContent=this.value+'%'">
+                <b id="v24-progress-val">${Number(old.progressScore??50)}%</b>
+              </div>
+            </label>
+          </div>
+
+          <div class="v24-section-title">
+            <div><small>02</small><h3>Clinical Comments</h3></div>
+            <span>Fast structured documentation</span>
+          </div>
+
+          <div class="v24-note-grid">
+            <label class="wide">
+              <span>Patient Report / Subjective</span>
+              <textarea id="v24-subjective" rows="3" placeholder="Symptoms, changes since last visit, functional limitations...">${esc(old.subjective||'')}</textarea>
+            </label>
+            <label class="wide">
+              <span>Clinical Findings / Objective</span>
+              <textarea id="v24-objective" rows="3" placeholder="Movement, mobility, strength, tolerance, observed findings...">${esc(old.objective||'')}</textarea>
+            </label>
+          </div>
+
+          <div class="v24-section-title">
+            <div><small>03</small><h3>Interventions Performed</h3></div>
+            <span>Quick-select treatment activities</span>
+          </div>
+          ${interventionHtml(old.interventions||[])}
+
+          <div class="v24-note-grid">
+            <label class="wide">
+              <span>Session Response</span>
+              <textarea id="v24-response" rows="2" placeholder="Patient response during and after the session...">${esc(old.response||'')}</textarea>
+            </label>
+            <label class="wide">
+              <span>Next Session / Recommendation</span>
+              <textarea id="v24-next" rows="2" placeholder="Focus for next visit, progression, review...">${esc(old.nextSession||'')}</textarea>
+            </label>
+          </div>
+        </div>
+
+        <div id="v24-tab-plan" class="v24-tab">
+          <div class="v24-plan-banner">
+            <div>
+              <small>ACTIVE TREATMENT PLAN</small>
+              <h3>${esc(plan.title||'New Treatment Plan')}</h3>
+              <p>Create or update the overall patient rehabilitation plan.</p>
+            </div>
+            <span>${esc(plan.status||'Draft')}</span>
+          </div>
+
+          <div class="v24-note-grid">
+            <label class="wide">
+              <span>Treatment Plan Title</span>
+              <input id="v24-plan-title" value="${esc(plan.title||'')} " placeholder="e.g. Lower Back Rehabilitation">
+            </label>
+            <label class="wide">
+              <span>Main Clinical Comments</span>
+              <textarea id="v24-plan-comments" rows="4" placeholder="Primary concerns, treatment direction, relevant comments...">${esc(plan.comments||'')}</textarea>
+            </label>
+            <label class="wide">
+              <span>Treatment Goals</span>
+              <textarea id="v24-plan-goals" rows="4" placeholder="Short and long-term functional goals...">${esc(plan.goals||'')}</textarea>
+            </label>
+            <label>
+              <span>Planned Sessions</span>
+              <input id="v24-plan-sessions" type="number" min="1" max="100" value="${Number(plan.plannedSessions||10)}">
+            </label>
+            <label>
+              <span>Review After</span>
+              <select id="v24-plan-review">
+                ${[2,4,6,8,10,12].map(n=>`<option value="${n}" ${Number(plan.reviewAfter||4)===n?'selected':''}>${n} sessions</option>`).join('')}
+              </select>
+            </label>
+            <label class="wide">
+              <span>Home Advice / Exercise Notes</span>
+              <textarea id="v24-plan-home" rows="3" placeholder="Education, home exercises or self-management notes...">${esc(plan.homeAdvice||'')}</textarea>
+            </label>
+          </div>
+
+          <div class="v24-section-title">
+            <div><small>AREA</small><h3>Treatment Areas</h3></div>
+            <span>Stored with the active plan</span>
+          </div>
+          <div id="v24-plan-areas">
+            ${selectedAreasHtml(plan.areas||old.areas||[])}
+          </div>
+        </div>
+
+        <div id="v24-tab-history" class="v24-tab">
+          ${renderV24PatientHistory(a.patientId)}
+        </div>
+
+        <footer class="v24-footer">
+          <button class="secondary" onclick="closeV24ClinicalNote()">Close</button>
+          <button class="secondary" onclick="previewV24SessionReport('${a.id}')">Preview Report</button>
+          <button class="primary" onclick="saveV24ClinicalSession('${a.id}')">Save Clinical Session</button>
+        </footer>
+      </section>`;
+  };
+
+  window.closeV24ClinicalNote=function(){
+    const root=document.getElementById('v24-clinical-modal');
+    if(root) root.className='';
+  };
+
+  window.switchV24Tab=function(name,btn){
+    document.querySelectorAll('#v24-clinical-modal .v24-tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('#v24-clinical-modal .v24-tabs button').forEach(x=>x.classList.remove('active'));
+    document.getElementById('v24-tab-'+name)?.classList.add('active');
+    btn?.classList.add('active');
+  };
+
+  window.saveV24ClinicalSession=function(appointmentId){
+    ensure();
+    const a=appt(appointmentId);
+    const root=document.getElementById('v24-clinical-modal');
+    if(!a || !root) return;
+
+    const existing=noteForAppointment(appointmentId);
+    const note={
+      id: existing?.id || 'SN-'+Date.now(),
+      appointmentId:a.id,
+      patientId:a.patientId,
+      date:a.date,
+      therapist:a.therapist||'',
+      areas:collectAreas(document.getElementById('v24-tab-session')),
+      painScore:Number(document.getElementById('v24-pain')?.value||0),
+      progressScore:Number(document.getElementById('v24-progress')?.value||0),
+      subjective:document.getElementById('v24-subjective')?.value.trim()||'',
+      objective:document.getElementById('v24-objective')?.value.trim()||'',
+      interventions:collectInterventions(document.getElementById('v24-tab-session')),
+      response:document.getElementById('v24-response')?.value.trim()||'',
+      nextSession:document.getElementById('v24-next')?.value.trim()||'',
+      updatedAt:new Date().toISOString(),
+      createdAt:existing?.createdAt||new Date().toISOString()
+    };
+
+    if(existing) Object.assign(existing,note);
+    else S().sessionNotes.push(note);
+
+    const title=document.getElementById('v24-plan-title')?.value.trim();
+    const comments=document.getElementById('v24-plan-comments')?.value.trim();
+    const goals=document.getElementById('v24-plan-goals')?.value.trim();
+    const home=document.getElementById('v24-plan-home')?.value.trim();
+    const planned=Number(document.getElementById('v24-plan-sessions')?.value||0);
+    const review=Number(document.getElementById('v24-plan-review')?.value||4);
+    const planAreas=collectAreas(document.getElementById('v24-plan-areas'));
+
+    if(title || comments || goals || home || planAreas.length){
+      let plan=planForPatient(a.patientId);
+      if(!plan){
+        plan={
+          id:'TP-'+Date.now(),
+          patientId:a.patientId,
+          createdAt:new Date().toISOString(),
+          status:'Active'
+        };
+        S().treatmentPlans.push(plan);
+      }
+      Object.assign(plan,{
+        title:title||plan.title||'Treatment Plan',
+        comments,goals,homeAdvice:home,
+        plannedSessions:planned||10,
+        reviewAfter:review,
+        areas:planAreas,
+        updatedAt:new Date().toISOString(),
+        status:'Active'
+      });
+    }
+
+    save();
+    if(typeof window.logAudit==='function'){
+      try{window.logAudit('Clinical Session Saved','Appointments',`${patientName(a.patientId)} — ${a.date}`);}catch(e){}
+    }
+
+    closeV24ClinicalNote();
+    renderV24SessionBadges();
+    if(typeof window.renderV22==='function') try{window.renderV22();}catch(e){}
+  };
+
+  window.renderV24PatientHistory=function(patientId){
+    ensure();
+    const notes=(S().sessionNotes||[])
+      .filter(n=>String(n.patientId)===String(patientId))
+      .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+
+    const plan=planForPatient(patientId);
+
+    return `
+      <div class="v24-history-head">
+        <div>
+          <small>TREATMENT HISTORY</small>
+          <h3>${notes.length} documented session${notes.length===1?'':'s'}</h3>
+        </div>
+        ${plan?`<span>${esc(plan.title||'Treatment Plan')}</span>`:''}
+      </div>
+
+      ${plan?`
+        <div class="v24-plan-summary">
+          <div><small>Plan</small><b>${esc(plan.title||'—')}</b></div>
+          <div><small>Planned Sessions</small><b>${Number(plan.plannedSessions||0)}</b></div>
+          <div><small>Areas</small><b>${esc((plan.areas||[]).slice(0,3).join(', ')||'—')}</b></div>
+        </div>`:''}
+
+      <div class="v24-history-list">
+        ${notes.length?notes.map(n=>`
+          <article class="v24-history-card">
+            <div class="v24-history-date">
+              <b>${esc(n.date)}</b>
+              <small>${esc(n.therapist||'Therapist')}</small>
+            </div>
+            <div class="v24-history-main">
+              <div class="v24-history-tags">
+                ${(n.areas||[]).slice(0,4).map(x=>`<span>${esc(x)}</span>`).join('')}
+              </div>
+              <p>${esc(n.subjective||n.response||'Clinical session documented.')}</p>
+              <small>${(n.interventions||[]).slice(0,4).map(esc).join(' · ')}</small>
+            </div>
+            <div class="v24-score">
+              <b>${Number(n.painScore||0)}/10</b>
+              <span>Pain</span>
+            </div>
+          </article>`).join(''):
+          `<div class="v24-empty">No clinical session notes yet.</div>`}
+      </div>`;
+  };
+
+  window.previewV24SessionReport=function(appointmentId){
+    ensure();
+    const a=appt(appointmentId);
+    const n=noteForAppointment(appointmentId);
+    const p=a?planForPatient(a.patientId):null;
+    if(!a) return;
+
+    let root=document.getElementById('v24-report-preview');
+    if(!root){
+      root=document.createElement('div');
+      root.id='v24-report-preview';
+      document.body.appendChild(root);
+    }
+    root.className='open';
+    root.innerHTML=`
+      <div class="v24-backdrop" onclick="closeV24Report()"></div>
+      <section class="v24-report">
+        <header>
+          <div>
+            <small>MY AIMS REHABILITATION CENTER W.L.L</small>
+            <h2>Session Clinical Report</h2>
+          </div>
+          <button onclick="closeV24Report()">×</button>
+        </header>
+
+        <div class="v24-report-meta">
+          <div><small>Patient</small><b>${esc(patientName(a.patientId))}</b></div>
+          <div><small>Date</small><b>${esc(a.date)}</b></div>
+          <div><small>Therapist</small><b>${esc(a.therapist||'—')}</b></div>
+          <div><small>Visit Type</small><b>${esc(a.visitType||'Session')}</b></div>
+        </div>
+
+        ${p?`<section><small>TREATMENT PLAN</small><h3>${esc(p.title||'Treatment Plan')}</h3><p>${esc(p.goals||p.comments||'')}</p></section>`:''}
+
+        ${n?`
+          <section>
+            <small>PAIN / TREATMENT AREAS</small>
+            <div class="v24-report-tags">${(n.areas||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div>
+          </section>
+          <div class="v24-report-scores">
+            <div><small>Pain Score</small><b>${Number(n.painScore||0)}/10</b></div>
+            <div><small>Progress</small><b>${Number(n.progressScore||0)}%</b></div>
+          </div>
+          <section><small>PATIENT REPORT / SUBJECTIVE</small><p>${esc(n.subjective||'—')}</p></section>
+          <section><small>CLINICAL FINDINGS / OBJECTIVE</small><p>${esc(n.objective||'—')}</p></section>
+          <section><small>INTERVENTIONS</small><p>${esc((n.interventions||[]).join(' · ')||'—')}</p></section>
+          <section><small>SESSION RESPONSE</small><p>${esc(n.response||'—')}</p></section>
+          <section><small>NEXT SESSION / RECOMMENDATION</small><p>${esc(n.nextSession||'—')}</p></section>
+        `:`<div class="v24-empty">No session note saved yet.</div>`}
+
+        <footer>
+          <button onclick="window.print()">Print / Save PDF</button>
+          <button class="primary" onclick="closeV24Report()">Close</button>
+        </footer>
+      </section>`;
+  };
+
+  window.closeV24Report=function(){
+    const r=document.getElementById('v24-report-preview');
+    if(r) r.className='';
+  };
+
+  function renderV24SessionBadges(){
+    document.querySelectorAll('#page-appointments .v22-appt').forEach(btn=>{
+      btn.querySelector('.v24-clinical-badge')?.remove();
+
+      const click=btn.getAttribute('onclick')||'';
+      const m=click.match(/openV22PatientCard\('([^']+)'\)/);
+      if(!m) return;
+
+      const n=noteForAppointment(m[1]);
+      if(!n) return;
+
+      const badge=document.createElement('span');
+      badge.className='v24-clinical-badge';
+      badge.textContent='Clinical ✓';
+      btn.appendChild(badge);
+    });
+  }
+
+  function enhancePatientCard(){
+    const card=document.querySelector('#v22-card-shade.open .v22-patient-card');
+    if(!card || card.dataset.v24==='1') return;
+
+    const shade=document.getElementById('v22-card-shade');
+    const html=shade?.innerHTML||'';
+    const m=html.match(/openV21Reminder\('([^']+)'\)/) || html.match(/openV16Appointment\('([^']+)'\)/);
+    if(!m) return;
+
+    const id=m[1];
+    const a=appt(id);
+    if(!a) return;
+
+    card.dataset.v24='1';
+
+    const plan=planForPatient(a.patientId);
+    const note=noteForAppointment(id);
+
+    const summary=document.createElement('div');
+    summary.className='v24-card-summary';
+    summary.innerHTML=`
+      <div>
+        <small>TREATMENT PLAN</small>
+        <b>${esc(plan?.title||'No active plan')}</b>
+        <span>${plan?.areas?.length?esc(plan.areas.slice(0,3).join(', ')):'Add treatment areas and goals'}</span>
+      </div>
+      ${note?`<em>${Number(note.painScore||0)}/10</em>`:'<em>NEW</em>'}`;
+
+    const actions=card.querySelector('.v22-card-actions');
+    if(actions) actions.insertAdjacentElement('beforebegin',summary);
+
+    if(actions && !actions.querySelector('.v24-clinical-action')){
+      const btn=document.createElement('button');
+      btn.className='v24-clinical-action gold';
+      btn.textContent=note?'Open Clinical Session':'Add Clinical Session';
+      btn.onclick=()=>{ closeV22PatientCard(); openV24ClinicalNote(id); };
+      actions.prepend(btn);
+
+      if(note){
+        const report=document.createElement('button');
+        report.className='v24-clinical-action';
+        report.textContent='Session Report';
+        report.onclick=()=>{ closeV22PatientCard(); previewV24SessionReport(id); };
+        actions.prepend(report);
+      }
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v24-css')) return;
+    const st=document.createElement('style');
+    st.id='v24-css';
+    st.textContent=`
+      #v24-clinical-modal,#v24-report-preview{display:none}
+      #v24-clinical-modal.open,#v24-report-preview.open{display:block;position:fixed;inset:0;z-index:100030}
+      .v24-backdrop{position:absolute;inset:0;background:rgba(11,31,37,.50);backdrop-filter:blur(4px)}
+      .v24-dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(980px,96vw);height:min(900px,94vh);background:#fff;border-radius:20px;box-shadow:0 35px 100px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
+      .v24-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;padding:20px 22px 15px;border-bottom:1px solid #e4ebed}.v24-head small{font-size:8px;letter-spacing:1.5px;color:#b68a3b;font-weight:900}.v24-head h2{margin:3px 0;color:#173f49}.v24-head p{margin:0;color:#839196;font-size:9px}.v24-head>button{border:0;background:#f1f4f5;width:33px;height:33px;border-radius:50%;font-size:20px;cursor:pointer}
+      .v24-tabs{display:flex;gap:6px;padding:10px 22px;border-bottom:1px solid #edf1f2;background:#fbfcfc}.v24-tabs button{border:1px solid #dfe7e9;background:#fff;border-radius:8px;padding:8px 11px;font-size:9px;font-weight:800;color:#566e74;cursor:pointer}.v24-tabs button.active{background:#174f5b;border-color:#174f5b;color:#fff}
+      .v24-tab{display:none;overflow:auto;padding:18px 22px;flex:1}.v24-tab.active{display:block}
+      .v24-section-title{display:flex;justify-content:space-between;align-items:flex-end;margin:7px 0 10px}.v24-section-title>div{display:flex;align-items:center;gap:7px}.v24-section-title small{width:24px;height:24px;border-radius:8px;background:#fff7e8;color:#9b742d;display:grid;place-items:center;font-size:7px;font-weight:900}.v24-section-title h3{margin:0;font-size:13px;color:#31545c}.v24-section-title>span{font-size:8px;color:#8e9b9f}
+      .v24-area-group{margin-bottom:9px}.v24-area-group>b{display:block;font-size:8px;color:#829095;margin-bottom:5px}.v24-chip-wrap{display:flex;flex-wrap:wrap;gap:5px}.v24-chip{border:1px solid #dce6e8;background:#fff;border-radius:999px;padding:6px 9px;font-size:8px;color:#61757b;cursor:pointer}.v24-chip:hover{border-color:#b8c9cd}.v24-chip.active{background:#eaf4f3;border-color:#3d8276;color:#256b60;font-weight:800}.v24-chip-wrap.interventions .v24-chip.active{background:#fff5e3;border-color:#c99a42;color:#8d6828}
+      .v24-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0}.v24-metrics label{border:1px solid #e0e8ea;border-radius:11px;padding:10px}.v24-metrics label>span{display:block;font-size:8px;font-weight:800;color:#687b80;margin-bottom:8px}.v24-range-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:6px}.v24-range-row input{accent-color:#174f5b}.v24-range-row b{font-size:13px;color:#31545c}.v24-range-row small{font-size:8px;color:#88969a}
+      .v24-note-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}.v24-note-grid label{display:flex;flex-direction:column;gap:5px}.v24-note-grid .wide{grid-column:1/-1}.v24-note-grid label>span{font-size:8px;font-weight:800;color:#60757b}.v24-note-grid input,.v24-note-grid textarea,.v24-note-grid select{border:1px solid #dce6e8;border-radius:9px;padding:9px;font:inherit;font-size:10px;color:#375860;resize:vertical}
+      .v24-plan-banner{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#174f5b,#2b6874);color:#fff;border-radius:14px;padding:15px;margin-bottom:14px}.v24-plan-banner small{font-size:7px;letter-spacing:1px;opacity:.72}.v24-plan-banner h3{margin:3px 0}.v24-plan-banner p{margin:0;font-size:8px;opacity:.74}.v24-plan-banner>span{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);border-radius:99px;padding:5px 8px;font-size:8px}
+      .v24-footer{display:flex;justify-content:flex-end;gap:7px;border-top:1px solid #e5ecee;padding:12px 20px;background:#fff}.v24-footer button{border-radius:8px;padding:9px 12px;font-size:9px;font-weight:800;cursor:pointer}.v24-footer .secondary{border:1px solid #dce6e8;background:#fff;color:#4b666d}.v24-footer .primary{border:1px solid #c99a42;background:#c99a42;color:#fff}
+      .v24-history-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.v24-history-head small{font-size:7px;color:#b78c3e;font-weight:900;letter-spacing:1px}.v24-history-head h3{margin:3px 0;color:#31545c}.v24-history-head>span{font-size:8px;padding:5px 8px;border-radius:99px;background:#edf6f2;color:#286c57}.v24-plan-summary{display:grid;grid-template-columns:2fr 1fr 2fr;gap:8px;margin-bottom:12px}.v24-plan-summary>div{border:1px solid #e0e8ea;border-radius:9px;padding:9px}.v24-plan-summary small,.v24-plan-summary b{display:block}.v24-plan-summary small{font-size:7px;color:#8b989c}.v24-plan-summary b{font-size:9px;color:#36575f;margin-top:3px}
+      .v24-history-list{display:grid;gap:8px}.v24-history-card{display:grid;grid-template-columns:100px 1fr 55px;gap:10px;border:1px solid #e0e8ea;border-radius:11px;padding:10px}.v24-history-date b,.v24-history-date small{display:block}.v24-history-date b{font-size:9px;color:#36575f}.v24-history-date small{font-size:7px;color:#8a989c;margin-top:2px}.v24-history-tags{display:flex;flex-wrap:wrap;gap:4px}.v24-history-tags span{font-size:7px;background:#f0f5f5;border-radius:99px;padding:3px 6px;color:#60767c}.v24-history-main p{font-size:9px;color:#62777c;margin:6px 0}.v24-history-main>small{font-size:7px;color:#9a7c45}.v24-score{text-align:center}.v24-score b,.v24-score span{display:block}.v24-score b{font-size:12px;color:#31545c}.v24-score span{font-size:7px;color:#8b989c}
+      .v24-empty{text-align:center;padding:30px;color:#8c999d;font-size:9px}
+      .v24-card-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #e0e8ea;background:#f8fbfb;border-radius:11px;padding:10px;margin:10px 0}.v24-card-summary small,.v24-card-summary b,.v24-card-summary span{display:block}.v24-card-summary small{font-size:7px;color:#b78c3e;font-weight:900}.v24-card-summary b{font-size:10px;color:#31545c;margin:2px 0}.v24-card-summary span{font-size:7px;color:#8b989c}.v24-card-summary em{font-style:normal;font-size:9px;font-weight:900;color:#fff;background:#174f5b;border-radius:99px;padding:5px 7px}.v24-clinical-badge{position:absolute;right:6px;bottom:5px;font-size:6px!important;background:#e9f6f0;color:#287359;border-radius:99px;padding:2px 5px;font-weight:900}
+      .v24-report{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(780px,95vw);max-height:92vh;overflow:auto;background:#fff;border-radius:17px;padding:22px;box-shadow:0 30px 90px rgba(0,0,0,.22)}.v24-report header{display:flex;justify-content:space-between;border-bottom:2px solid #174f5b;padding-bottom:13px}.v24-report header small{font-size:8px;color:#b78c3e;font-weight:900;letter-spacing:1px}.v24-report header h2{margin:3px 0;color:#31545c}.v24-report header button{border:0;background:#f1f4f5;border-radius:50%;width:31px;height:31px;font-size:18px}.v24-report-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.v24-report-meta>div{border:1px solid #e1e9eb;border-radius:9px;padding:8px}.v24-report-meta small,.v24-report-meta b{display:block}.v24-report-meta small,.v24-report section>small{font-size:7px;color:#8c999d;font-weight:800}.v24-report-meta b{font-size:9px;color:#36575f;margin-top:3px}.v24-report section{border-bottom:1px solid #edf1f2;padding:10px 0}.v24-report section h3{margin:3px 0;color:#31545c}.v24-report section p{font-size:9px;line-height:1.55;color:#60757b;white-space:pre-wrap}.v24-report-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}.v24-report-tags span{font-size:7px;background:#eff5f5;border-radius:99px;padding:4px 7px}.v24-report-scores{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.v24-report-scores>div{background:#f7f9fa;border-radius:9px;padding:9px}.v24-report-scores small,.v24-report-scores b{display:block}.v24-report-scores small{font-size:7px;color:#8b989c}.v24-report-scores b{font-size:14px;color:#31545c;margin-top:2px}.v24-report footer{display:flex;justify-content:flex-end;gap:7px;margin-top:14px}.v24-report footer button{border:1px solid #dbe5e7;background:#fff;border-radius:8px;padding:8px 11px;font-size:8px;font-weight:800}.v24-report footer .primary{background:#c99a42;border-color:#c99a42;color:#fff}
+      @media(max-width:700px){.v24-dialog{height:96vh}.v24-metrics,.v24-note-grid{grid-template-columns:1fr}.v24-note-grid .wide{grid-column:auto}.v24-plan-summary{grid-template-columns:1fr}.v24-history-card{grid-template-columns:1fr}.v24-report-meta{grid-template-columns:1fr 1fr}}
+      @media print{#v24-report-preview.open{position:static}.v24-backdrop{display:none}.v24-report{position:static;transform:none;width:100%;max-height:none;box-shadow:none;border-radius:0}.v24-report header button,.v24-report footer{display:none}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    renderV24SessionBadges();
+    enhancePatientCard();
+  }
+
+  function init(){
+    ensure();
+    css();
+    setTimeout(repair,400);
+
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v24repair);
+      window.__v24repair=setTimeout(repair,60);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+
+})();
