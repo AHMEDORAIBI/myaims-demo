@@ -8782,3 +8782,119 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+/* =========================================================
+   myAIMS V31 - PATIENT WORKSPACE
+   Makes the patient record a full in-page workspace:
+   Overview | Treatment Plan | Sessions | Progress |
+   Clinical Timeline | Reports
+   ========================================================= */
+(function(){
+ const S=()=>window.state||window.appState||{};
+ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const patient=id=>(S().patients||[]).find(p=>String(p.id)===String(id));
+ const name=id=>{const p=patient(id);return p?(p.name||p.fullName||p.patientName||'Patient'):'Patient'};
+ const notes=id=>(S().sessionNotes||[]).filter(n=>String(n.patientId)===String(id)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+ const appts=id=>(S().appointments||[]).filter(a=>String(a.patientId)===String(id)).sort((a,b)=>(String(b.date||'')+String(b.time||'')).localeCompare(String(a.date||'')+String(a.time||'')));
+ const plan=id=>(S().treatmentPlans||[]).filter(x=>String(x.patientId)===String(id)&&x.status!=='Closed').sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0];
+ const goals=id=>(S().treatmentGoals||[]).filter(x=>String(x.patientId)===String(id));
+ const updates=id=>(S().clinicalUpdates||[]).filter(x=>String(x.patientId)===String(id)).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+
+ function workspace(){
+   let w=document.getElementById('v31-workspace');
+   if(!w){
+     w=document.createElement('div');
+     w.id='v31-workspace';
+     const page=document.getElementById('page-patients');
+     if(page) page.appendChild(w);
+   }
+   return w;
+ }
+
+ function body(pid,tab){
+   const p=patient(pid), ns=notes(pid), as=appts(pid), pl=plan(pid), gs=goals(pid), us=updates(pid);
+   const completed=as.filter(a=>a.status==='Completed').length;
+   const latest=ns[0];
+   if(tab==='overview') return `
+     <div class="v31-kpis">
+       <div><small>ACTIVE PLAN</small><b>${esc(pl?.title||'No active plan')}</b><span>${esc((pl?.areas||[]).slice(0,2).join(', ')||'')}</span></div>
+       <div><small>SESSIONS</small><b>${completed}${pl?.plannedSessions?' / '+pl.plannedSessions:''}</b><span>${Math.max(0,Number(pl?.plannedSessions||0)-completed)} remaining</span></div>
+       <div><small>LATEST PAIN</small><b>${latest?Number(latest.painScore||0)+'/10':'—'}</b><span>${latest?.date||'No session note'}</span></div>
+       <div><small>GOALS</small><b>${gs.filter(g=>String(g.status).toLowerCase().includes('achiev')).length} / ${gs.length}</b><span>achieved</span></div>
+     </div>
+     <div class="v31-grid">
+       <section class="v31-card"><div class="v31-card-head"><div><small>LATEST CLINICAL UPDATE</small><h3>${esc(us[0]?.title||'No update yet')}</h3></div><button onclick="openV29ClinicalUpdate('${pid}')">+ Update</button></div><p>${esc(us[0]?.note||latest?.subjective||'Add the latest patient status or clinical update.')}</p>${us[0]?`<span class="v31-date">${new Date(us[0].createdAt).toLocaleString()}</span>`:''}</section>
+       <section class="v31-card"><div class="v31-card-head"><div><small>TREATMENT PLAN</small><h3>${esc(pl?.title||'Not created')}</h3></div><button onclick="openV28PlanEditor('${pid}')">${pl?'Edit':'Create'}</button></div><p>${esc(pl?.comments||'No active treatment plan documented.')}</p><div class="v31-tags">${(pl?.areas||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div></section>
+     </div>
+     <div class="v31-grid">
+       <section class="v31-card"><div class="v31-card-head"><div><small>RECENT SESSIONS</small><h3>Clinical Activity</h3></div><button onclick="v31Tab('${pid}','sessions')">View All</button></div>${as.slice(0,4).map(a=>`<div class="v31-mini-row"><div><b>${esc(a.visitType||'Session')}</b><small>${esc(a.date)} · ${esc(a.time||'')}</small></div><span>${esc(a.status||'')}</span></div>`).join('')||'<p>No sessions yet.</p>'}</section>
+       <section class="v31-card"><div class="v31-card-head"><div><small>GOAL PROGRESS</small><h3>Treatment Goals</h3></div><button onclick="openV29GoalEditor('${pid}')">+ Goal</button></div>${gs.slice(0,4).map(g=>`<div class="v31-goal"><div><b>${esc(g.title)}</b><small>${esc(g.status||'Active')}</small></div><div class="v31-bar"><i style="width:${Number(g.progress||0)}%"></i></div><strong>${Number(g.progress||0)}%</strong></div>`).join('')||'<p>No goals added yet.</p>'}</section>
+     </div>`;
+
+   if(tab==='plan') return `<div class="v31-card v31-full"><div class="v31-card-head"><div><small>TREATMENT PLAN</small><h3>${esc(pl?.title||'No active treatment plan')}</h3></div><button onclick="openV28PlanEditor('${pid}')">${pl?'Edit Plan':'+ Create Plan'}</button></div>${pl?`<div class="v31-plan-grid"><div><small>CLINICAL COMMENTS</small><p>${esc(pl.comments||'—')}</p></div><div><small>GOALS</small><p>${esc(pl.goals||'—')}</p></div><div><small>HOME ADVICE</small><p>${esc(pl.homeAdvice||'—')}</p></div><div><small>SESSIONS</small><p>${completed} completed · ${Math.max(0,Number(pl.plannedSessions||0)-completed)} remaining</p></div></div><div class="v31-tags">${(pl.areas||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:'<div class="v31-empty">Create the patient treatment plan to start the clinical journey.</div>'}</div>`;
+
+   if(tab==='sessions') return `<div class="v31-section-head"><div><small>SESSIONS</small><h3>Appointments & Clinical Sessions</h3></div><button onclick="openV28AddSession('${pid}')">+ Add Session</button></div><div class="v31-session-list">${as.map(a=>{const n=(S().sessionNotes||[]).find(x=>String(x.appointmentId)===String(a.id));return `<article><div class="v31-session-date"><b>${esc(a.date)}</b><span>${esc(a.time||'')}</span></div><div><b>${esc(a.visitType||'Session')}</b><small>${esc(a.therapist||'')} · ${esc(a.room||'')} · ${esc(a.status||'')}</small><p>${esc(n?.subjective||n?.response||'No clinical note yet.')}</p></div><div class="v31-actions">${n?`<button onclick="previewV24SessionReport('${a.id}')">Report</button>`:''}<button class="primary" onclick="openV24ClinicalNote('${a.id}')">${n?'Open Note':'Start Session'}</button></div></article>`}).join('')||'<div class="v31-empty">No sessions scheduled.</div>'}</div>`;
+
+   if(tab==='progress') return `<div class="v31-section-head"><div><small>PROGRESS</small><h3>Clinical Progress & Outcomes</h3></div><button onclick="openV30ProgressReview('${pid}')">Progress Review</button></div><div class="v31-kpis"><div><small>LATEST PAIN</small><b>${latest?latest.painScore+'/10':'—'}</b><span>${latest?.date||''}</span></div><div><small>SESSION PROGRESS</small><b>${latest?latest.progressScore+'%':'—'}</b><span>latest recorded</span></div><div><small>COMPLETED</small><b>${completed}</b><span>sessions</span></div><div><small>UPDATES</small><b>${us.length}</b><span>clinical updates</span></div></div><div class="v31-card v31-full"><div class="v31-card-head"><div><small>GOALS</small><h3>Outcome Tracking</h3></div><button onclick="openV29GoalEditor('${pid}')">+ Goal</button></div>${gs.map(g=>`<div class="v31-goal"><div><b>${esc(g.title)}</b><small>${esc(g.status||'')}</small></div><div class="v31-bar"><i style="width:${Number(g.progress||0)}%"></i></div><strong>${Number(g.progress||0)}%</strong></div>`).join('')||'<div class="v31-empty">No goals recorded.</div>'}</div>`;
+
+   if(tab==='timeline') return typeof window.renderV29ClinicalTimeline==='function'?window.renderV29ClinicalTimeline(pid):'<div class="v31-empty">Clinical timeline unavailable.</div>';
+
+   return `<div class="v31-section-head"><div><small>REPORTS</small><h3>Patient Clinical Reports</h3></div><button onclick="openV30ProgressReview('${pid}')">Progress Review</button></div><div class="v31-report-list">${ns.map(n=>`<button onclick="previewV24SessionReport('${n.appointmentId}')"><div><small>SESSION REPORT</small><b>${esc(n.date||'')}</b><span>${esc(n.therapist||'')}</span></div><strong>${Number(n.painScore||0)}/10</strong><i>›</i></button>`).join('')||'<div class="v31-empty">No reports available.</div>'}</div>`;
+ }
+
+ window.openV31PatientWorkspace=function(pid,tab='overview'){
+   const p=patient(pid),w=workspace(); if(!p||!w)return;
+   const page=document.getElementById('page-patients');
+   [...page.children].forEach(x=>{if(x!==w)x.classList.add('v31-hidden-patient-list')});
+   w.className='open';w.dataset.pid=pid;
+   w.innerHTML=`<div class="v31-top"><button class="v31-back" onclick="closeV31PatientWorkspace()">← Patients</button><div class="v31-identity"><span>${esc(name(pid).split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase())}</span><div><small>PATIENT RECORD</small><h2>${esc(name(pid))}</h2><p>${esc(p.phone||p.mobile||'No mobile')} · ${esc(p.id||'')}</p></div></div><div class="v31-top-actions"><button onclick="openV29ClinicalUpdate('${pid}')">+ Clinical Update</button><button onclick="openV28AddSession('${pid}')">+ Session</button><button class="gold" onclick="openV30ProgressReview('${pid}')">Progress Review</button></div></div><nav class="v31-tabs">${[['overview','Overview'],['plan','Treatment Plan'],['sessions','Sessions'],['progress','Progress'],['timeline','Clinical Timeline'],['reports','Reports']].map(([x,l])=>`<button class="${x===tab?'active':''}" onclick="v31Tab('${pid}','${x}',this)">${l}</button>`).join('')}</nav><main id="v31-body">${body(pid,tab)}</main>`;
+ };
+
+ window.v31Tab=function(pid,tab,btn){
+   document.querySelectorAll('#v31-workspace .v31-tabs button').forEach(x=>x.classList.remove('active'));
+   if(btn)btn.classList.add('active');
+   else [...document.querySelectorAll('#v31-workspace .v31-tabs button')].find(x=>x.textContent.trim().toLowerCase().replace(/\s+/g,'')===tab.toLowerCase().replace(/\s+/g,''))?.classList.add('active');
+   const b=document.getElementById('v31-body');if(b)b.innerHTML=body(pid,tab);
+ };
+
+ window.closeV31PatientWorkspace=function(){
+   const w=document.getElementById('v31-workspace');if(w)w.className='';
+   document.querySelectorAll('#page-patients .v31-hidden-patient-list').forEach(x=>x.classList.remove('v31-hidden-patient-list'));
+ };
+
+ function enhancePatients(){
+   const page=document.getElementById('page-patients');if(!page)return;
+   page.querySelectorAll('tbody tr').forEach(tr=>{
+     if(tr.dataset.v31==='1')return;
+     const text=tr.textContent||'';
+     const p=(S().patients||[]).find(x=>text.includes(x.name||x.fullName||x.patientName||'')||text.includes(String(x.id)));
+     if(!p)return;
+     tr.dataset.v31='1';tr.classList.add('v31-patient-row');tr.title='Open Patient Record';
+     tr.addEventListener('dblclick',e=>{if(!e.target.closest('button,a,input,select'))openV31PatientWorkspace(p.id)});
+     const nameCell=[...tr.querySelectorAll('td')].find(td=>td.textContent.includes(p.name||p.fullName||p.patientName||''));
+     if(nameCell){
+       nameCell.classList.add('v31-name-cell');
+       nameCell.addEventListener('click',e=>{if(!e.target.closest('button,a'))openV31PatientWorkspace(p.id)});
+     }
+   });
+ }
+
+ function css(){
+   if(document.getElementById('v31-css'))return;
+   const s=document.createElement('style');s.id='v31-css';s.textContent=`
+   #v31-workspace{display:none}#v31-workspace.open{display:block;background:linear-gradient(180deg,#f7fafb,#edf4f5);min-height:720px;border-radius:15px;padding:14px}.v31-hidden-patient-list{display:none!important}
+   .v31-top{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;background:#fff;border:1px solid #dfe8ea;border-radius:13px;padding:12px 14px}.v31-back{border:0;background:#eef4f5;color:#4e6970;border-radius:8px;padding:8px 10px;font-size:8px;font-weight:800}.v31-identity{display:flex;gap:9px;align-items:center}.v31-identity>span{width:43px;height:43px;border-radius:13px;background:linear-gradient(145deg,#174f5b,#286b78);color:#fff;display:grid;place-items:center;font-size:9px;font-weight:900}.v31-identity small{font-size:6px;color:#b48637;font-weight:900;letter-spacing:1px}.v31-identity h2{margin:1px 0;color:#31545c;font-size:17px}.v31-identity p{margin:0;font-size:7px;color:#8b999d}.v31-top-actions{display:flex;gap:6px}.v31-top-actions button{border:1px solid #d9e4e6;background:#fff;border-radius:8px;padding:7px 9px;font-size:7px;font-weight:800;color:#566f75}.v31-top-actions .gold{background:#c99a42;border-color:#c99a42;color:#fff}
+   .v31-tabs{display:flex;gap:5px;margin:9px 0;background:#fff;border:1px solid #dfe8ea;border-radius:11px;padding:6px}.v31-tabs button{border:0;background:transparent;border-radius:7px;padding:7px 10px;font-size:7px;font-weight:800;color:#6a7f84}.v31-tabs button.active{background:#174f5b;color:#fff}
+   #v31-body{min-height:580px}.v31-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:9px}.v31-kpis>div,.v31-card{background:#fff;border:1px solid #dfe8ea;border-radius:11px;padding:10px;box-shadow:0 4px 12px rgba(28,66,75,.035)}.v31-kpis small,.v31-kpis b,.v31-kpis span{display:block}.v31-kpis small,.v31-card small{font-size:6px;color:#a27a35;font-weight:900}.v31-kpis b{font-size:12px;color:#31545c;margin:3px 0}.v31-kpis span{font-size:6px;color:#89979c}.v31-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px}.v31-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}.v31-card-head h3{margin:2px 0;color:#31545c;font-size:10px}.v31-card-head button,.v31-section-head button{border:1px solid #d8e3e5;background:#fff;border-radius:7px;padding:5px 7px;font-size:6px;font-weight:800;color:#587178}.v31-card p{font-size:8px;color:#63787e;line-height:1.5}.v31-date{font-size:6px;color:#9a9fa0}.v31-tags{display:flex;gap:4px;flex-wrap:wrap}.v31-tags span{background:#edf5f5;color:#567178;border-radius:99px;padding:3px 6px;font-size:6px}.v31-mini-row{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #edf1f2;padding:6px 0}.v31-mini-row b,.v31-mini-row small{display:block}.v31-mini-row b{font-size:7px;color:#36575f}.v31-mini-row small,.v31-mini-row span{font-size:6px;color:#89979c}.v31-goal{display:grid;grid-template-columns:minmax(110px,1fr) 1fr 35px;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #edf1f2}.v31-goal b,.v31-goal small{display:block}.v31-goal b{font-size:7px;color:#36575f}.v31-goal small{font-size:6px;color:#89979c}.v31-bar{height:5px;background:#e9f0f1;border-radius:99px;overflow:hidden}.v31-bar i{display:block;height:100%;background:linear-gradient(90deg,#174f5b,#c99a42)}.v31-goal strong{font-size:7px;color:#31545c}.v31-full{margin-bottom:9px}.v31-plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:9px 0}.v31-plan-grid>div{background:#f8fbfb;border-radius:8px;padding:8px}.v31-plan-grid p{margin:4px 0}
+   .v31-section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.v31-section-head small{font-size:6px;color:#a27a35;font-weight:900}.v31-section-head h3{margin:2px 0;color:#31545c}.v31-session-list{display:grid;gap:6px}.v31-session-list article{display:grid;grid-template-columns:85px 1fr auto;gap:9px;align-items:center;background:#fff;border:1px solid #dfe8ea;border-radius:10px;padding:9px}.v31-session-date b,.v31-session-date span,.v31-session-list article>div:nth-child(2)>b,.v31-session-list article>div:nth-child(2)>small{display:block}.v31-session-date b,.v31-session-list article>div:nth-child(2)>b{font-size:8px;color:#36575f}.v31-session-date span,.v31-session-list article>div:nth-child(2)>small{font-size:6px;color:#89979c}.v31-session-list p{font-size:7px;color:#687d82;margin:3px 0}.v31-actions{display:flex;gap:4px}.v31-actions button{border:1px solid #d8e3e5;background:#fff;border-radius:7px;padding:6px 7px;font-size:6px;font-weight:800}.v31-actions .primary{background:#174f5b;color:#fff;border-color:#174f5b}.v31-report-list{display:grid;gap:6px}.v31-report-list>button{display:grid;grid-template-columns:1fr auto 12px;align-items:center;text-align:left;background:#fff;border:1px solid #dfe8ea;border-radius:9px;padding:9px}.v31-report-list small,.v31-report-list b,.v31-report-list span{display:block}.v31-report-list small{font-size:6px;color:#a27a35}.v31-report-list b{font-size:8px;color:#36575f}.v31-report-list span{font-size:6px;color:#89979c}.v31-report-list strong{font-size:8px;color:#31545c}.v31-empty{text-align:center;padding:30px;color:#8b999d;font-size:8px}.v31-patient-row{cursor:default}.v31-name-cell{cursor:pointer!important;color:#175765!important;font-weight:800}.v31-name-cell:hover{text-decoration:underline}
+   @media(max-width:850px){.v31-top{grid-template-columns:1fr}.v31-top-actions{flex-wrap:wrap}.v31-tabs{overflow:auto}.v31-kpis{grid-template-columns:1fr 1fr}.v31-grid,.v31-plan-grid{grid-template-columns:1fr}.v31-session-list article{grid-template-columns:1fr}}
+   `;document.head.appendChild(s);
+ }
+
+ function init(){
+   css();setTimeout(enhancePatients,300);
+   const o=new MutationObserver(()=>{clearTimeout(window.__v31);window.__v31=setTimeout(enhancePatients,70)});
+   o.observe(document.body,{childList:true,subtree:true});
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
