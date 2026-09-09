@@ -1536,3 +1536,331 @@ render();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V13 - USERS, ROLES & AUDIT TRAIL
+   Demo-ready access control + activity log
+   ========================================================= */
+(function () {
+  const getState = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  const DEFAULT_USERS = [
+    { id:'USR-1', name:'Main User', username:'admin', role:'Administrator', status:'Active' },
+    { id:'USR-2', name:'Reception', username:'reception', role:'Reception', status:'Active' },
+    { id:'USR-3', name:'Accounts', username:'accounts', role:'Accounts', status:'Active' }
+  ];
+
+  const ROLE_ACCESS = {
+    Administrator:['dashboard','patients','appointments','billing','receipts','expenses','insurance','reports','cash-closing','alerts','settings','users'],
+    Reception:['dashboard','patients','appointments','billing','receipts'],
+    Accounts:['dashboard','billing','receipts','expenses','insurance','reports','cash-closing'],
+    Viewer:['dashboard','reports']
+  };
+
+  function ensureV13State(){
+    const s = getState();
+    if (!Array.isArray(s.users) || !s.users.length) s.users = DEFAULT_USERS.map(x => ({...x}));
+    if (!Array.isArray(s.auditLog)) s.auditLog = [];
+    if (!s.currentUserId) s.currentUserId = 'USR-1';
+    save();
+  }
+
+  function currentUser(){
+    const s = getState();
+    return (s.users || []).find(u => String(u.id) === String(s.currentUserId)) || s.users?.[0] || DEFAULT_USERS[0];
+  }
+
+  window.logAudit = function(action, module, details){
+    ensureV13State();
+    const s = getState();
+    const u = currentUser();
+    s.auditLog.unshift({
+      id:'LOG-' + Date.now(),
+      timestamp:new Date().toISOString(),
+      user:u?.name || 'Unknown',
+      role:u?.role || '',
+      action:action || 'Action',
+      module:module || 'System',
+      details:details || ''
+    });
+    s.auditLog = s.auditLog.slice(0,200);
+    save();
+  };
+
+  window.switchDemoUser = function(userId){
+    const s = getState();
+    const user = (s.users || []).find(u => String(u.id) === String(userId));
+    if (!user || user.status !== 'Active') return;
+    s.currentUserId = user.id;
+    save();
+    window.logAudit('Login / Switch User','Security',user.name);
+    applyRoleVisibility();
+    renderUserChip();
+    if (typeof window.renderDashboard === 'function') window.renderDashboard();
+  };
+
+  function detectPageKey(el){
+    const txt = ((el.dataset?.page || '') + ' ' + (el.textContent || '')).toLowerCase();
+    if (txt.includes('dashboard')) return 'dashboard';
+    if (txt.includes('patient')) return 'patients';
+    if (txt.includes('appointment')) return 'appointments';
+    if (txt.includes('billing') || txt.includes('invoice')) return 'billing';
+    if (txt.includes('receipt')) return 'receipts';
+    if (txt.includes('expense')) return 'expenses';
+    if (txt.includes('insurance')) return 'insurance';
+    if (txt.includes('report')) return 'reports';
+    if (txt.includes('cash closing')) return 'cash-closing';
+    if (txt.includes('alert')) return 'alerts';
+    if (txt.includes('setting')) return 'settings';
+    if (txt.includes('user')) return 'users';
+    return '';
+  }
+
+  function applyRoleVisibility(){
+    const u = currentUser();
+    const allowed = ROLE_ACCESS[u?.role] || ROLE_ACCESS.Viewer;
+
+    document.querySelectorAll('aside a, aside button, .sidebar a, .sidebar button, #sidebar a, #sidebar button, [data-v12-page]')
+      .forEach(el => {
+        const key = detectPageKey(el);
+        if (!key) return;
+        el.style.display = allowed.includes(key) ? '' : 'none';
+      });
+  }
+
+  function renderUserChip(){
+    let header = document.querySelector('header, .topbar, .app-header, .header-actions');
+    if (!header) return;
+
+    let box = document.getElementById('v13-user-chip');
+    if (!box){
+      box = document.createElement('div');
+      box.id = 'v13-user-chip';
+      box.className = 'v13-user-chip';
+      header.appendChild(box);
+    }
+
+    const s = getState();
+    const u = currentUser();
+    box.innerHTML = `
+      <span class="v13-avatar">${(u?.name || 'U').charAt(0).toUpperCase()}</span>
+      <div><b>${u?.name || 'User'}</b><small>${u?.role || ''}</small></div>
+      <select onchange="switchDemoUser(this.value)">
+        ${(s.users || []).filter(x => x.status === 'Active').map(x =>
+          `<option value="${x.id}" ${x.id===u?.id?'selected':''}>${x.name}</option>`
+        ).join('')}
+      </select>
+    `;
+  }
+
+  function ensureUsersNav(){
+    const nav = document.querySelector('aside nav, .sidebar nav, #sidebar nav, aside, .sidebar, #sidebar');
+    if (!nav || nav.querySelector('[data-v13-page="users"]')) return;
+
+    const btn = document.createElement('button');
+    btn.type='button';
+    btn.className='v12-nav-item';
+    btn.dataset.v13Page='users';
+    btn.innerHTML='<span class="v12-icon">⚿</span><span>Users & Audit</span>';
+    btn.onclick=()=>openUsersAudit();
+
+    const settings = [...nav.querySelectorAll('a,button')].find(x => (x.textContent||'').toLowerCase().includes('settings'));
+    if (settings) nav.insertBefore(btn, settings);
+    else nav.appendChild(btn);
+  }
+
+  function mainHost(){
+    const main = document.querySelector('main, .main-content, #main-content, .app-main, #content, .content');
+    if (!main) return null;
+    let h = document.getElementById('v13-users-host');
+    if (!h){
+      h=document.createElement('div');
+      h.id='v13-users-host';
+      h.className='v12-feature-host';
+      main.appendChild(h);
+    }
+    return h;
+  }
+
+  function hideMain(){
+    const main = document.querySelector('main, .main-content, #main-content, .app-main, #content, .content');
+    if (!main) return;
+    [...main.children].forEach(el=>{
+      if (el.id !== 'v13-users-host') {
+        if (!el.dataset.v13Display) el.dataset.v13Display = el.style.display || '';
+        el.style.display='none';
+      }
+    });
+  }
+
+  function userRows(){
+    const s=getState();
+    return (s.users||[]).map(u=>`
+      <tr>
+        <td><b>${u.name}</b><small>${u.username}</small></td>
+        <td>${u.role}</td>
+        <td><span class="v13-status ${u.status==='Active'?'active':'inactive'}">${u.status}</span></td>
+        <td>
+          <button class="v13-mini" onclick="editDemoUser('${u.id}')">Edit</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function auditRows(){
+    const s=getState();
+    return (s.auditLog||[]).slice(0,50).map(l=>`
+      <tr>
+        <td>${new Date(l.timestamp).toLocaleString()}</td>
+        <td><b>${l.user}</b><small>${l.role}</small></td>
+        <td>${l.module}</td>
+        <td>${l.action}</td>
+        <td>${l.details || ''}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="v13-empty">No activity recorded yet.</td></tr>`;
+  }
+
+  window.openUsersAudit=function(){
+    ensureV13State();
+    const h=mainHost();
+    if (!h) return;
+    hideMain();
+    h.style.display='block';
+
+    h.innerHTML=`
+      <div class="v12-title">
+        <div><small>SECURITY & CONTROL</small><h2>Users & Audit Trail</h2>
+        <p>Demo access roles and system activity history.</p></div>
+        <button class="v13-primary" onclick="addDemoUser()">+ New User</button>
+      </div>
+
+      <div class="v13-role-cards">
+        <div><span>Administrator</span><b>Full Access</b></div>
+        <div><span>Reception</span><b>Front Desk</b></div>
+        <div><span>Accounts</span><b>Finance</b></div>
+        <div><span>Viewer</span><b>Read Only</b></div>
+      </div>
+
+      <div class="v12-white">
+        <div class="v13-section-head"><h3>Users</h3><span>${(getState().users||[]).length} users</span></div>
+        <div class="v13-table-wrap">
+          <table class="v13-table">
+            <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>${userRows()}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="v12-white" style="margin-top:16px">
+        <div class="v13-section-head"><h3>Audit Trail</h3><span>Latest 50 activities</span></div>
+        <div class="v13-table-wrap">
+          <table class="v13-table">
+            <thead><tr><th>Date & Time</th><th>User</th><th>Module</th><th>Action</th><th>Details</th></tr></thead>
+            <tbody>${auditRows()}</tbody>
+          </table>
+        </div>
+      </div>`;
+  };
+
+  window.addDemoUser=function(){
+    const name=prompt('User name:');
+    if (!name) return;
+    const username=prompt('Username:', name.toLowerCase().replace(/\s+/g,'.'));
+    if (!username) return;
+    const role=prompt('Role: Administrator / Reception / Accounts / Viewer','Reception');
+    const allowed=['Administrator','Reception','Accounts','Viewer'];
+    const finalRole=allowed.includes(role) ? role : 'Viewer';
+
+    const s=getState();
+    s.users.push({
+      id:'USR-'+Date.now(),
+      name, username,
+      role:finalRole,
+      status:'Active'
+    });
+    save();
+    window.logAudit('Create User','Users',name + ' — ' + finalRole);
+    openUsersAudit();
+    renderUserChip();
+  };
+
+  window.editDemoUser=function(id){
+    const s=getState();
+    const u=(s.users||[]).find(x=>String(x.id)===String(id));
+    if (!u) return;
+
+    const role=prompt('Role: Administrator / Reception / Accounts / Viewer',u.role);
+    if (role!==null && ['Administrator','Reception','Accounts','Viewer'].includes(role)) u.role=role;
+
+    const status=prompt('Status: Active / Inactive',u.status);
+    if (status!==null && ['Active','Inactive'].includes(status)) u.status=status;
+
+    save();
+    window.logAudit('Update User','Users',u.name + ' — ' + u.role + ' — ' + u.status);
+    openUsersAudit();
+    applyRoleVisibility();
+    renderUserChip();
+  };
+
+  function addGenericAuditCapture(){
+    document.addEventListener('click', function(e){
+      const btn=e.target.closest('button');
+      if (!btn) return;
+      const text=(btn.textContent||'').trim();
+      if (!text) return;
+      if (/new patient|new appointment|new invoice|pay|receipt|expense|close today|print closing/i.test(text)){
+        window.logAudit(text,'Operation','Triggered from UI');
+      }
+    }, true);
+  }
+
+  function css(){
+    if (document.getElementById('myaims-v13-css')) return;
+    const st=document.createElement('style');
+    st.id='myaims-v13-css';
+    st.textContent=`
+      .v13-user-chip{display:flex;align-items:center;gap:9px;margin-left:10px;padding:6px 9px;border:1px solid #dce5e8;border-radius:10px;background:#fff}
+      .v13-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#184f5b;color:#fff;font-weight:700}
+      .v13-user-chip b,.v13-user-chip small{display:block;line-height:1.15}.v13-user-chip small{font-size:10px;opacity:.6}
+      .v13-user-chip select{border:0;background:#f5f8f9;border-radius:7px;padding:6px}
+      .v13-role-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+      .v13-role-cards>div{background:#fff;border:1px solid #dfe8eb;border-radius:12px;padding:14px}
+      .v13-role-cards span{display:block;font-size:12px;opacity:.65;margin-bottom:5px}.v13-role-cards b{font-size:16px}
+      .v13-section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.v13-section-head h3{margin:0}
+      .v13-section-head span{font-size:12px;opacity:.6}
+      .v13-table-wrap{overflow:auto}.v13-table{width:100%;border-collapse:collapse}
+      .v13-table th,.v13-table td{padding:11px;border-bottom:1px solid #edf1f2;text-align:left;vertical-align:top}
+      .v13-table th{font-size:12px;opacity:.65}.v13-table td small{display:block;font-size:11px;opacity:.6;margin-top:3px}
+      .v13-status{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700}
+      .v13-status.active{background:#e8f7ef}.v13-status.inactive{background:#f2f2f2}
+      .v13-mini,.v13-primary{border:0;border-radius:8px;padding:7px 10px;cursor:pointer}
+      .v13-mini{background:#f2f6f7}.v13-primary{background:#c99a42;color:#fff;font-weight:700;padding:10px 14px}
+      .v13-empty{text-align:center;opacity:.6;padding:24px!important}
+      @media(max-width:900px){.v13-role-cards{grid-template-columns:1fr 1fr}.v13-user-chip{display:none}}
+      @media(max-width:600px){.v13-role-cards{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function init(){
+    ensureV13State();
+    css();
+    ensureUsersNav();
+    renderUserChip();
+    applyRoleVisibility();
+    addGenericAuditCapture();
+
+    const observer=new MutationObserver(()=>{
+      clearTimeout(window.__v13t);
+      window.__v13t=setTimeout(()=>{
+        ensureUsersNav();
+        renderUserChip();
+        applyRoleVisibility();
+      },40);
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
