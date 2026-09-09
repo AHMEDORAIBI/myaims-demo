@@ -687,3 +687,264 @@ render();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+
+/* =========================
+   myAIMS V9 - Daily & Monthly Closing / Cash Closing
+   ========================= */
+(function () {
+  const getState = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  function toNum(v){ const n = Number(v || 0); return Number.isFinite(n) ? n : 0; }
+  function fmt(v){ return toNum(v).toFixed(3) + ' BHD'; }
+  function today(){ return new Date().toISOString().slice(0,10); }
+
+  function ensureClosingState(){
+    const s = getState();
+    if (!Array.isArray(s.cashClosings)) s.cashClosings = [];
+    save();
+  }
+
+  function receiptDate(r){
+    return r.date || r.paymentDate || r.createdAt?.slice?.(0,10) || '';
+  }
+
+  function expenseDate(e){
+    return e.date || e.expenseDate || e.createdAt?.slice?.(0,10) || '';
+  }
+
+  function receiptAmount(r){
+    return toNum(r.amount || r.paidAmount || r.total);
+  }
+
+  function expenseAmount(e){
+    return toNum(e.amount || e.total);
+  }
+
+  window.getClosingSummary = function(dateStr){
+    const s = getState();
+    const date = dateStr || today();
+
+    const receipts = (s.receipts || s.payments || []).filter(r => receiptDate(r) === date);
+    const expenses = (s.expenses || []).filter(e => expenseDate(e) === date);
+
+    const byMethod = {};
+    receipts.forEach(r => {
+      const m = r.method || r.paymentMethod || 'Other';
+      byMethod[m] = (byMethod[m] || 0) + receiptAmount(r);
+    });
+
+    const totalReceipts = receipts.reduce((a,r)=>a+receiptAmount(r),0);
+    const totalExpenses = expenses.reduce((a,e)=>a+expenseAmount(e),0);
+
+    return {
+      date,
+      totalReceipts,
+      totalExpenses,
+      netCash: totalReceipts - totalExpenses,
+      receiptCount: receipts.length,
+      expenseCount: expenses.length,
+      byMethod
+    };
+  };
+
+  window.saveCashClosing = function(dateStr){
+    ensureClosingState();
+    const s = getState();
+    const sm = window.getClosingSummary(dateStr);
+
+    const openingRaw = prompt('Opening cash balance (BHD):', '0.000');
+    if (openingRaw === null) return;
+    const opening = toNum(openingRaw);
+
+    const countedRaw = prompt('Counted cash at closing (BHD):', (opening + sm.netCash).toFixed(3));
+    if (countedRaw === null) return;
+    const counted = toNum(countedRaw);
+
+    const expected = opening + sm.netCash;
+    const variance = counted - expected;
+
+    const existing = s.cashClosings.find(x => x.date === sm.date);
+    const record = {
+      id: existing?.id || ('CLOSE-' + Date.now()),
+      date: sm.date,
+      openingCash: opening,
+      receipts: sm.totalReceipts,
+      expenses: sm.totalExpenses,
+      expectedCash: expected,
+      countedCash: counted,
+      variance,
+      closedAt: new Date().toISOString()
+    };
+
+    if (existing) Object.assign(existing, record);
+    else s.cashClosings.push(record);
+
+    save();
+    alert('Cash closing saved successfully.');
+    renderClosingPanel();
+  };
+
+  window.printCashClosing = function(dateStr){
+    const sm = window.getClosingSummary(dateStr);
+    const s = getState();
+    const close = (s.cashClosings || []).find(x => x.date === sm.date);
+
+    const methods = Object.entries(sm.byMethod)
+      .map(([k,v]) => `<tr><td>${k}</td><td>${fmt(v)}</td></tr>`)
+      .join('') || `<tr><td colspan="2">No receipts</td></tr>`;
+
+    const html = `
+    <html><head><title>Cash Closing ${sm.date}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:28px;color:#222}
+      h1{font-size:22px;margin-bottom:4px}
+      .muted{color:#666;font-size:12px}
+      table{width:100%;border-collapse:collapse;margin-top:18px}
+      td,th{border:1px solid #ddd;padding:9px;text-align:left}
+      .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:18px}
+      .card{border:1px solid #ddd;border-radius:10px;padding:12px}
+      .card span{display:block;color:#666;font-size:12px}
+      .card b{font-size:17px}
+      .variance{font-size:18px;font-weight:700}
+    </style></head><body>
+      <h1>MY AIMS REHABILITATION CENTER W.L.L</h1>
+      <div class="muted">Daily Cash Closing Report — ${sm.date}</div>
+
+      <div class="grid">
+        <div class="card"><span>Total Receipts</span><b>${fmt(sm.totalReceipts)}</b></div>
+        <div class="card"><span>Total Expenses</span><b>${fmt(sm.totalExpenses)}</b></div>
+        <div class="card"><span>Net Cash Movement</span><b>${fmt(sm.netCash)}</b></div>
+        <div class="card"><span>Transactions</span><b>${sm.receiptCount + sm.expenseCount}</b></div>
+      </div>
+
+      <h3>Receipts by Payment Method</h3>
+      <table><thead><tr><th>Method</th><th>Amount</th></tr></thead><tbody>${methods}</tbody></table>
+
+      ${close ? `
+      <h3>Cash Reconciliation</h3>
+      <table>
+        <tr><th>Opening Cash</th><td>${fmt(close.openingCash)}</td></tr>
+        <tr><th>Expected Cash</th><td>${fmt(close.expectedCash)}</td></tr>
+        <tr><th>Counted Cash</th><td>${fmt(close.countedCash)}</td></tr>
+        <tr><th>Variance</th><td class="variance">${fmt(close.variance)}</td></tr>
+      </table>` : ''}
+    </body></html>`;
+
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(()=>w.print(), 250);
+  };
+
+  window.getMonthlyClosingSummary = function(monthStr){
+    const s = getState();
+    const month = monthStr || today().slice(0,7);
+    const receipts = (s.receipts || s.payments || []).filter(r => receiptDate(r).startsWith(month));
+    const expenses = (s.expenses || []).filter(e => expenseDate(e).startsWith(month));
+
+    const totalReceipts = receipts.reduce((a,r)=>a+receiptAmount(r),0);
+    const totalExpenses = expenses.reduce((a,e)=>a+expenseAmount(e),0);
+
+    return {
+      month,
+      totalReceipts,
+      totalExpenses,
+      net: totalReceipts-totalExpenses,
+      receiptCount: receipts.length,
+      expenseCount: expenses.length
+    };
+  };
+
+  function renderClosingPanel(){
+    ensureClosingState();
+    const reports = document.querySelector('#reports, [data-page="reports"], .reports-page');
+    if (!reports) return;
+
+    let box = document.getElementById('cash-closing-panel');
+    if (!box){
+      box = document.createElement('section');
+      box.id = 'cash-closing-panel';
+      box.className = 'v9-panel';
+      reports.prepend(box);
+    }
+
+    const sm = window.getClosingSummary(today());
+    const close = (getState().cashClosings || []).find(x => x.date === sm.date);
+    const month = window.getMonthlyClosingSummary(today().slice(0,7));
+
+    box.innerHTML = `
+      <div class="v9-head">
+        <div><strong>Cash Closing</strong><small>Daily & monthly closing control</small></div>
+        <div class="v9-actions">
+          <button class="btn btn-sm" onclick="saveCashClosing('${sm.date}')">Close Today</button>
+          <button class="btn btn-sm" onclick="printCashClosing('${sm.date}')">Print Closing</button>
+        </div>
+      </div>
+
+      <div class="v9-cards">
+        <div><span>Today's Receipts</span><b>${fmt(sm.totalReceipts)}</b></div>
+        <div><span>Today's Expenses</span><b>${fmt(sm.totalExpenses)}</b></div>
+        <div><span>Today's Net</span><b>${fmt(sm.netCash)}</b></div>
+        <div><span>Closing Status</span><b>${close ? 'Closed' : 'Open'}</b></div>
+      </div>
+
+      <div class="v9-month">
+        <strong>Current Month</strong>
+        <span>Receipts: ${fmt(month.totalReceipts)}</span>
+        <span>Expenses: ${fmt(month.totalExpenses)}</span>
+        <span>Net: ${fmt(month.net)}</span>
+      </div>
+
+      ${close ? `
+      <div class="v9-recon">
+        <span>Opening: <b>${fmt(close.openingCash)}</b></span>
+        <span>Expected: <b>${fmt(close.expectedCash)}</b></span>
+        <span>Counted: <b>${fmt(close.countedCash)}</b></span>
+        <span>Variance: <b>${fmt(close.variance)}</b></span>
+      </div>` : ''}
+    `;
+  }
+
+  function injectStyles(){
+    if (document.getElementById('myaims-v9-style')) return;
+    const st = document.createElement('style');
+    st.id = 'myaims-v9-style';
+    st.textContent = `
+      .v9-panel{background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:16px;margin-bottom:18px}
+      .v9-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+      .v9-head small{display:block;opacity:.65;margin-top:3px}
+      .v9-actions{display:flex;gap:8px;flex-wrap:wrap}
+      .v9-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+      .v9-cards>div{border:1px solid #edf0f4;border-radius:11px;padding:12px}
+      .v9-cards span{display:block;font-size:12px;opacity:.65;margin-bottom:5px}
+      .v9-cards b{font-size:16px}
+      .v9-month,.v9-recon{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid #edf0f4}
+      @media(max-width:760px){
+        .v9-cards{grid-template-columns:1fr 1fr}
+        .v9-head{align-items:flex-start;flex-direction:column}
+        .v9-actions,.v9-actions .btn{width:100%}
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  const oldReports = window.renderReports;
+  if (typeof oldReports === 'function'){
+    window.renderReports = function(){
+      oldReports.apply(this, arguments);
+      setTimeout(renderClosingPanel, 40);
+    };
+  }
+
+  function init(){
+    injectStyles();
+    ensureClosingState();
+    setTimeout(renderClosingPanel, 300);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
