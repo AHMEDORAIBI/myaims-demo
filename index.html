@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>myAIMS Rehabilitation Center — Demo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">M</div>
+        <div>
+          <strong>myAIMS</strong>
+          <small data-en="Rehabilitation Center" data-ar="مركز أهدافي للتأهيل">Rehabilitation Center</small>
+        </div>
+      </div>
+
+      <div class="demo-badge">DEMO</div>
+
+      <nav id="nav">
+        <button class="nav-item active" data-page="dashboard">⌂ <span data-en="Dashboard" data-ar="لوحة التحكم">Dashboard</span></button>
+        <button class="nav-item" data-page="patients">♙ <span data-en="Patients" data-ar="المرضى">Patients</span></button>
+        <button class="nav-item" data-page="appointments">▣ <span data-en="Appointments" data-ar="المواعيد">Appointments</span></button>
+        <button class="nav-item" data-page="billing">▤ <span data-en="Billing" data-ar="الفواتير">Billing</span></button>
+        <button class="nav-item" data-page="receipts">✓ <span data-en="Receipts" data-ar="سندات القبض">Receipts</span></button>
+        <button class="nav-item" data-page="expenses">↗ <span data-en="Expenses" data-ar="المصروفات">Expenses</span></button>
+        <div class="nav-label" data-en="Insights" data-ar="التحليلات">Insights</div>
+        <button class="nav-item" data-page="reports">▥ <span data-en="Reports" data-ar="التقارير">Reports</span></button>
+        <button class="nav-item" data-page="settings">⚙ <span data-en="Settings" data-ar="الإعدادات">Settings</span></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="online-dot"></span>
+        <span data-en="Demo System Online" data-ar="نظام العرض متصل">Demo System Online</span>
+        <small>APEX-ORAIBI</small>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Physiotherapy & Rehabilitation</span>
+          <h1 data-en="MY AIMS REHABILITATION CENTER W.L.L" data-ar="مركز أهدافي للتأهيل ذ.م.م">MY AIMS REHABILITATION CENTER W.L.L</h1>
+        </div>
+        <div class="top-actions">
+          <span id="todayChip" class="chip"></span>
+          <button class="secondary" id="languageBtn">العربية</button>
+          <button class="secondary" id="resetBtn" data-en="Reset Demo" data-ar="إعادة بيانات العرض">Reset Demo</button>
+        </div>
+      </header>
+
+      <section id="page-dashboard" class="page active">
+        <section class="hero">
+          <div>
+            <span class="hero-kicker">myAIMS · INTERACTIVE DEMO</span>
+            <h2 data-en="A clearer view of your clinic." data-ar="نظرة أوضح على أعمال العيادة.">A clearer view of your clinic.</h2>
+            <p data-en="Patients, appointments, billing and daily operations — organized in one professional workspace."
+               data-ar="المرضى والمواعيد والفواتير والعمليات اليومية في مساحة عمل احترافية واحدة.">
+               Patients, appointments, billing and daily operations — organized in one professional workspace.
+            </p>
+            <div class="quick-actions">
+              <button class="primary" data-open="patientModal">+ <span data-en="New Patient" data-ar="مريض جديد">New Patient</span></button>
+              <button class="primary" data-open="appointmentModal">+ <span data-en="New Appointment" data-ar="موعد جديد">New Appointment</span></button>
+              <button class="primary" data-open="invoiceModal">+ <span data-en="New Invoice" data-ar="فاتورة جديدة">New Invoice</span></button>
+            </div>
+          </div>
+          <div class="hero-card">
+            <span data-en="Today's clinic pulse" data-ar="ملخص نشاط اليوم">Today's clinic pulse</span>
+            <strong id="heroRevenue">BHD 0.000</strong>
+            <small data-en="Recorded collections" data-ar="التحصيلات المسجلة">Recorded collections</small>
+          </div>
+        </section>
+
+        <section class="kpis">
+          <article class="kpi"><span data-en="Active Patients" data-ar="المرضى النشطون">Active Patients</span><strong id="kpiPatients">0</strong><small data-en="Registered" data-ar="مسجل">Registered</small></article>
+          <article class="kpi"><span data-en="Appointments" data-ar="المواعيد">Appointments</span><strong id="kpiAppointments">0</strong><small data-en="Scheduled" data-ar="مجدولة">Scheduled</small></article>
+          <article class="kpi"><span data-en="Outstanding" data-ar="الرصيد المستحق">Outstanding</span><strong id="kpiOutstanding">BHD 0.000</strong><small data-en="Patient balances" data-ar="أرصدة المرضى">Patient balances</small></article>
+          <article class="kpi"><span data-en="Net Cash" data-ar="صافي النقد">Net Cash</span><strong id="kpiNet">BHD 0.000</strong><small data-en="Receipts less expenses" data-ar="المقبوضات ناقص المصروفات">Receipts less expenses</small></article>
+        </section>
+
+        <section class="grid-2">
+          <article class="panel">
+            <div class="panel-head"><h3 data-en="Upcoming Appointments" data-ar="المواعيد القادمة">Upcoming Appointments</h3></div>
+            <div id="dashboardAppointments" class="stack"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><h3 data-en="Recent Activity" data-ar="آخر الحركات">Recent Activity</h3></div>
+            <div id="recentActivity" class="stack"></div>
+          </article>
+        </section>
+      </section>
+
+      <section id="page-patients" class="page">
+        <div class="page-title"><div><span class="eyebrow">Clinic Management</span><h2 data-en="Patients" data-ar="المرضى">Patients</h2></div><button class="primary" data-open="patientModal">+ <span data-en="Add Patient" data-ar="إضافة مريض">Add Patient</span></button></div>
+        <article class="panel"><div class="table-wrap"><table><thead><tr><th data-en="Patient No." data-ar="رقم المريض">Patient No.</th><th data-en="Name" data-ar="الاسم">Name</th><th data-en="Phone" data-ar="الهاتف">Phone</th><th data-en="Status" data-ar="الحالة">Status</th><th data-en="Balance" data-ar="الرصيد">Balance</th></tr></thead><tbody id="patientsBody"></tbody></table></div></article>
+      </section>
+
+      <section id="page-appointments" class="page">
+        <div class="page-title"><div><span class="eyebrow">Scheduling</span><h2 data-en="Appointments" data-ar="المواعيد">Appointments</h2></div><button class="primary" data-open="appointmentModal">+ <span data-en="New Appointment" data-ar="موعد جديد">New Appointment</span></button></div>
+        <article class="panel"><div class="table-wrap"><table><thead><tr><th data-en="Date" data-ar="التاريخ">Date</th><th data-en="Time" data-ar="الوقت">Time</th><th data-en="Patient" data-ar="المريض">Patient</th><th data-en="Therapist" data-ar="المعالج">Therapist</th><th data-en="Service" data-ar="الخدمة">Service</th><th data-en="Status" data-ar="الحالة">Status</th></tr></thead><tbody id="appointmentsBody"></tbody></table></div></article>
+      </section>
+
+      <section id="page-billing" class="page">
+        <div class="page-title"><div><span class="eyebrow">Finance</span><h2 data-en="Billing" data-ar="الفواتير">Billing</h2></div><button class="primary" data-open="invoiceModal">+ <span data-en="New Invoice" data-ar="فاتورة جديدة">New Invoice</span></button></div>
+        <article class="panel"><div class="table-wrap"><table><thead><tr><th data-en="Invoice" data-ar="الفاتورة">Invoice</th><th data-en="Patient" data-ar="المريض">Patient</th><th data-en="Date" data-ar="التاريخ">Date</th><th data-en="Amount" data-ar="القيمة">Amount</th><th data-en="Paid" data-ar="المدفوع">Paid</th><th data-en="Balance" data-ar="الرصيد">Balance</th></tr></thead><tbody id="invoicesBody"></tbody></table></div></article>
+      </section>
+
+      <section id="page-receipts" class="page">
+        <div class="page-title"><div><span class="eyebrow">Finance</span><h2 data-en="Receipts" data-ar="سندات القبض">Receipts</h2></div><button class="primary" data-open="receiptModal">+ <span data-en="New Receipt" data-ar="سند قبض جديد">New Receipt</span></button></div>
+        <article class="panel"><div class="table-wrap"><table><thead><tr><th data-en="Receipt" data-ar="السند">Receipt</th><th data-en="Patient" data-ar="المريض">Patient</th><th data-en="Date" data-ar="التاريخ">Date</th><th data-en="Method" data-ar="الطريقة">Method</th><th data-en="Amount" data-ar="المبلغ">Amount</th></tr></thead><tbody id="receiptsBody"></tbody></table></div></article>
+      </section>
+
+      <section id="page-expenses" class="page">
+        <div class="page-title"><div><span class="eyebrow">Finance</span><h2 data-en="Expenses" data-ar="المصروفات">Expenses</h2></div><button class="primary" data-open="expenseModal">+ <span data-en="New Expense" data-ar="مصروف جديد">New Expense</span></button></div>
+        <article class="panel"><div class="table-wrap"><table><thead><tr><th data-en="Date" data-ar="التاريخ">Date</th><th data-en="Category" data-ar="التصنيف">Category</th><th data-en="Description" data-ar="البيان">Description</th><th data-en="Amount" data-ar="المبلغ">Amount</th></tr></thead><tbody id="expensesBody"></tbody></table></div></article>
+      </section>
+
+      <section id="page-reports" class="page">
+        <div class="page-title"><div><span class="eyebrow">Insights</span><h2 data-en="Reports" data-ar="التقارير">Reports</h2></div></div>
+        <section class="kpis">
+          <article class="kpi"><span data-en="Total Invoiced" data-ar="إجمالي الفواتير">Total Invoiced</span><strong id="reportInvoiced">BHD 0.000</strong></article>
+          <article class="kpi"><span data-en="Collections" data-ar="التحصيلات">Collections</span><strong id="reportCollected">BHD 0.000</strong></article>
+          <article class="kpi"><span data-en="Expenses" data-ar="المصروفات">Expenses</span><strong id="reportExpenses">BHD 0.000</strong></article>
+          <article class="kpi"><span data-en="Net Cash" data-ar="صافي النقد">Net Cash</span><strong id="reportNet">BHD 0.000</strong></article>
+        </section>
+        <article class="panel"><div class="panel-head"><h3 data-en="Collection Performance" data-ar="أداء التحصيل">Collection Performance</h3></div><div class="progress"><div id="collectionBar"></div></div><p id="collectionText"></p></article>
+      </section>
+
+      <section id="page-settings" class="page">
+        <div class="page-title"><div><span class="eyebrow">Administration</span><h2 data-en="Settings" data-ar="الإعدادات">Settings</h2></div></div>
+        <section class="grid-2">
+          <article class="panel"><h3 data-en="Clinic Identity" data-ar="هوية المركز">Clinic Identity</h3><p>MY AIMS REHABILITATION CENTER W.L.L</p><p>مركز أهدافي للتأهيل ذ.م.م</p><p>BHD · Bahrain</p></article>
+          <article class="panel"><h3 data-en="Demo Mode" data-ar="وضع العرض">Demo Mode</h3><p data-en="This GitHub version uses sample data saved only in your browser. No real patient data is included." data-ar="نسخة GitHub تستخدم بيانات تجريبية محفوظة داخل المتصفح فقط، ولا تتضمن أي بيانات حقيقية للمرضى.">This GitHub version uses sample data saved only in your browser. No real patient data is included.</p></article>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal" id="patientModal"><div class="modal-card"><button class="close">×</button><h3 data-en="New Patient" data-ar="مريض جديد">New Patient</h3><form id="patientForm"><label><span data-en="Full Name" data-ar="الاسم الكامل">Full Name</span><input name="name" required></label><label><span data-en="Phone" data-ar="الهاتف">Phone</span><input name="phone" required></label><button class="primary" type="submit" data-en="Save Patient" data-ar="حفظ المريض">Save Patient</button></form></div></div>
+
+  <div class="modal" id="appointmentModal"><div class="modal-card"><button class="close">×</button><h3 data-en="New Appointment" data-ar="موعد جديد">New Appointment</h3><form id="appointmentForm"><label><span data-en="Patient" data-ar="المريض">Patient</span><select name="patient" class="patient-select" required></select></label><label><span data-en="Date" data-ar="التاريخ">Date</span><input name="date" type="date" required></label><label><span data-en="Time" data-ar="الوقت">Time</span><input name="time" type="time" required></label><label><span data-en="Therapist" data-ar="المعالج">Therapist</span><select name="therapist"><option>Dr. Eman</option><option>Dr. Hussain</option></select></label><label><span data-en="Service" data-ar="الخدمة">Service</span><select name="service"><option>Physiotherapy Session</option><option>Assessment</option><option>Rehabilitation Session</option></select></label><button class="primary" type="submit" data-en="Save Appointment" data-ar="حفظ الموعد">Save Appointment</button></form></div></div>
+
+  <div class="modal" id="invoiceModal"><div class="modal-card"><button class="close">×</button><h3 data-en="New Invoice" data-ar="فاتورة جديدة">New Invoice</h3><form id="invoiceForm"><label><span data-en="Patient" data-ar="المريض">Patient</span><select name="patient" class="patient-select" required></select></label><label><span data-en="Amount (BHD)" data-ar="المبلغ (د.ب)">Amount (BHD)</span><input name="amount" type="number" min="0" step="0.001" required></label><button class="primary" type="submit" data-en="Create Invoice" data-ar="إنشاء الفاتورة">Create Invoice</button></form></div></div>
+
+  <div class="modal" id="receiptModal"><div class="modal-card"><button class="close">×</button><h3 data-en="New Receipt" data-ar="سند قبض جديد">New Receipt</h3><form id="receiptForm"><label><span data-en="Patient" data-ar="المريض">Patient</span><select name="patient" class="patient-select" required></select></label><label><span data-en="Amount (BHD)" data-ar="المبلغ (د.ب)">Amount (BHD)</span><input name="amount" type="number" min="0" step="0.001" required></label><label><span data-en="Payment Method" data-ar="طريقة السداد">Payment Method</span><select name="method"><option>BenefitPay</option><option>Cash</option><option>Bank Transfer</option><option>Card</option></select></label><button class="primary" type="submit" data-en="Save Receipt" data-ar="حفظ السند">Save Receipt</button></form></div></div>
+
+  <div class="modal" id="expenseModal"><div class="modal-card"><button class="close">×</button><h3 data-en="New Expense" data-ar="مصروف جديد">New Expense</h3><form id="expenseForm"><label><span data-en="Category" data-ar="التصنيف">Category</span><select name="category"><option>Clinic Supplies</option><option>Professional Fees</option><option>Rent</option><option>Utilities</option><option>Other</option></select></label><label><span data-en="Description" data-ar="البيان">Description</span><input name="description" required></label><label><span data-en="Amount (BHD)" data-ar="المبلغ (د.ب)">Amount (BHD)</span><input name="amount" type="number" min="0" step="0.001" required></label><button class="primary" type="submit" data-en="Save Expense" data-ar="حفظ المصروف">Save Expense</button></form></div></div>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
