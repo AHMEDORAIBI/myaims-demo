@@ -8359,3 +8359,426 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V30 - PROGRESS REVIEW + OUTCOME SUMMARY
+   Adds:
+   - Compare current vs previous clinical session
+   - Review Due logic based on treatment plan reviewAfter
+   - Milestones and goal achievement summary
+   - Printable Progress Review report
+   - Quick Review action inside Patient Clinical Journey
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{ if(typeof window.saveState==='function') window.saveState(); };
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function notesForPatient(id){
+    return (S().sessionNotes||[])
+      .filter(x=>String(x.patientId)===String(id))
+      .sort((a,b)=>(String(a.date||'')+String(a.updatedAt||'')).localeCompare(String(b.date||'')+String(b.updatedAt||'')));
+  }
+
+  function planForPatient(id){
+    return (S().treatmentPlans||[])
+      .filter(x=>String(x.patientId)===String(id) && x.status!=='Closed')
+      .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0];
+  }
+
+  function goalsForPatient(id){
+    return (S().treatmentGoals||[]).filter(x=>String(x.patientId)===String(id));
+  }
+
+  function patient(id){
+    return (S().patients||[]).find(p=>String(p.id)===String(id));
+  }
+
+  function pname(id){
+    const p=patient(id);
+    return p?(p.name||p.fullName||p.patientName||'Patient'):'Patient';
+  }
+
+  function completedAppointments(id){
+    return (S().appointments||[]).filter(a=>String(a.patientId)===String(id) && a.status==='Completed').length;
+  }
+
+  function latestComparison(id){
+    const notes=notesForPatient(id);
+    const current=notes[notes.length-1]||null;
+    const previous=notes.length>1?notes[notes.length-2]:null;
+    return {current,previous};
+  }
+
+  function delta(current,previous){
+    if(current==null || previous==null) return null;
+    return Number(current)-Number(previous);
+  }
+
+  function arrow(d,reverseGood=false){
+    if(d==null) return '—';
+    if(d===0) return '→';
+    const good=reverseGood ? d<0 : d>0;
+    return good?'↓':'↑';
+  }
+
+  function statusClass(d,reverseGood=false){
+    if(d==null || d===0) return 'neutral';
+    const good=reverseGood ? d<0 : d>0;
+    return good?'good':'watch';
+  }
+
+  function reviewStatus(id){
+    const plan=planForPatient(id);
+    if(!plan) return {due:false,text:'No active treatment plan'};
+    const completed=completedAppointments(id);
+    const every=Math.max(1,Number(plan.reviewAfter||4));
+    const next=Math.ceil(Math.max(1,completed)/every)*every;
+    const due=completed>0 && completed%every===0;
+    return {
+      due,
+      text:due?`Review due now after ${completed} completed sessions`:`Next review after session ${next}`,
+      completed,
+      every
+    };
+  }
+
+  function milestoneHtml(id){
+    const goals=goalsForPatient(id);
+    if(!goals.length) return `<div class="v30-empty">No treatment goals available.</div>`;
+    return goals.map(g=>{
+      const p=Math.max(0,Math.min(100,Number(g.progress||0)));
+      return `
+        <div class="v30-milestone">
+          <div class="v30-ms-top">
+            <div><b>${esc(g.title||'Goal')}</b><small>${esc(g.status||'Active')}</small></div>
+            <strong>${p}%</strong>
+          </div>
+          <div class="v30-ms-bar"><i style="width:${p}%"></i></div>
+          ${g.measurement?`<p>${esc(g.measurement)}</p>`:''}
+        </div>`;
+    }).join('');
+  }
+
+  function bodyAreaComparison(id){
+    const {current,previous}=latestComparison(id);
+    const currentMap=current?.bodyAreaSeverity||{};
+    const prevMap=previous?.bodyAreaSeverity||{};
+    const areas=[...new Set([...Object.keys(currentMap),...Object.keys(prevMap)])];
+    if(!areas.length) return `<div class="v30-empty">No body-area comparison available yet.</div>`;
+
+    const label=v=>['Selected','Mild','Moderate','Severe'][Number(v)]||'—';
+    return areas.map(area=>{
+      const a=prevMap[area];
+      const b=currentMap[area];
+      const d=(a!=null && b!=null)?Number(b)-Number(a):null;
+      return `
+        <div class="v30-area-row">
+          <b>${esc(area)}</b>
+          <span>${a!=null?label(a):'—'}</span>
+          <i>→</i>
+          <strong class="${statusClass(d,true)}">${b!=null?label(b):'—'}</strong>
+        </div>`;
+    }).join('');
+  }
+
+  window.openV30ProgressReview=function(patientId){
+    const {current,previous}=latestComparison(patientId);
+    const plan=planForPatient(patientId);
+    const review=reviewStatus(patientId);
+
+    let r=document.getElementById('v30-review');
+    if(!r){
+      r=document.createElement('div');
+      r.id='v30-review';
+      document.body.appendChild(r);
+    }
+
+    const painDelta=current&&previous?delta(Number(current.painScore||0),Number(previous.painScore||0)):null;
+    const progDelta=current&&previous?delta(Number(current.progressScore||0),Number(previous.progressScore||0)):null;
+    const completed=completedAppointments(patientId);
+    const planned=Number(plan?.plannedSessions||0);
+    const overall=planned?Math.min(100,Math.round(completed/planned*100)):0;
+
+    r.className='open';
+    r.dataset.patientId=patientId;
+    r.innerHTML=`
+      <div class="v30-back" onclick="closeV30ProgressReview()"></div>
+      <section class="v30-shell">
+        <header class="v30-head">
+          <div>
+            <small>PROGRESS REVIEW</small>
+            <h2>${esc(pname(patientId))}</h2>
+            <p>${review.text}</p>
+          </div>
+          <div class="v30-head-actions">
+            <button onclick="printV30ProgressReview('${patientId}')">Print Review</button>
+            <button onclick="closeV30ProgressReview()">×</button>
+          </div>
+        </header>
+
+        <div class="v30-review-banner ${review.due?'due':'ok'}">
+          <div>
+            <small>${review.due?'REVIEW DUE':'REVIEW STATUS'}</small>
+            <b>${review.text}</b>
+          </div>
+          <span>${completed}${planned?` / ${planned}`:''} sessions</span>
+        </div>
+
+        <div class="v30-kpis">
+          <div>
+            <small>PAIN SCORE</small>
+            <b>${current?Number(current.painScore||0)+'/10':'—'}</b>
+            <span class="${statusClass(painDelta,true)}">${previous?`${Number(previous.painScore||0)}/10 ${arrow(painDelta,true)} ${painDelta===0?'No change':Math.abs(painDelta)+' point'+(Math.abs(painDelta)!==1?'s':'')}`:'No previous session'}</span>
+          </div>
+          <div>
+            <small>SESSION PROGRESS</small>
+            <b>${current?Number(current.progressScore||0)+'%':'—'}</b>
+            <span class="${statusClass(progDelta,false)}">${previous?`${Number(previous.progressScore||0)}% ${arrow(progDelta,false)} ${progDelta===0?'No change':Math.abs(progDelta)+'%'}`:'No previous session'}</span>
+          </div>
+          <div>
+            <small>PLAN COMPLETION</small>
+            <b>${overall}%</b>
+            <span>${completed} completed${planned?` · ${Math.max(0,planned-completed)} remaining`:''}</span>
+          </div>
+          <div>
+            <small>GOALS ACHIEVED</small>
+            <b>${goalsForPatient(patientId).filter(g=>String(g.status).toLowerCase().includes('achiev')).length}</b>
+            <span>of ${goalsForPatient(patientId).length} tracked goals</span>
+          </div>
+        </div>
+
+        <div class="v30-grid">
+          <section class="v30-card">
+            <div class="v30-card-head"><div><small>SESSION COMPARISON</small><h3>Previous vs Latest</h3></div></div>
+            ${current?`
+              <div class="v30-compare">
+                <div>
+                  <small>PREVIOUS SESSION</small>
+                  <b>${previous?.date||'—'}</b>
+                  <p>${esc(previous?.subjective||previous?.response||'No previous note available.')}</p>
+                </div>
+                <div class="latest">
+                  <small>LATEST SESSION</small>
+                  <b>${current.date||'—'}</b>
+                  <p>${esc(current.subjective||current.response||'No clinical summary.')}</p>
+                </div>
+              </div>
+            `:`<div class="v30-empty">No clinical session data yet.</div>`}
+          </section>
+
+          <section class="v30-card">
+            <div class="v30-card-head"><div><small>BODY MAP</small><h3>Area Change</h3></div></div>
+            <div class="v30-area-list">${bodyAreaComparison(patientId)}</div>
+          </section>
+        </div>
+
+        <section class="v30-card">
+          <div class="v30-card-head">
+            <div><small>MILESTONES</small><h3>Treatment Goal Progress</h3></div>
+          </div>
+          <div class="v30-milestones">${milestoneHtml(patientId)}</div>
+        </section>
+
+        <section class="v30-card v30-clinical-review">
+          <div class="v30-card-head">
+            <div><small>REVIEW NOTE</small><h3>Progress Review Summary</h3></div>
+          </div>
+          <div class="v30-review-fields">
+            <label><span>Overall Progress Summary</span><textarea id="v30-summary" rows="3" placeholder="Summarise overall progress since the previous review..."></textarea></label>
+            <label><span>Plan Decision</span>
+              <select id="v30-decision">
+                <option>Continue Current Plan</option>
+                <option>Modify Treatment Plan</option>
+                <option>Increase Session Frequency</option>
+                <option>Reduce Session Frequency</option>
+                <option>Prepare for Discharge</option>
+                <option>Refer for Medical Review</option>
+              </select>
+            </label>
+            <label><span>Next Review / Action</span><textarea id="v30-next" rows="2" placeholder="Next review date, action or treatment adjustment..."></textarea></label>
+          </div>
+          <div class="v30-review-actions">
+            <button onclick="saveV30Review('${patientId}')">Save Progress Review</button>
+          </div>
+        </section>
+      </section>`;
+  };
+
+  window.closeV30ProgressReview=function(){
+    const r=document.getElementById('v30-review');
+    if(r) r.className='';
+  };
+
+  window.saveV30Review=function(patientId){
+    if(!Array.isArray(S().progressReviews)) S().progressReviews=[];
+    const plan=planForPatient(patientId);
+    S().progressReviews.push({
+      id:'PR-'+Date.now(),
+      patientId,
+      planId:plan?.id||'',
+      createdAt:new Date().toISOString(),
+      completedSessions:completedAppointments(patientId),
+      summary:document.getElementById('v30-summary')?.value.trim()||'',
+      decision:document.getElementById('v30-decision')?.value||'Continue Current Plan',
+      nextAction:document.getElementById('v30-next')?.value.trim()||''
+    });
+    save();
+    alert('Progress review saved.');
+  };
+
+  window.printV30ProgressReview=function(patientId){
+    const p=patient(patientId);
+    const plan=planForPatient(patientId);
+    const {current,previous}=latestComparison(patientId);
+    const goals=goalsForPatient(patientId);
+    const review=reviewStatus(patientId);
+
+    const win=window.open('','_blank','width=900,height=1000');
+    if(!win) return;
+
+    win.document.write(`
+      <html>
+      <head>
+        <title>Progress Review - ${esc(pname(patientId))}</title>
+        <style>
+          body{font-family:Arial,sans-serif;color:#27434a;margin:0;background:#fff}
+          .page{width:190mm;min-height:270mm;margin:0 auto;padding:13mm;box-sizing:border-box}
+          header{display:flex;justify-content:space-between;border-bottom:2px solid #174f5b;padding-bottom:10px}
+          h1{font-size:20px;margin:0;color:#174f5b} h2{font-size:14px;color:#174f5b}
+          small{color:#a27c36;font-weight:bold;font-size:9px;letter-spacing:.8px}
+          p,td,th{font-size:10px;line-height:1.5}
+          .meta{font-size:10px;color:#687d82}
+          .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+          .kpis div{border:1px solid #dbe6e8;border-radius:8px;padding:8px}
+          .kpis b{display:block;font-size:15px;color:#174f5b;margin-top:3px}
+          table{border-collapse:collapse;width:100%;margin-top:7px}
+          th,td{border:1px solid #dfe7e9;padding:7px;text-align:left}
+          th{background:#f2f7f8}
+          .box{border:1px solid #dbe6e8;border-radius:8px;padding:10px;margin:10px 0}
+          @media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.page{margin:0}}
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <header>
+            <div><small>myAIMS REHABILITATION CENTER</small><h1>Patient Progress Review</h1></div>
+            <div class="meta">${new Date().toLocaleDateString()}</div>
+          </header>
+
+          <div class="box">
+            <b>${esc(pname(patientId))}</b>
+            <div class="meta">${esc(p?.id||'')} · ${esc(p?.phone||p?.mobile||'')}</div>
+            <div class="meta">Treatment Plan: ${esc(plan?.title||'No active plan')}</div>
+          </div>
+
+          <div class="kpis">
+            <div><small>Sessions</small><b>${completedAppointments(patientId)}</b></div>
+            <div><small>Latest Pain</small><b>${current?Number(current.painScore||0)+'/10':'—'}</b></div>
+            <div><small>Latest Progress</small><b>${current?Number(current.progressScore||0)+'%':'—'}</b></div>
+            <div><small>Review</small><b>${review.due?'Due':'On Track'}</b></div>
+          </div>
+
+          <h2>Session Comparison</h2>
+          <table>
+            <tr><th></th><th>Previous</th><th>Latest</th></tr>
+            <tr><td>Date</td><td>${previous?.date||'—'}</td><td>${current?.date||'—'}</td></tr>
+            <tr><td>Pain Score</td><td>${previous?Number(previous.painScore||0)+'/10':'—'}</td><td>${current?Number(current.painScore||0)+'/10':'—'}</td></tr>
+            <tr><td>Progress</td><td>${previous?Number(previous.progressScore||0)+'%':'—'}</td><td>${current?Number(current.progressScore||0)+'%':'—'}</td></tr>
+          </table>
+
+          <h2>Treatment Goals</h2>
+          <table>
+            <tr><th>Goal</th><th>Status</th><th>Progress</th></tr>
+            ${goals.map(g=>`<tr><td>${esc(g.title||'')}</td><td>${esc(g.status||'')}</td><td>${Number(g.progress||0)}%</td></tr>`).join('') || '<tr><td colspan="3">No treatment goals documented.</td></tr>'}
+          </table>
+
+          <div class="box">
+            <small>LATEST CLINICAL SUMMARY</small>
+            <p>${esc(current?.subjective||current?.response||'No latest clinical note available.')}</p>
+          </div>
+        </div>
+        <script>window.onload=()=>setTimeout(()=>window.print(),200)<\/script>
+      </body>
+      </html>`);
+    win.document.close();
+  };
+
+  function enhanceJourney(){
+    const journey=document.getElementById('v28-journey');
+    if(!journey?.classList.contains('open')) return;
+    const pid=journey.dataset.patientId;
+    if(!pid) return;
+
+    const actions=journey.querySelector('.v28-head-actions');
+    if(actions && !actions.querySelector('.v30-review-btn')){
+      const b=document.createElement('button');
+      b.className='v30-review-btn';
+      const rs=reviewStatus(pid);
+      b.innerHTML=rs.due?'Review Due':'Progress Review';
+      if(rs.due) b.classList.add('due');
+      b.onclick=()=>openV30ProgressReview(pid);
+      actions.prepend(b);
+    }
+
+    const c=document.getElementById('v28-content');
+    const active=[...journey.querySelectorAll('.v28-tabs button')].find(x=>x.classList.contains('active'));
+    if(c && active?.textContent.trim().toLowerCase()==='progress' && !c.querySelector('.v30-progress-review-card')){
+      const rs=reviewStatus(pid);
+      const x=document.createElement('section');
+      x.className='v30-progress-review-card '+(rs.due?'due':'');
+      x.innerHTML=`
+        <div>
+          <small>PROGRESS REVIEW</small>
+          <h3>${rs.due?'Review is due':'Treatment review status'}</h3>
+          <p>${rs.text}</p>
+        </div>
+        <button onclick="openV30ProgressReview('${pid}')">${rs.due?'Start Review':'Open Review'}</button>`;
+      c.prepend(x);
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v30-css')) return;
+    const st=document.createElement('style');
+    st.id='v30-css';
+    st.textContent=`
+      #v30-review{display:none}
+      #v30-review.open{display:block;position:fixed;inset:0;z-index:100090}
+      .v30-back{position:absolute;inset:0;background:rgba(10,30,37,.50);backdrop-filter:blur(4px)}
+      .v30-shell{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1100px,96vw);height:min(900px,94vh);overflow:auto;background:#f4f8f9;border-radius:19px;box-shadow:0 30px 100px rgba(0,0,0,.27);padding:18px;box-sizing:border-box}
+      .v30-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;background:#fff;border:1px solid #dfe8ea;border-radius:13px;padding:13px}.v30-head small{font-size:7px;color:#b48637;font-weight:900;letter-spacing:1px}.v30-head h2{margin:2px 0;color:#31545c}.v30-head p{font-size:8px;color:#89979c;margin:0}.v30-head-actions{display:flex;gap:6px}.v30-head-actions button{border:1px solid #d9e4e6;background:#fff;border-radius:8px;padding:7px 9px;font-size:7px;font-weight:800;color:#526d74}
+      .v30-review-banner{display:flex;justify-content:space-between;align-items:center;border-radius:11px;padding:10px 12px;margin:10px 0}.v30-review-banner.ok{background:#edf8f3;border:1px solid #cee8da}.v30-review-banner.due{background:#fff4dc;border:1px solid #ead4a3}.v30-review-banner small,.v30-review-banner b{display:block}.v30-review-banner small{font-size:6px;color:#9d7938;font-weight:900}.v30-review-banner b{font-size:9px;color:#405d64}.v30-review-banner span{font-size:8px;color:#6f8389}
+      .v30-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}.v30-kpis>div{background:#fff;border:1px solid #dfe8ea;border-radius:11px;padding:10px}.v30-kpis small,.v30-kpis b,.v30-kpis span{display:block}.v30-kpis small{font-size:6px;color:#a17a35;font-weight:900}.v30-kpis b{font-size:14px;color:#31545c;margin:3px 0}.v30-kpis span{font-size:7px;color:#86969b}.v30-kpis span.good{color:#277357}.v30-kpis span.watch{color:#b16b30}.v30-kpis span.neutral{color:#7f9095}
+      .v30-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.v30-card{background:#fff;border:1px solid #dfe8ea;border-radius:12px;padding:11px;margin-bottom:9px}.v30-card-head small{font-size:6px;color:#b48637;font-weight:900}.v30-card-head h3{margin:2px 0 8px;color:#31545c;font-size:11px}.v30-compare{display:grid;grid-template-columns:1fr 1fr;gap:7px}.v30-compare>div{background:#f8fbfb;border:1px solid #e3ebed;border-radius:8px;padding:8px}.v30-compare>div.latest{background:#eef7f5;border-color:#d5e8e3}.v30-compare small,.v30-compare b{display:block}.v30-compare small{font-size:6px;color:#9d7a3b;font-weight:900}.v30-compare b{font-size:8px;color:#36575f;margin:2px 0}.v30-compare p{font-size:7px;color:#667a80;line-height:1.45}
+      .v30-area-list{display:grid;gap:5px}.v30-area-row{display:grid;grid-template-columns:1fr auto 18px auto;gap:7px;align-items:center;background:#f8fbfb;border:1px solid #e4ebed;border-radius:8px;padding:7px}.v30-area-row b{font-size:7px;color:#36575f}.v30-area-row span,.v30-area-row strong{font-size:7px}.v30-area-row i{font-style:normal;color:#9b8a65}.v30-area-row strong.good{color:#277357}.v30-area-row strong.watch{color:#b26539}.v30-area-row strong.neutral{color:#73878d}
+      .v30-milestones{display:grid;grid-template-columns:1fr 1fr;gap:7px}.v30-milestone{border:1px solid #e1e9eb;border-radius:9px;padding:8px;background:#fbfdfd}.v30-ms-top{display:flex;justify-content:space-between;gap:8px}.v30-ms-top b,.v30-ms-top small{display:block}.v30-ms-top b{font-size:8px;color:#36575f}.v30-ms-top small{font-size:6px;color:#89979c}.v30-ms-top strong{font-size:9px;color:#174f5b}.v30-ms-bar{height:5px;background:#eaf0f1;border-radius:99px;overflow:hidden;margin:6px 0}.v30-ms-bar i{display:block;height:100%;background:linear-gradient(90deg,#174f5b,#c99a42)}.v30-milestone p{font-size:7px;color:#6c8085;margin:3px 0 0}
+      .v30-review-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}.v30-review-fields label{display:flex;flex-direction:column;gap:4px}.v30-review-fields label:first-child{grid-column:1/-1}.v30-review-fields label span{font-size:7px;font-weight:800;color:#5d7379}.v30-review-fields textarea,.v30-review-fields select{border:1px solid #dbe5e7;border-radius:8px;padding:8px;font:inherit;font-size:8px}.v30-review-actions{display:flex;justify-content:flex-end;margin-top:8px}.v30-review-actions button{background:#174f5b;color:#fff;border:0;border-radius:8px;padding:8px 10px;font-size:7px;font-weight:800}
+      .v30-review-btn.due{background:#fff4dc!important;border-color:#dfbd76!important;color:#926828!important}
+      .v30-progress-review-card{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#edf8f3;border:1px solid #cfe8dc;border-radius:11px;padding:10px;margin-bottom:10px}.v30-progress-review-card.due{background:#fff5df;border-color:#e4c886}.v30-progress-review-card small{font-size:6px;color:#a17a35;font-weight:900}.v30-progress-review-card h3{margin:2px 0;color:#36575f}.v30-progress-review-card p{margin:0;font-size:7px;color:#76898e}.v30-progress-review-card button{border:1px solid #d6e2e4;background:#fff;border-radius:8px;padding:7px 9px;font-size:7px;font-weight:800}
+      .v30-empty{text-align:center;color:#8d9b9f;font-size:7px;padding:18px}
+      @media(max-width:780px){.v30-kpis{grid-template-columns:1fr 1fr}.v30-grid,.v30-milestones,.v30-review-fields,.v30-compare{grid-template-columns:1fr}.v30-review-fields label:first-child{grid-column:auto}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    enhanceJourney();
+  }
+
+  function init(){
+    if(!Array.isArray(S().progressReviews)) S().progressReviews=[];
+    save();
+    css();
+    setTimeout(repair,300);
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v30repair);
+      window.__v30repair=setTimeout(repair,60);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
