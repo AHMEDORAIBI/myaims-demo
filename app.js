@@ -2781,3 +2781,302 @@ render();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
 })();
+
+
+/* =========================================================
+   myAIMS V17 - APPOINTMENTS LAYOUT REPAIR
+   Structural fix: appointment enhancements can only live
+   inside #page-appointments, never inside the sidebar.
+   ========================================================= */
+(function () {
+  const APPOINTMENTS_PAGE_ID = 'page-appointments';
+
+  function page() {
+    return document.getElementById(APPOINTMENTS_PAGE_ID);
+  }
+
+  function sidebar() {
+    return document.querySelector('.sidebar, #sidebar, aside');
+  }
+
+  function appointmentNav() {
+    return document.querySelector('.nav-item[data-page="appointments"]');
+  }
+
+  function removeBrokenSidebarInjections() {
+    const side = sidebar();
+    if (!side) return;
+
+    [
+      '#appointments-pro-panel',
+      '#v15-visual-scheduler',
+      '#v16-timeline'
+    ].forEach(sel => {
+      side.querySelectorAll(sel).forEach(el => {
+        const target = page();
+        if (target && sel === '#v16-timeline') {
+          placeTimeline(el);
+        } else {
+          el.remove();
+        }
+      });
+    });
+  }
+
+  function placeTimeline(el) {
+    const target = page();
+    if (!target || !el) return;
+
+    const title = target.querySelector(':scope > .page-title');
+    if (title) title.insertAdjacentElement('afterend', el);
+    else target.prepend(el);
+  }
+
+  function repairExistingPanels() {
+    const target = page();
+    if (!target) return;
+
+    // V14/V15 were experimental presentation layers.
+    // Keep them disabled so V16 remains the single clean scheduler.
+    document.querySelectorAll('#appointments-pro-panel, #v15-visual-scheduler')
+      .forEach(el => {
+        if (el.closest('.sidebar, #sidebar, aside')) el.remove();
+        else el.style.display = 'none';
+      });
+
+    const timeline = document.getElementById('v16-timeline');
+    if (timeline && !target.contains(timeline)) {
+      placeTimeline(timeline);
+    }
+
+    // Keep the old table as an optional compact list below the scheduler.
+    const oldPanel = [...target.children].find(el =>
+      el.matches('article.panel') && el.querySelector('#appointmentsBody')
+    );
+    if (oldPanel) {
+      oldPanel.classList.add('v17-original-list');
+      oldPanel.style.display = window.__v17ListOpen ? '' : 'none';
+    }
+  }
+
+  window.toggleV17AppointmentList = function () {
+    window.__v17ListOpen = !window.__v17ListOpen;
+    const target = page();
+    const oldPanel = target?.querySelector('.v17-original-list');
+    if (oldPanel) oldPanel.style.display = window.__v17ListOpen ? '' : 'none';
+
+    const btn = document.getElementById('v17-list-toggle');
+    if (btn) btn.textContent = window.__v17ListOpen ? 'Hide List' : 'List View';
+  };
+
+  function installPageHeaderControls() {
+    const target = page();
+    if (!target) return;
+
+    const title = target.querySelector(':scope > .page-title');
+    if (!title || document.getElementById('v17-list-toggle')) return;
+
+    let actions = title.querySelector('.v17-page-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'v17-page-actions';
+
+      const existingNew = title.querySelector('[data-open="appointmentModal"]');
+      if (existingNew) actions.appendChild(existingNew);
+
+      const listBtn = document.createElement('button');
+      listBtn.type = 'button';
+      listBtn.id = 'v17-list-toggle';
+      listBtn.className = 'v17-secondary';
+      listBtn.textContent = 'List View';
+      listBtn.onclick = window.toggleV17AppointmentList;
+      actions.appendChild(listBtn);
+
+      title.appendChild(actions);
+    }
+  }
+
+  function forceOpenAppointmentsPage() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const target = page();
+    if (target) target.classList.add('active');
+
+    document.querySelectorAll('.nav-item').forEach(n =>
+      n.classList.toggle('active', n.dataset.page === 'appointments')
+    );
+
+    // Hide dynamic feature hosts that can sit above normal pages.
+    ['v12-feature-host', 'v13-users-host'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+
+    // Restore normal page display in case V12/V13 stored inline display:none.
+    const main = target?.parentElement;
+    if (main) {
+      [...main.children].forEach(el => {
+        if (el.classList.contains('page')) {
+          el.style.display = '';
+        }
+      });
+    }
+
+    repairExistingPanels();
+    setTimeout(() => {
+      if (typeof window.renderV16Timeline === 'function') {
+        try { window.renderV16Timeline(); } catch(e) {}
+      }
+      repairExistingPanels();
+    }, 30);
+  }
+
+  function bindAppointmentNav() {
+    const nav = appointmentNav();
+    if (!nav || nav.dataset.v17Bound === '1') return;
+    nav.dataset.v17Bound = '1';
+
+    // Use bubble phase so the original navigation may run first,
+    // then V17 guarantees the correct final layout.
+    nav.addEventListener('click', () => {
+      setTimeout(forceOpenAppointmentsPage, 0);
+    });
+  }
+
+  function protectTimelineRenderer() {
+    if (typeof window.renderV16Timeline !== 'function' || window.renderV16Timeline.__v17Wrapped) return;
+
+    const original = window.renderV16Timeline;
+    const wrapped = function () {
+      const result = original.apply(this, arguments);
+      setTimeout(repairExistingPanels, 0);
+      return result;
+    };
+    wrapped.__v17Wrapped = true;
+    window.renderV16Timeline = wrapped;
+  }
+
+  function css() {
+    if (document.getElementById('myaims-v17-css')) return;
+
+    const st = document.createElement('style');
+    st.id = 'myaims-v17-css';
+    st.textContent = `
+      /* Absolute protection against scheduler content inside sidebar */
+      .sidebar #appointments-pro-panel,
+      .sidebar #v15-visual-scheduler,
+      .sidebar #v16-timeline,
+      #sidebar #appointments-pro-panel,
+      #sidebar #v15-visual-scheduler,
+      #sidebar #v16-timeline,
+      aside #appointments-pro-panel,
+      aside #v15-visual-scheduler,
+      aside #v16-timeline {
+        display:none !important;
+      }
+
+      /* V14/V15 are superseded by V16 */
+      #page-appointments > #appointments-pro-panel,
+      #page-appointments > #v15-visual-scheduler {
+        display:none !important;
+      }
+
+      #page-appointments {
+        width:100%;
+        min-width:0;
+      }
+
+      #page-appointments.active {
+        display:block;
+      }
+
+      #page-appointments > .page-title {
+        margin-bottom:16px;
+        align-items:center;
+      }
+
+      #page-appointments #v16-timeline {
+        display:block !important;
+        width:100%;
+        max-width:none;
+        margin:0 0 20px 0;
+        box-sizing:border-box;
+      }
+
+      .v17-page-actions {
+        display:flex;
+        gap:8px;
+        align-items:center;
+        margin-left:auto;
+      }
+
+      .v17-secondary {
+        border:1px solid #d7e3e6;
+        background:#fff;
+        color:#27525c;
+        border-radius:9px;
+        padding:10px 14px;
+        font-weight:700;
+        cursor:pointer;
+      }
+
+      .v17-secondary:hover {
+        background:#f3f8f9;
+      }
+
+      #page-appointments .v17-original-list {
+        margin-top:14px;
+      }
+
+      /* Sidebar must remain a navigation column only */
+      .sidebar, #sidebar, aside.sidebar {
+        overflow-x:hidden;
+      }
+
+      .sidebar > *,
+      #sidebar > * {
+        max-width:100%;
+        box-sizing:border-box;
+      }
+
+      @media(max-width:760px){
+        .v17-page-actions {
+          width:100%;
+          margin-left:0;
+          flex-wrap:wrap;
+        }
+        #page-appointments > .page-title {
+          align-items:flex-start;
+          flex-direction:column;
+        }
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair() {
+    css();
+    bindAppointmentNav();
+    protectTimelineRenderer();
+    removeBrokenSidebarInjections();
+    repairExistingPanels();
+    installPageHeaderControls();
+  }
+
+  function init() {
+    repair();
+
+    // V14/V15/V16 contain render observers; this guard corrects
+    // any future accidental sidebar injection immediately.
+    const observer = new MutationObserver(() => {
+      clearTimeout(window.__v17RepairTimer);
+      window.__v17RepairTimer = setTimeout(repair, 20);
+    });
+    observer.observe(document.body, { childList:true, subtree:true });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
