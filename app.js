@@ -3080,3 +3080,342 @@ render();
     init();
   }
 })();
+
+
+/* =========================================================
+   myAIMS V18 - PROFESSIONAL NEW APPOINTMENT MODAL
+   Patient / therapist / room / date / time / duration /
+   visit type / availability check / notes.
+   ========================================================= */
+(function(){
+  const S = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  const VISITS = [
+    'Initial Assessment',
+    'Physiotherapy Session',
+    'Rehabilitation Session',
+    'Follow-up',
+    'Consultation'
+  ];
+  const DURATIONS = [30,45,60,90];
+
+  function ensure(){
+    if(!Array.isArray(S().appointments)) S().appointments = [];
+    if(!Array.isArray(S().patients)) S().patients = [];
+  }
+
+  function pname(p){ return p.name || p.fullName || p.patientName || 'Patient'; }
+
+  function therapistList(){
+    const vals=[...new Set((S().appointments||[]).map(a=>a.therapist).filter(Boolean))];
+    return vals.length ? vals : ['Dr. Eman','Therapist 2','Therapist 3'];
+  }
+
+  function roomList(){
+    const vals=[...new Set((S().appointments||[]).map(a=>a.room).filter(Boolean))];
+    return vals.length ? vals : ['Treatment Room 1','Treatment Room 2','Treatment Room 3'];
+  }
+
+  function mins(t){
+    const [h,m]=String(t||'00:00').split(':').map(Number);
+    return h*60+(m||0);
+  }
+
+  function conflict(candidate){
+    return (S().appointments||[]).find(a=>{
+      if(a.date!==candidate.date) return false;
+      if(['Cancelled','No Show'].includes(a.status||'Scheduled')) return false;
+      const sameTherapist = candidate.therapist && a.therapist===candidate.therapist;
+      const sameRoom = candidate.room && a.room===candidate.room;
+      if(!sameTherapist && !sameRoom) return false;
+
+      const aStart=mins(a.time), aEnd=aStart+Number(a.duration||60);
+      const cStart=mins(candidate.time), cEnd=cStart+Number(candidate.duration||60);
+      return cStart < aEnd && cEnd > aStart;
+    });
+  }
+
+  function availableSlots(date, therapist, room, duration){
+    const out=[];
+    for(let h=8;h<20;h++){
+      for(const m of [0,30]){
+        const t=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+        const c={date,time:t,therapist,room,duration};
+        if(!conflict(c)) out.push(t);
+      }
+    }
+    return out;
+  }
+
+  function modal(){
+    let root=document.getElementById('v18-appt-modal');
+    if(!root){
+      root=document.createElement('div');
+      root.id='v18-appt-modal';
+      document.body.appendChild(root);
+    }
+    return root;
+  }
+
+  function patientOptions(){
+    return (S().patients||[]).map(p=>`<option value="${p.id}">${pname(p)}</option>`).join('');
+  }
+
+  function renderSlots(){
+    const date=document.getElementById('v18-date')?.value;
+    const therapist=document.getElementById('v18-therapist')?.value;
+    const room=document.getElementById('v18-room')?.value;
+    const duration=Number(document.getElementById('v18-duration')?.value||60);
+    const wrap=document.getElementById('v18-slots');
+    if(!wrap) return;
+
+    const slots=availableSlots(date,therapist,room,duration);
+    wrap.innerHTML=slots.length
+      ? slots.map(t=>`<button type="button" onclick="selectV18Slot('${t}',this)">${t}</button>`).join('')
+      : `<div class="v18-no-slots">No available slots for this therapist / room.</div>`;
+  }
+
+  window.selectV18Slot=function(time,el){
+    document.getElementById('v18-time').value=time;
+    document.querySelectorAll('#v18-slots button').forEach(b=>b.classList.toggle('active',b===el));
+  };
+
+  window.openV18Appointment=function(){
+    ensure();
+    const root=modal();
+    const defaultDate=window.__v16Date || new Date().toISOString().slice(0,10);
+
+    root.className='open';
+    root.innerHTML=`
+      <div class="v18-backdrop" onclick="closeV18Appointment()"></div>
+      <section class="v18-dialog">
+        <div class="v18-head">
+          <div>
+            <small>NEW APPOINTMENT</small>
+            <h2>Schedule Patient Visit</h2>
+            <p>Create an appointment and check therapist / room availability.</p>
+          </div>
+          <button onclick="closeV18Appointment()">×</button>
+        </div>
+
+        <div class="v18-form-grid">
+          <label class="span2">
+            <span>Patient</span>
+            <select id="v18-patient">
+              <option value="">Select patient</option>
+              ${patientOptions()}
+            </select>
+          </label>
+
+          <label>
+            <span>Date</span>
+            <input id="v18-date" type="date" value="${defaultDate}" onchange="renderV18Slots()">
+          </label>
+
+          <label>
+            <span>Duration</span>
+            <select id="v18-duration" onchange="renderV18Slots()">
+              ${DURATIONS.map(d=>`<option value="${d}" ${d===60?'selected':''}>${d} min</option>`).join('')}
+            </select>
+          </label>
+
+          <label>
+            <span>Therapist</span>
+            <select id="v18-therapist" onchange="renderV18Slots()">
+              ${therapistList().map(x=>`<option>${x}</option>`).join('')}
+            </select>
+          </label>
+
+          <label>
+            <span>Room</span>
+            <select id="v18-room" onchange="renderV18Slots()">
+              ${roomList().map(x=>`<option>${x}</option>`).join('')}
+            </select>
+          </label>
+
+          <label class="span2">
+            <span>Visit Type</span>
+            <select id="v18-visit">
+              ${VISITS.map(v=>`<option>${v}</option>`).join('')}
+            </select>
+          </label>
+
+          <label class="span2">
+            <span>Available Time</span>
+            <input id="v18-time" type="hidden">
+            <div id="v18-slots" class="v18-slots"></div>
+          </label>
+
+          <label class="span2">
+            <span>Appointment Notes</span>
+            <textarea id="v18-notes" rows="3" placeholder="Optional notes"></textarea>
+          </label>
+        </div>
+
+        <div id="v18-warning" class="v18-warning"></div>
+
+        <div class="v18-footer">
+          <button class="secondary" onclick="closeV18Appointment()">Cancel</button>
+          <button class="primary" onclick="saveV18Appointment()">Save Appointment</button>
+        </div>
+      </section>`;
+    setTimeout(renderSlots,30);
+  };
+
+  window.closeV18Appointment=function(){
+    const root=document.getElementById('v18-appt-modal');
+    if(root) root.className='';
+  };
+
+  window.renderV18Slots=renderSlots;
+
+  window.saveV18Appointment=function(){
+    const patientId=document.getElementById('v18-patient')?.value;
+    const date=document.getElementById('v18-date')?.value;
+    const time=document.getElementById('v18-time')?.value;
+    const therapist=document.getElementById('v18-therapist')?.value;
+    const room=document.getElementById('v18-room')?.value;
+    const duration=Number(document.getElementById('v18-duration')?.value||60);
+    const visitType=document.getElementById('v18-visit')?.value;
+    const notes=document.getElementById('v18-notes')?.value || '';
+    const warning=document.getElementById('v18-warning');
+
+    if(!patientId || !date || !time){
+      if(warning) warning.textContent='Please select patient, date and an available time.';
+      return;
+    }
+
+    const candidate={patientId,date,time,therapist,room,duration,visitType};
+    const clash=conflict(candidate);
+    if(clash){
+      if(warning) warning.textContent='This time is no longer available. Please select another slot.';
+      renderSlots();
+      return;
+    }
+
+    S().appointments.push({
+      id:'APT-'+Date.now(),
+      patientId,
+      date,
+      time,
+      therapist,
+      room,
+      duration,
+      visitType,
+      notes,
+      status:'Scheduled',
+      checkedInAt:'',
+      completedAt:'',
+      followUpNeeded:false
+    });
+
+    save();
+    if(typeof window.logAudit==='function'){
+      const p=(S().patients||[]).find(x=>String(x.id)===String(patientId));
+      window.logAudit('Create Appointment','Appointments',`${p?pname(p):'Patient'} — ${date} ${time}`);
+    }
+
+    window.__v16Date=date;
+    closeV18Appointment();
+
+    if(typeof window.renderAppointments==='function') try{ window.renderAppointments(); }catch(e){}
+    if(typeof window.renderV16Timeline==='function') try{ window.renderV16Timeline(); }catch(e){}
+    if(typeof window.renderVisualScheduler==='function') try{ window.renderVisualScheduler(); }catch(e){}
+  };
+
+  function replaceButtons(){
+    const page=document.getElementById('page-appointments');
+    if(page){
+      page.querySelectorAll('[data-open="appointmentModal"], button').forEach(btn=>{
+        const txt=(btn.textContent||'').toLowerCase();
+        if(btn.dataset?.open==='appointmentModal' || txt.includes('new appointment')){
+          if(btn.dataset.v18Bound==='1') return;
+          btn.dataset.v18Bound='1';
+          btn.onclick=function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            openV18Appointment();
+          };
+        }
+      });
+    }
+
+    document.querySelectorAll('button').forEach(btn=>{
+      const txt=(btn.textContent||'').trim().toLowerCase();
+      if(txt==='+ new appointment' || txt==='new appointment'){
+        if(btn.dataset.v18Bound==='1') return;
+        btn.dataset.v18Bound='1';
+        btn.onclick=function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          openV18Appointment();
+        };
+      }
+    });
+  }
+
+  function addTimelineButton(){
+    const page=document.getElementById('page-appointments');
+    const top=page?.querySelector('#v16-timeline .v16-top');
+    if(!top || document.getElementById('v18-timeline-new')) return;
+
+    const btn=document.createElement('button');
+    btn.id='v18-timeline-new';
+    btn.className='v18-new-btn';
+    btn.innerHTML='+ New Appointment';
+    btn.onclick=openV18Appointment;
+
+    const controls=top.querySelector('.v16-controls');
+    if(controls) controls.prepend(btn);
+  }
+
+  function css(){
+    if(document.getElementById('v18-css')) return;
+    const st=document.createElement('style');
+    st.id='v18-css';
+    st.textContent=`
+      #v18-appt-modal{display:none}
+      #v18-appt-modal.open{display:block;position:fixed;inset:0;z-index:100000}
+      .v18-backdrop{position:absolute;inset:0;background:rgba(12,31,37,.44);backdrop-filter:blur(3px)}
+      .v18-dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,94vw);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;box-shadow:0 28px 80px rgba(0,0,0,.22);padding:22px}
+      .v18-head{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid #e6edef;padding-bottom:15px;margin-bottom:17px}
+      .v18-head small{font-size:9px;letter-spacing:1.5px;font-weight:800;color:#b68a3b}.v18-head h2{margin:4px 0;color:#173f49}.v18-head p{margin:0;color:#7b8b90;font-size:12px}
+      .v18-head>button{border:0;background:#f1f5f6;width:34px;height:34px;border-radius:50%;font-size:22px;cursor:pointer}
+      .v18-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .v18-form-grid label{display:flex;flex-direction:column;gap:6px}.v18-form-grid label>span{font-size:11px;font-weight:700;color:#50686f}
+      .v18-form-grid input,.v18-form-grid select,.v18-form-grid textarea{border:1px solid #d9e4e7;border-radius:9px;padding:10px 11px;background:#fff;font:inherit;color:#294c55}
+      .v18-form-grid .span2{grid-column:1/-1}
+      .v18-slots{display:flex;gap:7px;flex-wrap:wrap;background:#f7fafb;border:1px solid #e1eaec;border-radius:10px;padding:10px;min-height:50px}
+      .v18-slots button{border:1px solid #d8e4e7;background:#fff;border-radius:8px;padding:7px 10px;cursor:pointer;font-size:11px;color:#34565e}
+      .v18-slots button:hover,.v18-slots button.active{background:#174f5b;color:#fff;border-color:#174f5b}
+      .v18-no-slots{color:#9a6565;font-size:11px;padding:8px}
+      .v18-warning{min-height:18px;margin-top:9px;color:#b44747;font-size:11px;font-weight:700}
+      .v18-footer{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e8edef;margin-top:12px;padding-top:14px}
+      .v18-footer button,.v18-new-btn{border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}
+      .v18-footer .secondary{border:1px solid #d9e3e6;background:#fff;color:#385961}.v18-footer .primary,.v18-new-btn{border:1px solid #c99a42;background:#c99a42;color:#fff}
+      .v18-new-btn{height:38px;padding:0 13px!important;white-space:nowrap}
+      @media(max-width:650px){.v18-dialog{padding:16px}.v18-form-grid{grid-template-columns:1fr}.v18-form-grid .span2{grid-column:auto}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    replaceButtons();
+    addTimelineButton();
+  }
+
+  function init(){
+    ensure();
+    css();
+    repair();
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v18t);
+      window.__v18t=setTimeout(repair,30);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
