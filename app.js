@@ -6833,3 +6833,540 @@ render();
   else init();
 
 })();
+
+
+/* =========================================================
+   myAIMS V27 - FINAL CALENDAR VISUAL POLISH
+   Refinement of approved appointments design:
+   - stronger but calm palette
+   - tighter spacing
+   - clearer appointment hierarchy
+   - improved therapist headers
+   - better selected-day emphasis
+   - clearer empty slots / active timeline
+   - refined side summary panels
+   ========================================================= */
+(function(){
+
+  function polish(){
+    const page=document.getElementById('page-appointments');
+    if(!page) return;
+
+    // Therapist headers: avatar initials + compact capacity indicator.
+    page.querySelectorAll('.v22-flow-head > div:not(.v22-time-head)').forEach((cell,i)=>{
+      if(cell.dataset.v27==='1') return;
+      cell.dataset.v27='1';
+
+      const b=cell.querySelector('b');
+      const small=cell.querySelector('small');
+      if(!b) return;
+
+      const name=b.textContent.trim();
+      const initials=name.split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+
+      const wrap=document.createElement('div');
+      wrap.className='v27-therapist-head';
+      wrap.innerHTML=`
+        <span class="v27-th-avatar">${initials}</span>
+        <div>
+          <b>${name}</b>
+          <small>${small?.textContent||''}</small>
+        </div>
+        <span class="v27-th-dot"></span>
+      `;
+      cell.innerHTML='';
+      cell.appendChild(wrap);
+    });
+
+    // Add compact "available" cue only to larger open areas.
+    page.querySelectorAll('.v22-empty-slot').forEach(slot=>{
+      if(slot.dataset.v27==='1') return;
+      slot.dataset.v27='1';
+      slot.addEventListener('mouseenter',()=>{
+        if(slot.querySelector('.v27-slot-cue')) return;
+        const cue=document.createElement('span');
+        cue.className='v27-slot-cue';
+        cue.innerHTML='<i>＋</i> Add Appointment';
+        slot.appendChild(cue);
+      });
+      slot.addEventListener('mouseleave',()=>slot.querySelector('.v27-slot-cue')?.remove());
+    });
+
+    // Strengthen appointment card title and metadata layout.
+    page.querySelectorAll('.v22-appt').forEach(card=>{
+      card.classList.add('v27-card');
+      const copy=card.querySelector('.v22-appt-copy');
+      if(!copy || copy.dataset.v27==='1') return;
+      copy.dataset.v27='1';
+
+      const title=copy.querySelector('b');
+      const details=copy.querySelector('small');
+      const room=copy.querySelector('em');
+
+      if(title) title.classList.add('v27-patient-name');
+      if(details) details.classList.add('v27-appt-details');
+      if(room) room.classList.add('v27-room');
+    });
+
+    // Day cards: add small capacity caption based on current ring value/count.
+    page.querySelectorAll('.v22-day').forEach(day=>{
+      if(day.querySelector('.v27-cap-label')) return;
+      const count=day.querySelector('.v22-ring i')?.textContent?.trim()||'0';
+      const label=document.createElement('div');
+      label.className='v27-cap-label';
+      label.textContent=count==='0'?'Open day':`${count} booked`;
+      const load=day.querySelector('.v22-load');
+      if(load) load.insertAdjacentElement('beforebegin',label);
+    });
+
+    // Refine capacity side card title.
+    const insight=page.querySelector('.v22-insight');
+    if(insight && !insight.querySelector('.v27-summary-kicker')){
+      const kicker=document.createElement('div');
+      kicker.className='v27-summary-kicker';
+      kicker.textContent="Today's Flow";
+      insight.prepend(kicker);
+    }
+
+    // Refine next appointments panel.
+    const next=page.querySelector('.v22-next');
+    if(next) next.classList.add('v27-next-panel');
+  }
+
+  function css(){
+    if(document.getElementById('v27-css')) return;
+    const st=document.createElement('style');
+    st.id='v27-css';
+    st.textContent=`
+      :root{
+        --v27-navy:#123f4c;
+        --v27-teal:#175765;
+        --v27-teal2:#2b7480;
+        --v27-gold:#c7983f;
+        --v27-bg:#eef5f6;
+        --v27-line:#dbe6e8;
+        --v27-text:#173f49;
+        --v27-muted:#7e9196;
+      }
+
+      /* ---- overall page ---- */
+      #page-appointments{
+        background:
+          linear-gradient(180deg,#f6fafb 0%,#edf4f5 100%)!important;
+        padding:16px!important;
+      }
+
+      #page-appointments .v22-hero{
+        padding:14px 16px!important;
+        margin-bottom:10px!important;
+        border-radius:15px!important;
+        box-shadow:0 5px 16px rgba(25,66,75,.045)!important;
+      }
+
+      #page-appointments .v22-hero h2{
+        font-size:23px!important;
+        letter-spacing:-.25px;
+      }
+
+      #page-appointments .v22-hero-actions button{
+        height:35px!important;
+        padding:0 12px!important;
+        border-radius:9px!important;
+        font-size:9px!important;
+      }
+
+      #page-appointments .v22-hero-actions .gold{
+        background:linear-gradient(135deg,#c5963d,#d2a64f)!important;
+        box-shadow:0 5px 12px rgba(197,150,61,.20);
+      }
+
+      /* ---- view controls ---- */
+      .v25-viewbar{
+        padding:8px 10px!important;
+        margin:9px 0 11px!important;
+        border-radius:12px!important;
+        gap:10px!important;
+      }
+
+      .v25-modes button{
+        padding:6px 10px!important;
+        min-width:56px;
+      }
+
+      .v25-modes button.active{
+        background:linear-gradient(135deg,#123f4c,#195b69)!important;
+      }
+
+      .v25-legend{
+        gap:8px!important;
+      }
+
+      .v25-legend span{
+        background:#f7fafb;
+        border:1px solid #e3ebed;
+        padding:4px 6px;
+        border-radius:999px;
+      }
+
+      /* ---- week cards ---- */
+      #page-appointments .v22-orbit{
+        margin-bottom:11px!important;
+      }
+
+      #page-appointments .v22-days{
+        gap:7px!important;
+      }
+
+      #page-appointments .v22-day{
+        min-height:116px!important;
+        padding:9px!important;
+        border-radius:13px!important;
+        box-shadow:0 4px 11px rgba(29,67,75,.045)!important;
+      }
+
+      #page-appointments .v22-day:hover{
+        transform:translateY(-2px)!important;
+        box-shadow:0 8px 17px rgba(29,67,75,.09)!important;
+      }
+
+      #page-appointments .v22-day.active{
+        background:
+          radial-gradient(circle at 78% 18%,rgba(255,255,255,.11),transparent 28%),
+          linear-gradient(145deg,#174f5b,#0f3f4c)!important;
+        box-shadow:0 10px 24px rgba(17,67,78,.24)!important;
+        transform:translateY(-1px);
+      }
+
+      #page-appointments .v22-day.active:after{
+        content:"";
+        position:absolute;
+        left:12px;right:12px;bottom:0;
+        height:3px;border-radius:999px 999px 0 0;
+        background:#d1a34d;
+      }
+
+      #page-appointments .v22-day-top b{
+        font-size:16px!important;
+      }
+
+      #page-appointments .v22-ring{
+        width:36px!important;height:36px!important;
+        margin:6px 0!important;
+      }
+
+      .v27-cap-label{
+        font-size:6.5px;
+        color:#8b9a9f;
+        margin-top:3px;
+      }
+
+      #page-appointments .v22-day.active .v27-cap-label{
+        color:rgba(255,255,255,.72)!important;
+      }
+
+      /* ---- day title bar ---- */
+      #page-appointments .v22-command{
+        padding:8px 10px!important;
+        border-radius:11px!important;
+        margin-bottom:8px!important;
+      }
+
+      .v25-day-summary b{
+        font-size:12px!important;
+      }
+
+      .v25-calendar-icon{
+        background:linear-gradient(145deg,#e6f3f5,#d8ebef)!important;
+        border:1px solid #cfe2e6;
+      }
+
+      /* ---- timeline ---- */
+      #page-appointments .v22-flow-shell{
+        border-radius:13px!important;
+        box-shadow:0 7px 21px rgba(23,65,74,.065)!important;
+      }
+
+      #page-appointments .v22-flow-head{
+        height:58px!important;
+        background:linear-gradient(180deg,#f8fbfc,#edf4f5)!important;
+      }
+
+      #page-appointments .v22-flow-head>div{
+        padding:8px 10px!important;
+      }
+
+      .v27-therapist-head{
+        height:100%;
+        display:flex;
+        align-items:center;
+        gap:8px;
+      }
+
+      .v27-th-avatar{
+        width:30px;height:30px;
+        border-radius:50%;
+        display:grid;place-items:center;
+        flex:0 0 30px;
+        background:linear-gradient(145deg,#236779,#174f5b);
+        color:#fff;
+        font-size:7px;
+        font-weight:900;
+        box-shadow:0 3px 8px rgba(23,79,91,.16);
+      }
+
+      .v27-therapist-head div{
+        min-width:0;
+        flex:1;
+      }
+
+      .v27-therapist-head b{
+        font-size:9px!important;
+        color:#214b55!important;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+      }
+
+      .v27-therapist-head small{
+        font-size:6.5px!important;
+        color:#88999e!important;
+      }
+
+      .v27-th-dot{
+        width:7px;height:7px;
+        border-radius:50%;
+        background:#43b07b;
+        box-shadow:0 0 0 3px rgba(67,176,123,.12);
+      }
+
+      #page-appointments .v22-flow-body{
+        height:988px!important;
+      }
+
+      #page-appointments .v22-time-axis>div{
+        padding:6px!important;
+      }
+
+      #page-appointments .v22-time-axis span{
+        color:#71878d!important;
+        font-weight:700;
+      }
+
+      #page-appointments .v22-lane{
+        background:
+          linear-gradient(to bottom,transparent 75px,#e7eef0 76px),
+          linear-gradient(90deg,rgba(246,250,251,.22),rgba(255,255,255,.96))!important;
+        background-size:100% 76px,100% 100%!important;
+      }
+
+      /* ---- appointment cards ---- */
+      #page-appointments .v22-appt.v27-card{
+        left:7px!important;
+        right:7px!important;
+        width:calc(100% - 14px)!important;
+        padding:7px 8px!important;
+        border-radius:10px!important;
+        border-left-width:3px!important;
+      }
+
+      #page-appointments .v22-appt.v27-card .v22-avatar{
+        width:28px!important;
+        height:28px!important;
+        min-width:28px!important;
+        border-radius:9px!important;
+        box-shadow:0 2px 6px rgba(31,71,80,.13);
+      }
+
+      .v27-patient-name{
+        font-size:9.5px!important;
+        line-height:1.1!important;
+        color:#183f49!important;
+        font-weight:850!important;
+      }
+
+      .v27-appt-details{
+        font-size:6.8px!important;
+        line-height:1.2!important;
+        color:#6d8389!important;
+        margin-top:2px!important;
+      }
+
+      .v27-room{
+        display:inline-block!important;
+        margin-top:3px!important;
+        padding:2px 5px;
+        border-radius:999px;
+        background:rgba(255,255,255,.68);
+        border:1px solid rgba(255,255,255,.75);
+        font-size:6.3px!important;
+        color:#8d6e34!important;
+      }
+
+      #page-appointments .v22-appt.v25-scheduled{
+        background:linear-gradient(135deg,#edf7ff,#dceeff)!important;
+        border-color:#4c9be8!important;
+      }
+      #page-appointments .v22-appt.v25-confirmed{
+        background:linear-gradient(135deg,#edfaf4,#d9f2e5)!important;
+        border-color:#3eb77f!important;
+      }
+      #page-appointments .v22-appt.v25-checked-in{
+        background:linear-gradient(135deg,#fff9e8,#ffeec0)!important;
+        border-color:#d1a33c!important;
+      }
+      #page-appointments .v22-appt.v25-in-session{
+        background:linear-gradient(135deg,#e9faf6,#d4f1e9)!important;
+        border-color:#18a58b!important;
+      }
+      #page-appointments .v22-appt.v25-completed{
+        background:linear-gradient(135deg,#edf7f2,#dfede6)!important;
+        border-color:#6d9882!important;
+      }
+      #page-appointments .v22-appt.v25-cancelled{
+        background:linear-gradient(135deg,#fff0f1,#ffdfe3)!important;
+        border-color:#e06572!important;
+      }
+      #page-appointments .v22-appt.v25-no-show{
+        background:linear-gradient(135deg,#fff0f7,#f6dfef)!important;
+        border-color:#b66b9f!important;
+      }
+
+      .v25-meta{
+        margin-top:3px!important;
+        gap:3px!important;
+      }
+
+      .v25-meta span{
+        font-size:5.8px!important;
+        padding:1px 4px!important;
+      }
+
+      /* ---- now line ---- */
+      #page-appointments .v22-now{
+        height:2px!important;
+        background:#cf9a38!important;
+      }
+
+      #page-appointments .v22-now span{
+        background:#c9973d!important;
+        border-radius:7px!important;
+        padding:3px 6px!important;
+        font-size:6px!important;
+        box-shadow:0 3px 7px rgba(201,151,61,.20);
+      }
+
+      #page-appointments .v22-now i{
+        background:#c9973d!important;
+        width:8px!important;height:8px!important;
+      }
+
+      /* ---- empty slot cue ---- */
+      .v27-slot-cue{
+        position:absolute;
+        left:50%;top:50%;
+        transform:translate(-50%,-50%);
+        z-index:2;
+        display:flex;
+        align-items:center;
+        gap:4px;
+        white-space:nowrap;
+        font-size:6.5px;
+        font-weight:800;
+        color:#5c7f87;
+        background:rgba(255,255,255,.9);
+        border:1px dashed #93b2b8;
+        border-radius:8px;
+        padding:5px 8px;
+        pointer-events:none;
+        box-shadow:0 3px 9px rgba(41,78,87,.05);
+      }
+
+      .v27-slot-cue i{
+        font-style:normal;
+        color:#b78732;
+        font-size:10px;
+      }
+
+      /* ---- side summary ---- */
+      #page-appointments .v22-layout{
+        gap:10px!important;
+      }
+
+      #page-appointments .v22-layout>aside{
+        gap:9px!important;
+      }
+
+      #page-appointments .v22-insight,
+      #page-appointments .v22-next{
+        border-radius:13px!important;
+        padding:11px!important;
+      }
+
+      .v27-summary-kicker{
+        font-size:7px;
+        letter-spacing:1px;
+        color:#b38738;
+        font-weight:900;
+        margin-bottom:9px;
+      }
+
+      #page-appointments .v22-insight.v25-panel-teal{
+        background:
+          radial-gradient(circle at 80% 8%,rgba(43,116,128,.08),transparent 35%),
+          linear-gradient(145deg,#f0faf8,#e3f2ef)!important;
+      }
+
+      #page-appointments .v22-next.v25-panel-sand{
+        background:
+          radial-gradient(circle at 85% 10%,rgba(201,152,63,.10),transparent 35%),
+          linear-gradient(145deg,#fffdf8,#f9f1e2)!important;
+      }
+
+      #page-appointments .v22-mini div{
+        border:1px solid rgba(216,230,232,.75);
+        background:rgba(255,255,255,.68)!important;
+      }
+
+      #page-appointments .v22-next-list button{
+        border:1px solid rgba(222,231,233,.9)!important;
+        background:rgba(255,255,255,.72)!important;
+      }
+
+      #page-appointments .v22-next-list button:hover{
+        background:#fff!important;
+        transform:translateX(2px);
+      }
+
+      /* ---- scrollbar refinement ---- */
+      #page-appointments *::-webkit-scrollbar{width:7px;height:7px}
+      #page-appointments *::-webkit-scrollbar-thumb{background:#cddcdf;border-radius:99px}
+      #page-appointments *::-webkit-scrollbar-track{background:transparent}
+
+      @media(max-width:1100px){
+        .v25-viewbar{grid-template-columns:1fr!important}
+        .v25-legend{justify-content:flex-start!important}
+      }
+
+      @media(max-width:760px){
+        #page-appointments{padding:9px!important}
+        #page-appointments .v22-hero{padding:12px!important}
+        .v27-th-avatar{width:27px;height:27px;flex-basis:27px}
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function init(){
+    css();
+    setTimeout(polish,250);
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v27repair);
+      window.__v27repair=setTimeout(polish,60);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+
+})();
