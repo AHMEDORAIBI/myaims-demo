@@ -1864,3 +1864,388 @@ render();
   if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V14 - APPOINTMENTS PRO
+   Calendar-like filters, therapist/room, duration, visit type,
+   statuses, conflict checks, quick actions and follow-up.
+   ========================================================= */
+(function () {
+  const getState = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  const STATUSES = ['Scheduled','Confirmed','Checked In','In Session','Completed','Cancelled','No Show'];
+  const VISIT_TYPES = ['Initial Assessment','Follow-up','Physiotherapy Session','Rehabilitation Session','Consultation'];
+  const DURATIONS = [30,45,60,90];
+
+  function today(){ return new Date().toISOString().slice(0,10); }
+  function nowTime(){ return new Date().toTimeString().slice(0,5); }
+  function normalizeTime(t){ return String(t || '').slice(0,5); }
+
+  function ensureAppointmentModel(){
+    const s = getState();
+    if (!Array.isArray(s.appointments)) s.appointments = [];
+    s.appointments = s.appointments.map(a => ({
+      ...a,
+      status: a.status || 'Scheduled',
+      therapist: a.therapist || '',
+      room: a.room || '',
+      duration: Number(a.duration || 60),
+      visitType: a.visitType || 'Physiotherapy Session',
+      notes: a.notes || '',
+      checkedInAt: a.checkedInAt || '',
+      completedAt: a.completedAt || '',
+      followUpNeeded: !!a.followUpNeeded
+    }));
+    save();
+  }
+
+  function patientName(id){
+    const s=getState();
+    const p=(s.patients||[]).find(x=>String(x.id)===String(id));
+    return p ? (p.name || p.fullName || p.patientName || 'Patient') : (id || 'Patient');
+  }
+
+  function appointmentRows(filterDate, filterStatus){
+    const s=getState();
+    return (s.appointments||[])
+      .filter(a => !filterDate || a.date===filterDate)
+      .filter(a => !filterStatus || filterStatus==='All' || a.status===filterStatus)
+      .sort((a,b)=>(String(a.date)+String(a.time)).localeCompare(String(b.date)+String(b.time)));
+  }
+
+  window.hasAdvancedAppointmentConflict=function(appt){
+    const s=getState();
+    const duration=Number(appt.duration||60);
+    const start=(appt.date||'')+'T'+normalizeTime(appt.time);
+    if (!appt.date || !appt.time) return null;
+    const startDate=new Date(start);
+    const endDate=new Date(startDate.getTime()+duration*60000);
+
+    return (s.appointments||[]).find(a=>{
+      if (String(a.id)===String(appt.id||'')) return false;
+      if (a.date!==appt.date) return false;
+      if (['Cancelled','No Show'].includes(a.status||'Scheduled')) return false;
+
+      const sameResource =
+        (!!appt.therapist && !!a.therapist && appt.therapist===a.therapist) ||
+        (!!appt.room && !!a.room && appt.room===a.room);
+
+      if (!sameResource) return false;
+
+      const aStart=new Date((a.date||'')+'T'+normalizeTime(a.time));
+      const aEnd=new Date(aStart.getTime()+Number(a.duration||60)*60000);
+
+      return startDate < aEnd && endDate > aStart;
+    }) || null;
+  };
+
+  window.updateAppointmentStatusPro=function(id,status){
+    const s=getState();
+    const a=(s.appointments||[]).find(x=>String(x.id)===String(id));
+    if (!a || !STATUSES.includes(status)) return;
+
+    a.status=status;
+    if (status==='Checked In' && !a.checkedInAt) a.checkedInAt=new Date().toISOString();
+    if (status==='Completed') a.completedAt=new Date().toISOString();
+    save();
+
+    if (typeof window.logAudit==='function') window.logAudit('Update Appointment Status','Appointments',`${patientName(a.patientId||a.patient)} — ${status}`);
+    renderAppointmentsPro();
+    if (typeof window.renderDashboard==='function') window.renderDashboard();
+  };
+
+  window.toggleAppointmentFollowUp=function(id){
+    const s=getState();
+    const a=(s.appointments||[]).find(x=>String(x.id)===String(id));
+    if (!a) return;
+    a.followUpNeeded=!a.followUpNeeded;
+    save();
+    renderAppointmentsPro();
+  };
+
+  window.editAppointmentPro=function(id){
+    const s=getState();
+    const a=(s.appointments||[]).find(x=>String(x.id)===String(id));
+    if (!a) return;
+
+    const therapist=prompt('Therapist:',a.therapist||'');
+    if (therapist===null) return;
+    const room=prompt('Room / Treatment Area:',a.room||'');
+    if (room===null) return;
+    const duration=prompt('Duration in minutes: 30 / 45 / 60 / 90',String(a.duration||60));
+    if (duration===null) return;
+    const visitType=prompt('Visit Type:',a.visitType||'Physiotherapy Session');
+    if (visitType===null) return;
+    const notes=prompt('Notes:',a.notes||'');
+    if (notes===null) return;
+
+    const candidate={...a,therapist,room,duration:Number(duration||60),visitType,notes};
+    const conflict=window.hasAdvancedAppointmentConflict(candidate);
+    if (conflict){
+      alert(`Conflict detected with ${patientName(conflict.patientId||conflict.patient)} at ${conflict.time}.`);
+      return;
+    }
+
+    Object.assign(a,candidate);
+    save();
+    if (typeof window.logAudit==='function') window.logAudit('Edit Appointment','Appointments',patientName(a.patientId||a.patient));
+    renderAppointmentsPro();
+  };
+
+  window.createFollowUpFromAppointment=function(id){
+    const s=getState();
+    const a=(s.appointments||[]).find(x=>String(x.id)===String(id));
+    if (!a) return;
+
+    const nextDate=prompt('Follow-up date (YYYY-MM-DD):', a.date || today());
+    if (!nextDate) return;
+    const nextTime=prompt('Follow-up time (HH:MM):', a.time || '10:00');
+    if (!nextTime) return;
+
+    const newAppt={
+      ...a,
+      id:'APT-'+Date.now(),
+      date:nextDate,
+      time:nextTime,
+      status:'Scheduled',
+      checkedInAt:'',
+      completedAt:'',
+      followUpNeeded:false
+    };
+
+    const conflict=window.hasAdvancedAppointmentConflict(newAppt);
+    if (conflict){
+      alert(`Conflict detected with ${patientName(conflict.patientId||conflict.patient)} at ${conflict.time}.`);
+      return;
+    }
+
+    s.appointments.push(newAppt);
+    save();
+    if (typeof window.logAudit==='function') window.logAudit('Create Follow-up','Appointments',patientName(newAppt.patientId||newAppt.patient));
+    renderAppointmentsPro();
+  };
+
+  function stats(date){
+    const rows=appointmentRows(date,'All');
+    const count = status => rows.filter(a=>a.status===status).length;
+    return {
+      total:rows.length,
+      confirmed:count('Confirmed'),
+      checkedIn:count('Checked In')+count('In Session'),
+      completed:count('Completed'),
+      noShow:count('No Show'),
+      cancelled:count('Cancelled')
+    };
+  }
+
+  function statusOptions(current){
+    return STATUSES.map(s=>`<option ${s===current?'selected':''}>${s}</option>`).join('');
+  }
+
+  function renderAppointmentsPro(){
+    const page=document.querySelector('#appointments, [data-page="appointments"], .appointments-page');
+    if (!page) return;
+
+    let panel=document.getElementById('appointments-pro-panel');
+    if (!panel){
+      panel=document.createElement('section');
+      panel.id='appointments-pro-panel';
+      panel.className='v14-wrap';
+      page.prepend(panel);
+    }
+
+    const selectedDate=document.getElementById('v14-date-filter')?.value || today();
+    const selectedStatus=document.getElementById('v14-status-filter')?.value || 'All';
+    const rows=appointmentRows(selectedDate,selectedStatus);
+    const st=stats(selectedDate);
+
+    panel.innerHTML=`
+      <div class="v14-head">
+        <div>
+          <small>CLINIC SCHEDULE</small>
+          <h2>Appointments Pro</h2>
+          <p>Manage therapist schedules, treatment rooms, visit flow and follow-up.</p>
+        </div>
+        <div class="v14-filters">
+          <input id="v14-date-filter" type="date" value="${selectedDate}" onchange="renderAppointmentsPro()">
+          <select id="v14-status-filter" onchange="renderAppointmentsPro()">
+            ${['All',...STATUSES].map(s=>`<option ${s===selectedStatus?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="v14-stats">
+        <div><span>Total</span><b>${st.total}</b></div>
+        <div><span>Confirmed</span><b>${st.confirmed}</b></div>
+        <div><span>Checked In / In Session</span><b>${st.checkedIn}</b></div>
+        <div><span>Completed</span><b>${st.completed}</b></div>
+        <div><span>No Show</span><b>${st.noShow}</b></div>
+        <div><span>Cancelled</span><b>${st.cancelled}</b></div>
+      </div>
+
+      <div class="v14-table-card">
+        <div class="v14-table-head">
+          <h3>Schedule — ${selectedDate}</h3>
+          <span>${rows.length} appointment${rows.length===1?'':'s'}</span>
+        </div>
+        <div class="v14-table-wrap">
+          <table class="v14-table">
+            <thead>
+              <tr>
+                <th>Time</th><th>Patient</th><th>Visit Type</th><th>Therapist</th><th>Room</th><th>Duration</th><th>Status</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.length ? rows.map(a=>`
+                <tr>
+                  <td><b>${a.time||'—'}</b></td>
+                  <td><b>${patientName(a.patientId||a.patient)}</b>${a.followUpNeeded?'<small class="v14-follow">Follow-up needed</small>':''}</td>
+                  <td>${a.visitType||'—'}</td>
+                  <td>${a.therapist||'—'}</td>
+                  <td>${a.room||'—'}</td>
+                  <td>${Number(a.duration||60)} min</td>
+                  <td>
+                    <select class="v14-status" onchange="updateAppointmentStatusPro('${a.id}',this.value)">
+                      ${statusOptions(a.status||'Scheduled')}
+                    </select>
+                  </td>
+                  <td>
+                    <div class="v14-actions">
+                      <button onclick="editAppointmentPro('${a.id}')">Edit</button>
+                      <button onclick="toggleAppointmentFollowUp('${a.id}')">${a.followUpNeeded?'Clear Follow-up':'Follow-up'}</button>
+                      <button onclick="createFollowUpFromAppointment('${a.id}')">Next Visit</button>
+                      <button onclick="createInvoiceFromAppointment('${a.id}')">Invoice</button>
+                    </div>
+                  </td>
+                </tr>`).join('') :
+                `<tr><td colspan="8" class="v14-empty">No appointments for this filter.</td></tr>`
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  window.renderAppointmentsPro=renderAppointmentsPro;
+
+  // Improve existing appointment creation forms with extra fields.
+  function enhanceAppointmentForm(){
+    const forms=[...document.querySelectorAll('form')].filter(f=>{
+      const txt=((f.id||'')+' '+(f.className||'')+' '+(f.textContent||'')).toLowerCase();
+      return txt.includes('appointment');
+    });
+
+    forms.forEach(form=>{
+      if (form.dataset.v14Enhanced==='1') return;
+      form.dataset.v14Enhanced='1';
+
+      const holder=document.createElement('div');
+      holder.className='v14-extra-fields';
+      holder.innerHTML=`
+        <label>Therapist<input name="therapist" placeholder="Therapist name"></label>
+        <label>Room<input name="room" placeholder="Room / Treatment Area"></label>
+        <label>Duration<select name="duration">${DURATIONS.map(d=>`<option value="${d}" ${d===60?'selected':''}>${d} min</option>`).join('')}</select></label>
+        <label>Visit Type<select name="visitType">${VISIT_TYPES.map(v=>`<option>${v}</option>`).join('')}</select></label>
+        <label class="v14-notes">Clinical / appointment note<textarea name="notes" rows="2" placeholder="Optional note"></textarea></label>`;
+      form.appendChild(holder);
+    });
+  }
+
+  // Capture form submission and enrich most recently added appointment.
+  document.addEventListener('submit',function(e){
+    const form=e.target;
+    if (!form || form.dataset.v14Enhanced!=='1') return;
+
+    const fd=new FormData(form);
+    const appt={
+      therapist:fd.get('therapist')||'',
+      room:fd.get('room')||'',
+      duration:Number(fd.get('duration')||60),
+      visitType:fd.get('visitType')||'Physiotherapy Session',
+      notes:fd.get('notes')||'',
+      date:fd.get('date')||form.querySelector('[name="date"]')?.value||'',
+      time:fd.get('time')||form.querySelector('[name="time"]')?.value||''
+    };
+
+    const conflict=window.hasAdvancedAppointmentConflict(appt);
+    if (conflict){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      alert(`Schedule conflict: ${patientName(conflict.patientId||conflict.patient)} already occupies the same therapist/room time.`);
+      return false;
+    }
+
+    setTimeout(()=>{
+      const s=getState();
+      const last=(s.appointments||[])[s.appointments.length-1];
+      if (last){
+        last.therapist=appt.therapist;
+        last.room=appt.room;
+        last.duration=appt.duration;
+        last.visitType=appt.visitType;
+        last.notes=appt.notes;
+        last.status=last.status||'Scheduled';
+        save();
+        renderAppointmentsPro();
+      }
+    },80);
+  },true);
+
+  function css(){
+    if (document.getElementById('myaims-v14-css')) return;
+    const st=document.createElement('style');
+    st.id='myaims-v14-css';
+    st.textContent=`
+      .v14-wrap{margin-bottom:20px}
+      .v14-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:16px}
+      .v14-head small{letter-spacing:1.5px;font-weight:700;opacity:.55}
+      .v14-head h2{margin:4px 0;font-size:27px}.v14-head p{margin:0;opacity:.65}
+      .v14-filters{display:flex;gap:8px}.v14-filters input,.v14-filters select{padding:10px;border:1px solid #dce5e8;border-radius:9px;background:#fff}
+      .v14-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:14px}
+      .v14-stats>div{background:#fff;border:1px solid #dfe8eb;border-radius:12px;padding:13px}
+      .v14-stats span{display:block;font-size:11px;opacity:.62;margin-bottom:5px}.v14-stats b{font-size:18px}
+      .v14-table-card{background:#fff;border:1px solid #dfe8eb;border-radius:14px;padding:15px}
+      .v14-table-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.v14-table-head h3{margin:0}.v14-table-head span{font-size:12px;opacity:.6}
+      .v14-table-wrap{overflow:auto}.v14-table{width:100%;border-collapse:collapse;min-width:980px}
+      .v14-table th,.v14-table td{padding:10px;border-bottom:1px solid #edf1f2;text-align:left;vertical-align:top}
+      .v14-table th{font-size:11px;opacity:.62}.v14-table td{font-size:13px}
+      .v14-status{padding:6px;border:1px solid #dce5e8;border-radius:8px;background:#fff}
+      .v14-actions{display:flex;gap:5px;flex-wrap:wrap}.v14-actions button{border:0;background:#f1f6f7;border-radius:7px;padding:6px 8px;cursor:pointer;font-size:11px}
+      .v14-actions button:last-child{background:#c99a42;color:white}
+      .v14-follow{display:block;color:#b7791f;font-weight:700;margin-top:3px}
+      .v14-empty{text-align:center!important;padding:28px!important;opacity:.55}
+      .v14-extra-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #edf1f2}
+      .v14-extra-fields label{display:flex;flex-direction:column;gap:5px;font-size:12px}
+      .v14-extra-fields input,.v14-extra-fields select,.v14-extra-fields textarea{padding:9px;border:1px solid #dce5e8;border-radius:8px}
+      .v14-notes{grid-column:1/-1}
+      @media(max-width:1100px){.v14-stats{grid-template-columns:repeat(3,1fr)}}
+      @media(max-width:700px){.v14-head{align-items:flex-start;flex-direction:column}.v14-filters{width:100%}.v14-filters>*{flex:1}.v14-stats{grid-template-columns:1fr 1fr}.v14-extra-fields{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  const oldRender=window.renderAppointments;
+  if (typeof oldRender==='function'){
+    window.renderAppointments=function(){
+      oldRender.apply(this,arguments);
+      setTimeout(()=>{enhanceAppointmentForm();renderAppointmentsPro();},40);
+    };
+  }
+
+  function init(){
+    ensureAppointmentModel();
+    css();
+    setTimeout(()=>{enhanceAppointmentForm();renderAppointmentsPro();},300);
+
+    const observer=new MutationObserver(()=>{
+      clearTimeout(window.__v14t);
+      window.__v14t=setTimeout(()=>{enhanceAppointmentForm();renderAppointmentsPro();},60);
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
