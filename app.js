@@ -2537,3 +2537,247 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V16 - CLINIC TIMELINE + THERAPIST COLUMNS + SIDE PANEL
+   ========================================================= */
+(function(){
+  const S = () => window.state || window.appState || {};
+  const START_HOUR = 8, END_HOUR = 20, SLOT = 30, SLOT_H = 48;
+  window.__v16Date = window.__v16Date || new Date().toISOString().slice(0,10);
+  window.__v16View = window.__v16View || 'therapist';
+
+  function appts(){ return Array.isArray(S().appointments) ? S().appointments : []; }
+  function patients(){ return Array.isArray(S().patients) ? S().patients : []; }
+  function pname(a){
+    const id=a.patientId||a.patient;
+    const p=patients().find(x=>String(x.id)===String(id));
+    return p ? (p.name||p.fullName||p.patientName||'Patient') : 'Patient';
+  }
+  function pphone(a){
+    const id=a.patientId||a.patient;
+    const p=patients().find(x=>String(x.id)===String(id));
+    return p ? (p.phone||p.mobile||p.contact||'—') : '—';
+  }
+  function mins(t){
+    const [h,m]=String(t||'08:00').split(':').map(Number);
+    return h*60+(m||0);
+  }
+  function fmt(h,m){ return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+  function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function initials(n){ return String(n||'P').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase(); }
+
+  function resources(type){
+    const rows=appts().filter(a=>a.date===window.__v16Date);
+    let vals = rows.map(a=>type==='room' ? a.room : a.therapist).filter(Boolean);
+    vals=[...new Set(vals)];
+    if(!vals.length) vals=type==='room'?['Treatment Room 1','Treatment Room 2']:['Therapist 1','Therapist 2'];
+    return vals;
+  }
+
+  function statusClass(s){
+    return String(s||'Scheduled').toLowerCase().replace(/\s+/g,'-');
+  }
+
+  function timelineHours(){
+    let html='';
+    for(let h=START_HOUR;h<=END_HOUR;h++){
+      html+=`<div class="v16-hour-label" style="top:${(h-START_HOUR)*2*SLOT_H}px">${fmt(h,0)}</div>`;
+      if(h<END_HOUR) html+=`<div class="v16-half-label" style="top:${(h-START_HOUR)*2*SLOT_H+SLOT_H}px">${fmt(h,30)}</div>`;
+    }
+    return html;
+  }
+
+  function eventStyle(a){
+    const start=mins(a.time)-START_HOUR*60;
+    const top=Math.max(0,(start/SLOT)*SLOT_H);
+    const height=Math.max(42,(Number(a.duration||60)/SLOT)*SLOT_H-5);
+    return `top:${top}px;height:${height}px`;
+  }
+
+  function column(name,type){
+    const rows=appts().filter(a=>{
+      if(a.date!==window.__v16Date) return false;
+      return type==='room' ? (a.room||'')===name : (a.therapist||'')===name;
+    });
+    return `
+      <div class="v16-resource">
+        <div class="v16-resource-head">
+          <span class="v16-resource-avatar">${initials(name)}</span>
+          <div><b>${esc(name)}</b><small>${rows.length} appointment${rows.length===1?'':'s'}</small></div>
+        </div>
+        <div class="v16-resource-body">
+          ${Array.from({length:(END_HOUR-START_HOUR)*2},(_,i)=>`<div class="v16-slot" style="top:${i*SLOT_H}px"></div>`).join('')}
+          ${rows.map(a=>`
+            <button class="v16-event ${statusClass(a.status)}" style="${eventStyle(a)}" onclick="openV16Appointment('${a.id}')">
+              <span class="v16-event-time">${esc(a.time||'')}</span>
+              <b>${esc(pname(a))}</b>
+              <small>${esc(a.visitType||'Session')}</small>
+              <em>${Number(a.duration||60)} min</em>
+            </button>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  function renderTimeline(){
+    const page=document.querySelector('#appointments, .appointments-page');
+    if(!page) return;
+    let root=document.getElementById('v16-timeline');
+    if(!root){
+      root=document.createElement('section');
+      root.id='v16-timeline';
+      page.prepend(root);
+    }
+    const type=window.__v16View;
+    const list=resources(type);
+    const d=new Date(window.__v16Date+'T00:00:00');
+    root.innerHTML=`
+      <div class="v16-top">
+        <div>
+          <small>SMART CLINIC SCHEDULER</small>
+          <h2>Appointments Timeline</h2>
+          <p>${d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
+        </div>
+        <div class="v16-controls">
+          <div class="v16-toggle">
+            <button class="${type==='therapist'?'active':''}" onclick="setV16Resource('therapist')">Therapists</button>
+            <button class="${type==='room'?'active':''}" onclick="setV16Resource('room')">Rooms</button>
+          </div>
+          <button onclick="shiftV16(-1)">‹</button>
+          <input type="date" value="${window.__v16Date}" onchange="window.__v16Date=this.value;renderV16Timeline()">
+          <button onclick="shiftV16(1)">›</button>
+          <button class="v16-today" onclick="todayV16()">Today</button>
+        </div>
+      </div>
+      <div class="v16-legend">
+        ${['Scheduled','Confirmed','Checked In','In Session','Completed','No Show','Cancelled'].map(s=>`<span class="${statusClass(s)}"><i></i>${s}</span>`).join('')}
+      </div>
+      <div class="v16-board-wrap">
+        <div class="v16-board" style="--cols:${list.length}">
+          <div class="v16-times">
+            <div class="v16-time-head">TIME</div>
+            <div class="v16-time-body">${timelineHours()}<div id="v16-now-label"></div></div>
+          </div>
+          ${list.map(n=>column(n,type)).join('')}
+          <div id="v16-now-line"></div>
+        </div>
+      </div>`;
+    drawNowLine();
+  }
+
+  window.renderV16Timeline=renderTimeline;
+  window.setV16Resource=function(v){ window.__v16View=v; renderTimeline(); };
+  window.shiftV16=function(n){
+    const d=new Date(window.__v16Date+'T00:00:00'); d.setDate(d.getDate()+n);
+    window.__v16Date=d.toISOString().slice(0,10); renderTimeline();
+  };
+  window.todayV16=function(){ window.__v16Date=new Date().toISOString().slice(0,10); renderTimeline(); };
+
+  function drawNowLine(){
+    const line=document.getElementById('v16-now-line');
+    const label=document.getElementById('v16-now-label');
+    if(!line||!label) return;
+    const now=new Date(), td=now.toISOString().slice(0,10);
+    if(td!==window.__v16Date){ line.style.display='none'; label.style.display='none'; return; }
+    const m=now.getHours()*60+now.getMinutes()-START_HOUR*60;
+    if(m<0||m>(END_HOUR-START_HOUR)*60){ line.style.display='none'; label.style.display='none'; return; }
+    const y=(m/SLOT)*SLOT_H;
+    line.style.top=(58+y)+'px';
+    label.style.top=y+'px';
+    label.innerHTML='<span>NOW</span>';
+  }
+
+  window.openV16Appointment=function(id){
+    const a=appts().find(x=>String(x.id)===String(id)); if(!a) return;
+    let shade=document.getElementById('v16-shade');
+    if(!shade){
+      shade=document.createElement('div'); shade.id='v16-shade'; document.body.appendChild(shade);
+    }
+    shade.className='open';
+    shade.innerHTML=`
+      <div class="v16-overlay" onclick="closeV16Appointment()"></div>
+      <aside class="v16-panel">
+        <div class="v16-panel-head">
+          <div><small>APPOINTMENT DETAILS</small><h3>${esc(a.time||'')} · ${Number(a.duration||60)} min</h3></div>
+          <button onclick="closeV16Appointment()">×</button>
+        </div>
+        <div class="v16-patient-card">
+          <span>${initials(pname(a))}</span>
+          <div><h3>${esc(pname(a))}</h3><p>${esc(pphone(a))}</p></div>
+          <i class="${statusClass(a.status)}">${esc(a.status||'Scheduled')}</i>
+        </div>
+        <div class="v16-detail-grid">
+          <div><small>Visit Type</small><b>${esc(a.visitType||'Session')}</b></div>
+          <div><small>Therapist</small><b>${esc(a.therapist||'Not assigned')}</b></div>
+          <div><small>Room</small><b>${esc(a.room||'—')}</b></div>
+          <div><small>Date</small><b>${esc(a.date||'—')}</b></div>
+        </div>
+        ${a.notes?`<div class="v16-panel-note"><small>Notes</small><p>${esc(a.notes)}</p></div>`:''}
+        <div class="v16-journey">
+          <h4>Patient Journey</h4>
+          <div>${['Scheduled','Confirmed','Checked In','In Session','Completed'].map((s,i)=>{
+            const order=['Scheduled','Confirmed','Checked In','In Session','Completed'];
+            const current=order.indexOf(a.status);
+            return `<span class="${i<=current?'done':''}"><i>${i<current?'✓':i+1}</i><small>${s}</small></span>`;
+          }).join('')}</div>
+        </div>
+        <div class="v16-panel-actions">
+          <button onclick="updateAppointmentStatusPro('${a.id}','Checked In');openV16Appointment('${a.id}')">Check In</button>
+          <button onclick="updateAppointmentStatusPro('${a.id}','In Session');openV16Appointment('${a.id}')">Start Session</button>
+          <button class="primary" onclick="updateAppointmentStatusPro('${a.id}','Completed');openV16Appointment('${a.id}')">Complete</button>
+          <button onclick="editAppointmentPro('${a.id}');closeV16Appointment()">Edit</button>
+          <button onclick="createFollowUpFromAppointment('${a.id}');closeV16Appointment()">Next Visit</button>
+          <button onclick="createInvoiceFromAppointment('${a.id}');closeV16Appointment()">Create Invoice</button>
+        </div>
+      </aside>`;
+  };
+  window.closeV16Appointment=function(){
+    const s=document.getElementById('v16-shade'); if(s) s.className='';
+    renderTimeline();
+  };
+
+  function css(){
+    if(document.getElementById('v16-css')) return;
+    const st=document.createElement('style'); st.id='v16-css';
+    st.textContent=`
+      #v16-timeline{margin-bottom:22px;background:#f7fafb;border:1px solid #dce7e9;border-radius:20px;padding:20px;box-shadow:0 10px 30px rgba(21,65,75,.05)}
+      .v16-top{display:flex;justify-content:space-between;gap:20px;align-items:flex-end}
+      .v16-top small{font-size:10px;letter-spacing:1.6px;font-weight:800;color:#b48a3c}.v16-top h2{margin:4px 0;font-size:29px;color:#173f49}.v16-top p{margin:0;color:#718288}
+      .v16-controls{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.v16-controls>button,.v16-controls input,.v16-toggle{height:38px;border:1px solid #d9e4e7;background:#fff;border-radius:9px}
+      .v16-controls>button{padding:0 12px;cursor:pointer}.v16-controls input{padding:0 9px}.v16-today{font-weight:700;color:#174f5b}
+      .v16-toggle{display:flex;padding:3px;height:32px}.v16-toggle button{border:0;background:transparent;border-radius:6px;padding:0 11px;cursor:pointer}.v16-toggle button.active{background:#174f5b;color:#fff}
+      .v16-legend{display:flex;gap:13px;flex-wrap:wrap;margin:15px 0 12px;font-size:10px;color:#64777d}.v16-legend span{display:flex;align-items:center;gap:5px}.v16-legend i{width:8px;height:8px;border-radius:50%;background:#5b8def}
+      .v16-legend .confirmed i{background:#1fa97a}.v16-legend .checked-in i{background:#d39a2c}.v16-legend .in-session i{background:#8b5cf6}.v16-legend .completed i{background:#2f855a}.v16-legend .no-show i{background:#6b7280}.v16-legend .cancelled i{background:#d35d6e}
+      .v16-board-wrap{overflow:auto;border:1px solid #dfe8ea;border-radius:14px;background:#fff}.v16-board{position:relative;display:grid;grid-template-columns:72px repeat(var(--cols),minmax(220px,1fr));min-width:max-content}
+      .v16-times,.v16-resource{position:relative;border-right:1px solid #e7edef}.v16-time-head,.v16-resource-head{height:58px;box-sizing:border-box;border-bottom:1px solid #e2eaec;background:#fbfdfd;position:sticky;top:0;z-index:5}
+      .v16-time-head{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#8a999d}
+      .v16-resource-head{display:flex;align-items:center;gap:9px;padding:10px 12px}.v16-resource-avatar{width:34px;height:34px;border-radius:10px;background:#e8f2f4;color:#174f5b;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
+      .v16-resource-head b,.v16-resource-head small{display:block}.v16-resource-head b{font-size:12px;color:#294d55}.v16-resource-head small{font-size:9px;color:#87969a;margin-top:2px}
+      .v16-time-body,.v16-resource-body{height:${(END_HOUR-START_HOUR)*2*SLOT_H}px;position:relative}.v16-resource-body{min-width:220px}
+      .v16-slot{position:absolute;left:0;right:0;height:${SLOT_H}px;border-bottom:1px dashed #edf1f2}.v16-hour-label,.v16-half-label{position:absolute;right:10px;transform:translateY(-6px);font-size:9px;color:#72858a}.v16-half-label{color:#a3afb2;font-size:8px}
+      .v16-event{position:absolute;left:7px;right:7px;border:0;border-left:4px solid #5b8def;background:#edf4ff;border-radius:9px;padding:7px 8px;text-align:left;cursor:pointer;overflow:hidden;box-shadow:0 2px 7px rgba(40,70,80,.07);z-index:2}
+      .v16-event.confirmed{border-color:#1fa97a;background:#ecfaf5}.v16-event.checked-in{border-color:#d39a2c;background:#fff8e8}.v16-event.in-session{border-color:#8b5cf6;background:#f5f0ff}.v16-event.completed{border-color:#2f855a;background:#edf8f1}.v16-event.no-show{border-color:#6b7280;background:#f2f3f4}.v16-event.cancelled{border-color:#d35d6e;background:#fff0f2;opacity:.72}
+      .v16-event-time,.v16-event b,.v16-event small,.v16-event em{display:block}.v16-event-time{font-size:9px;color:#72858a}.v16-event b{font-size:11px;color:#264b54;margin:2px 0}.v16-event small{font-size:9px;color:#718287}.v16-event em{position:absolute;right:7px;top:7px;font-style:normal;font-size:8px;color:#849397}
+      #v16-now-line{position:absolute;left:72px;right:0;height:2px;background:#d94b4b;z-index:4;pointer-events:none}#v16-now-line:before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:#d94b4b}
+      #v16-now-label{position:absolute;left:3px;right:0;z-index:6;pointer-events:none}#v16-now-label span{background:#d94b4b;color:#fff;border-radius:4px;padding:2px 4px;font-size:7px;font-weight:800}
+      #v16-shade{display:none}#v16-shade.open{display:block;position:fixed;inset:0;z-index:99999}.v16-overlay{position:absolute;inset:0;background:rgba(14,32,38,.38);backdrop-filter:blur(2px)}
+      .v16-panel{position:absolute;right:0;top:0;bottom:0;width:min(440px,94vw);background:#fff;padding:22px;box-shadow:-15px 0 45px rgba(0,0,0,.14);overflow:auto;animation:v16in .22s ease-out}
+      @keyframes v16in{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+      .v16-panel-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e8edef;padding-bottom:15px}.v16-panel-head small{font-size:9px;letter-spacing:1.4px;color:#ad8337;font-weight:800}.v16-panel-head h3{margin:4px 0 0}.v16-panel-head button{border:0;background:#f2f6f7;width:32px;height:32px;border-radius:50%;font-size:20px;cursor:pointer}
+      .v16-patient-card{display:flex;align-items:center;gap:11px;padding:18px 0}.v16-patient-card>span{width:48px;height:48px;border-radius:14px;background:#e8f2f4;color:#174f5b;display:flex;align-items:center;justify-content:center;font-weight:800}.v16-patient-card h3,.v16-patient-card p{margin:0}.v16-patient-card p{font-size:11px;color:#819095;margin-top:3px}.v16-patient-card>i{margin-left:auto;font-style:normal;font-size:9px;background:#eef4f5;border-radius:999px;padding:5px 8px}
+      .v16-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.v16-detail-grid>div,.v16-panel-note{border:1px solid #e5ecee;border-radius:10px;padding:11px}.v16-detail-grid small,.v16-detail-grid b{display:block}.v16-detail-grid small,.v16-panel-note small{font-size:9px;color:#89979b}.v16-detail-grid b{font-size:11px;margin-top:4px;color:#31535b}.v16-panel-note{margin-top:9px}.v16-panel-note p{margin:5px 0 0;font-size:11px}
+      .v16-journey{margin:18px 0}.v16-journey h4{margin-bottom:12px}.v16-journey>div{display:flex;justify-content:space-between;position:relative}.v16-journey>div:before{content:"";position:absolute;left:8%;right:8%;top:13px;height:2px;background:#e4eaec}.v16-journey span{position:relative;z-index:1;text-align:center;width:20%}.v16-journey i{width:26px;height:26px;border-radius:50%;background:#edf1f2;display:flex;align-items:center;justify-content:center;margin:auto;font-style:normal;font-size:9px}.v16-journey span.done i{background:#174f5b;color:#fff}.v16-journey small{display:block;font-size:8px;margin-top:5px;color:#74858a}
+      .v16-panel-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.v16-panel-actions button{border:1px solid #dbe5e7;background:#fff;border-radius:9px;padding:10px;cursor:pointer;color:#31545c}.v16-panel-actions .primary{background:#174f5b;color:#fff;border-color:#174f5b}
+      @media(max-width:850px){.v16-top{align-items:flex-start;flex-direction:column}.v16-controls{width:100%}.v16-detail-grid{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function init(){
+    css();
+    setTimeout(renderTimeline,350);
+    setInterval(drawNowLine,60000);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+})();
