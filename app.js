@@ -3419,3 +3419,454 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V19 - RECURRING SESSIONS + TREATMENT PACKAGES
+   Bulk booking with conflict checks + package progress.
+   ========================================================= */
+(function(){
+  const S = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  function ensureV19(){
+    if(!Array.isArray(S().appointments)) S().appointments = [];
+    if(!Array.isArray(S().patients)) S().patients = [];
+    if(!Array.isArray(S().treatmentPackages)) S().treatmentPackages = [];
+  }
+
+  function pnameById(id){
+    const p=(S().patients||[]).find(x=>String(x.id)===String(id));
+    return p ? (p.name||p.fullName||p.patientName||'Patient') : 'Patient';
+  }
+
+  function mins(t){
+    const [h,m]=String(t||'00:00').split(':').map(Number);
+    return h*60+(m||0);
+  }
+
+  function addDays(dateStr,n){
+    const d=new Date(dateStr+'T00:00:00');
+    d.setDate(d.getDate()+n);
+    return d.toISOString().slice(0,10);
+  }
+
+  function clash(c){
+    return (S().appointments||[]).find(a=>{
+      if(a.date!==c.date) return false;
+      if(['Cancelled','No Show'].includes(a.status||'Scheduled')) return false;
+
+      const sameTherapist = c.therapist && a.therapist===c.therapist;
+      const sameRoom = c.room && a.room===c.room;
+      if(!sameTherapist && !sameRoom) return false;
+
+      const s1=mins(a.time), e1=s1+Number(a.duration||60);
+      const s2=mins(c.time), e2=s2+Number(c.duration||60);
+      return s2<e1 && e2>s1;
+    });
+  }
+
+  function modalRoot(){
+    let r=document.getElementById('v19-modal');
+    if(!r){
+      r=document.createElement('div');
+      r.id='v19-modal';
+      document.body.appendChild(r);
+    }
+    return r;
+  }
+
+  function patientOptions(){
+    return (S().patients||[]).map(p=>
+      `<option value="${p.id}">${pnameById(p.id)}</option>`
+    ).join('');
+  }
+
+  function therapists(){
+    const vals=[...new Set((S().appointments||[]).map(a=>a.therapist).filter(Boolean))];
+    return vals.length?vals:['Dr. Eman','Therapist 2','Therapist 3'];
+  }
+
+  function rooms(){
+    const vals=[...new Set((S().appointments||[]).map(a=>a.room).filter(Boolean))];
+    return vals.length?vals:['Treatment Room 1','Treatment Room 2','Treatment Room 3'];
+  }
+
+  window.openV19Recurring=function(){
+    ensureV19();
+    const r=modalRoot();
+    const date=window.__v16Date || new Date().toISOString().slice(0,10);
+
+    r.className='open';
+    r.innerHTML=`
+      <div class="v19-backdrop" onclick="closeV19Modal()"></div>
+      <section class="v19-dialog">
+        <div class="v19-head">
+          <div>
+            <small>RECURRING APPOINTMENTS</small>
+            <h2>Book Treatment Plan</h2>
+            <p>Create multiple sessions in one step with automatic conflict checking.</p>
+          </div>
+          <button onclick="closeV19Modal()">×</button>
+        </div>
+
+        <div class="v19-grid">
+          <label class="span2">
+            <span>Patient</span>
+            <select id="v19-patient">
+              <option value="">Select patient</option>
+              ${patientOptions()}
+            </select>
+          </label>
+
+          <label>
+            <span>Package / Plan Name</span>
+            <input id="v19-package-name" value="Physiotherapy Package">
+          </label>
+
+          <label>
+            <span>Number of Sessions</span>
+            <select id="v19-count">
+              ${[4,6,8,10,12,15,20].map(n=>`<option ${n===10?'selected':''}>${n}</option>`).join('')}
+            </select>
+          </label>
+
+          <label>
+            <span>First Session Date</span>
+            <input id="v19-date" type="date" value="${date}">
+          </label>
+
+          <label>
+            <span>Start Time</span>
+            <input id="v19-time" type="time" value="10:00">
+          </label>
+
+          <label>
+            <span>Frequency</span>
+            <select id="v19-frequency">
+              <option value="7">Weekly</option>
+              <option value="14">Every 2 Weeks</option>
+              <option value="3">Every 3 Days</option>
+              <option value="2">Every 2 Days</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Duration</span>
+            <select id="v19-duration">
+              ${[30,45,60,90].map(n=>`<option value="${n}" ${n===60?'selected':''}>${n} min</option>`).join('')}
+            </select>
+          </label>
+
+          <label>
+            <span>Therapist</span>
+            <select id="v19-therapist">
+              ${therapists().map(x=>`<option>${x}</option>`).join('')}
+            </select>
+          </label>
+
+          <label>
+            <span>Room</span>
+            <select id="v19-room">
+              ${rooms().map(x=>`<option>${x}</option>`).join('')}
+            </select>
+          </label>
+
+          <label class="span2">
+            <span>Visit Type</span>
+            <select id="v19-visit">
+              <option>Physiotherapy Session</option>
+              <option>Rehabilitation Session</option>
+              <option>Follow-up</option>
+              <option>Consultation</option>
+            </select>
+          </label>
+
+          <label class="span2">
+            <span>Notes</span>
+            <textarea id="v19-notes" rows="3" placeholder="Optional treatment plan notes"></textarea>
+          </label>
+        </div>
+
+        <div class="v19-preview-wrap">
+          <div class="v19-preview-head">
+            <h3>Schedule Preview</h3>
+            <button onclick="previewV19Recurring()">Refresh Preview</button>
+          </div>
+          <div id="v19-preview"></div>
+        </div>
+
+        <div id="v19-warning" class="v19-warning"></div>
+
+        <div class="v19-footer">
+          <button class="secondary" onclick="closeV19Modal()">Cancel</button>
+          <button class="primary" onclick="saveV19Recurring()">Create Sessions</button>
+        </div>
+      </section>`;
+
+    setTimeout(previewV19Recurring,30);
+  };
+
+  window.closeV19Modal=function(){
+    const r=document.getElementById('v19-modal');
+    if(r) r.className='';
+  };
+
+  function recurringCandidates(){
+    const count=Number(document.getElementById('v19-count')?.value||10);
+    const first=document.getElementById('v19-date')?.value;
+    const time=document.getElementById('v19-time')?.value;
+    const gap=Number(document.getElementById('v19-frequency')?.value||7);
+    const duration=Number(document.getElementById('v19-duration')?.value||60);
+    const therapist=document.getElementById('v19-therapist')?.value;
+    const room=document.getElementById('v19-room')?.value;
+
+    const list=[];
+    for(let i=0;i<count;i++){
+      const c={date:addDays(first,i*gap),time,duration,therapist,room};
+      c.conflict=clash(c);
+      list.push(c);
+    }
+    return list;
+  }
+
+  window.previewV19Recurring=function(){
+    const wrap=document.getElementById('v19-preview');
+    if(!wrap) return;
+    const rows=recurringCandidates();
+    wrap.innerHTML=`
+      <div class="v19-preview-grid">
+        ${rows.map((x,i)=>`
+          <div class="v19-preview-item ${x.conflict?'conflict':'ok'}">
+            <span>${i+1}</span>
+            <div><b>${x.date}</b><small>${x.time} · ${x.duration} min</small></div>
+            <em>${x.conflict?'Conflict':'Available'}</em>
+          </div>`).join('')}
+      </div>`;
+  };
+
+  window.saveV19Recurring=function(){
+    const patientId=document.getElementById('v19-patient')?.value;
+    const packageName=document.getElementById('v19-package-name')?.value || 'Treatment Package';
+    const visitType=document.getElementById('v19-visit')?.value;
+    const notes=document.getElementById('v19-notes')?.value || '';
+    const warning=document.getElementById('v19-warning');
+    const rows=recurringCandidates();
+
+    if(!patientId){
+      if(warning) warning.textContent='Please select a patient.';
+      return;
+    }
+
+    const conflicts=rows.filter(x=>x.conflict);
+    if(conflicts.length){
+      if(warning) warning.textContent=`${conflicts.length} session(s) conflict with existing therapist / room bookings. Adjust the plan first.`;
+      previewV19Recurring();
+      return;
+    }
+
+    const packageId='PKG-'+Date.now();
+
+    S().treatmentPackages.push({
+      id:packageId,
+      patientId,
+      name:packageName,
+      totalSessions:rows.length,
+      createdAt:new Date().toISOString(),
+      status:'Active'
+    });
+
+    rows.forEach((x,i)=>{
+      S().appointments.push({
+        id:'APT-'+Date.now()+'-'+i,
+        patientId,
+        date:x.date,
+        time:x.time,
+        duration:x.duration,
+        therapist:x.therapist,
+        room:x.room,
+        visitType,
+        notes,
+        status:'Scheduled',
+        packageId,
+        sessionNumber:i+1,
+        followUpNeeded:false,
+        checkedInAt:'',
+        completedAt:''
+      });
+    });
+
+    save();
+
+    if(typeof window.logAudit==='function'){
+      window.logAudit(
+        'Create Recurring Sessions',
+        'Appointments',
+        `${pnameById(patientId)} — ${packageName} — ${rows.length} sessions`
+      );
+    }
+
+    window.__v16Date=rows[0]?.date || window.__v16Date;
+    closeV19Modal();
+
+    if(typeof window.renderAppointments==='function') try{window.renderAppointments();}catch(e){}
+    if(typeof window.renderV16Timeline==='function') try{window.renderV16Timeline();}catch(e){}
+    renderV19PackageStrip();
+  };
+
+  function packageProgress(pkg){
+    const related=(S().appointments||[]).filter(a=>a.packageId===pkg.id);
+    const completed=related.filter(a=>a.status==='Completed').length;
+    const remaining=Math.max(0,Number(pkg.totalSessions||related.length)-completed);
+    return {completed,remaining,total:Number(pkg.totalSessions||related.length)};
+  }
+
+  window.openV19Packages=function(){
+    ensureV19();
+    const r=modalRoot();
+    const pkgs=(S().treatmentPackages||[]).slice().reverse();
+
+    r.className='open';
+    r.innerHTML=`
+      <div class="v19-backdrop" onclick="closeV19Modal()"></div>
+      <section class="v19-dialog packages">
+        <div class="v19-head">
+          <div>
+            <small>TREATMENT PACKAGES</small>
+            <h2>Patient Packages</h2>
+            <p>Track completed and remaining sessions for each treatment plan.</p>
+          </div>
+          <button onclick="closeV19Modal()">×</button>
+        </div>
+
+        <div class="v19-package-list">
+          ${pkgs.length ? pkgs.map(pkg=>{
+            const p=packageProgress(pkg);
+            const pct=p.total?Math.round((p.completed/p.total)*100):0;
+            return `
+              <article class="v19-package-card">
+                <div class="v19-package-top">
+                  <div><small>${esc19(pkg.id)}</small><h3>${esc19(pkg.name)}</h3><p>${esc19(pnameById(pkg.patientId))}</p></div>
+                  <span>${p.completed}/${p.total}</span>
+                </div>
+                <div class="v19-progress"><i style="width:${pct}%"></i></div>
+                <div class="v19-package-stats">
+                  <span><b>${p.completed}</b> Completed</span>
+                  <span><b>${p.remaining}</b> Remaining</span>
+                  <span><b>${pct}%</b> Progress</span>
+                </div>
+              </article>`;
+          }).join('') : `<div class="v19-empty">No treatment packages created yet.</div>`}
+        </div>
+
+        <div class="v19-footer">
+          <button class="primary" onclick="closeV19Modal();openV19Recurring()">+ New Treatment Plan</button>
+        </div>
+      </section>`;
+  };
+
+  function esc19(s){
+    return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderV19PackageStrip(){
+    const page=document.getElementById('page-appointments');
+    if(!page) return;
+
+    let strip=document.getElementById('v19-package-strip');
+    if(!strip){
+      strip=document.createElement('div');
+      strip.id='v19-package-strip';
+      strip.className='v19-package-strip';
+      const timeline=document.getElementById('v16-timeline');
+      if(timeline) timeline.insertAdjacentElement('afterend',strip);
+      else page.prepend(strip);
+    }
+
+    const active=(S().treatmentPackages||[]).filter(p=>p.status!=='Closed');
+    if(!active.length){
+      strip.style.display='none';
+      return;
+    }
+
+    strip.style.display='flex';
+    const totalRemaining=active.reduce((sum,p)=>sum+packageProgress(p).remaining,0);
+    strip.innerHTML=`
+      <div>
+        <small>ACTIVE TREATMENT PLANS</small>
+        <b>${active.length}</b>
+        <span>${totalRemaining} sessions remaining</span>
+      </div>
+      <button onclick="openV19Packages()">View Packages</button>`;
+  }
+
+  function installButtons(){
+    const timeline=document.querySelector('#page-appointments #v16-timeline .v16-controls');
+    if(timeline && !document.getElementById('v19-recurring-btn')){
+      const recurring=document.createElement('button');
+      recurring.id='v19-recurring-btn';
+      recurring.className='v19-toolbar-btn';
+      recurring.textContent='+ Recurring Sessions';
+      recurring.onclick=openV19Recurring;
+
+      const packages=document.createElement('button');
+      packages.id='v19-packages-btn';
+      packages.className='v19-toolbar-btn secondary';
+      packages.textContent='Packages';
+      packages.onclick=openV19Packages;
+
+      timeline.prepend(packages);
+      timeline.prepend(recurring);
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v19-css')) return;
+    const st=document.createElement('style');
+    st.id='v19-css';
+    st.textContent=`
+      #v19-modal{display:none}
+      #v19-modal.open{display:block;position:fixed;inset:0;z-index:100001}
+      .v19-backdrop{position:absolute;inset:0;background:rgba(12,31,37,.46);backdrop-filter:blur(3px)}
+      .v19-dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(820px,95vw);max-height:92vh;overflow:auto;background:#fff;border-radius:19px;padding:22px;box-shadow:0 30px 90px rgba(0,0,0,.24)}
+      .v19-dialog.packages{width:min(760px,95vw)}
+      .v19-head{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid #e6edef;padding-bottom:15px;margin-bottom:16px}
+      .v19-head small{font-size:9px;letter-spacing:1.5px;font-weight:800;color:#b68a3b}.v19-head h2{margin:4px 0;color:#173f49}.v19-head p{margin:0;font-size:12px;color:#78898e}
+      .v19-head>button{border:0;background:#f1f5f6;width:34px;height:34px;border-radius:50%;font-size:22px;cursor:pointer}
+      .v19-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.v19-grid label{display:flex;flex-direction:column;gap:5px}.v19-grid label>span{font-size:11px;font-weight:700;color:#526b72}.v19-grid .span2{grid-column:1/-1}
+      .v19-grid input,.v19-grid select,.v19-grid textarea{border:1px solid #d9e4e7;border-radius:9px;padding:10px;background:#fff;font:inherit;color:#2d4e56}
+      .v19-preview-wrap{margin-top:15px;border:1px solid #e3eaec;border-radius:12px;padding:12px;background:#f8fbfb}
+      .v19-preview-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}.v19-preview-head h3{margin:0;font-size:14px}.v19-preview-head button{border:1px solid #d9e4e7;background:#fff;border-radius:7px;padding:6px 9px;cursor:pointer}
+      .v19-preview-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.v19-preview-item{display:flex;align-items:center;gap:9px;border:1px solid #e3eaec;background:#fff;border-radius:9px;padding:8px}
+      .v19-preview-item>span{width:25px;height:25px;border-radius:8px;background:#eef4f5;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}.v19-preview-item b,.v19-preview-item small{display:block}.v19-preview-item b{font-size:11px}.v19-preview-item small{font-size:9px;color:#849398;margin-top:2px}.v19-preview-item em{margin-left:auto;font-style:normal;font-size:9px;font-weight:800}
+      .v19-preview-item.ok em{color:#23845f}.v19-preview-item.conflict{background:#fff4f4;border-color:#efd0d0}.v19-preview-item.conflict em{color:#bd4d4d}
+      .v19-warning{min-height:18px;margin-top:9px;color:#b44747;font-size:11px;font-weight:700}
+      .v19-footer{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e8edef;margin-top:12px;padding-top:14px}.v19-footer button{border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}.v19-footer .secondary{border:1px solid #d9e3e6;background:#fff;color:#385961}.v19-footer .primary{border:1px solid #c99a42;background:#c99a42;color:#fff}
+      .v19-toolbar-btn{height:38px!important;border:1px solid #c99a42!important;background:#c99a42!important;color:#fff!important;border-radius:9px!important;padding:0 12px!important;font-weight:700;cursor:pointer;white-space:nowrap}.v19-toolbar-btn.secondary{background:#fff!important;color:#31545c!important;border-color:#d9e4e7!important}
+      .v19-package-strip{display:flex;align-items:center;justify-content:space-between;gap:15px;background:#fff;border:1px solid #dfe8ea;border-radius:13px;padding:13px 15px;margin:0 0 16px}.v19-package-strip small,.v19-package-strip b,.v19-package-strip span{display:block}.v19-package-strip small{font-size:9px;color:#a17e3d;font-weight:800;letter-spacing:1px}.v19-package-strip b{font-size:20px;color:#173f49;margin:2px 0}.v19-package-strip span{font-size:10px;color:#7d8c91}.v19-package-strip button{border:1px solid #d9e4e7;background:#fff;border-radius:8px;padding:8px 11px;cursor:pointer}
+      .v19-package-list{display:grid;gap:10px}.v19-package-card{border:1px solid #e1e9eb;border-radius:12px;padding:14px}.v19-package-top{display:flex;justify-content:space-between;gap:10px}.v19-package-top small{font-size:8px;color:#94a0a4}.v19-package-top h3{margin:3px 0 2px;color:#294d55}.v19-package-top p{margin:0;font-size:11px;color:#7d8c91}.v19-package-top>span{font-size:18px;font-weight:800;color:#174f5b}
+      .v19-progress{height:7px;background:#edf2f3;border-radius:999px;overflow:hidden;margin:12px 0}.v19-progress i{display:block;height:100%;background:#c99a42;border-radius:999px}.v19-package-stats{display:flex;gap:22px;font-size:10px;color:#829095}.v19-package-stats b{color:#35565e;font-size:12px}.v19-empty{text-align:center;padding:35px;color:#8a989d}
+      @media(max-width:680px){.v19-dialog{padding:15px}.v19-grid,.v19-preview-grid{grid-template-columns:1fr}.v19-grid .span2{grid-column:auto}.v19-package-stats{gap:10px;justify-content:space-between}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    installButtons();
+    renderV19PackageStrip();
+  }
+
+  function init(){
+    ensureV19();
+    css();
+    setTimeout(repair,350);
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v19t);
+      window.__v19t=setTimeout(repair,40);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
