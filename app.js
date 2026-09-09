@@ -370,3 +370,162 @@ function enhancePatientListV6(){
 const renderV5=render;
 render=function(){renderV5();enhancePatientListV6();};
 render();
+
+
+/* =========================
+   myAIMS V7 - Appointment Workflow Enhancements
+   ========================= */
+(function () {
+  const APPT_STATUSES = ['Scheduled','Confirmed','Completed','Cancelled','No Show'];
+
+  function ensureAppointmentFields() {
+    try {
+      const state = window.state || window.appState || null;
+      if (!state || !Array.isArray(state.appointments)) return;
+      state.appointments = state.appointments.map(a => ({
+        ...a,
+        status: a.status || 'Scheduled'
+      }));
+      if (typeof window.saveState === 'function') window.saveState();
+    } catch (e) {}
+  }
+
+  function getAppointmentsSafe() {
+    const state = window.state || window.appState || {};
+    return Array.isArray(state.appointments) ? state.appointments : [];
+  }
+
+  window.setAppointmentStatus = function(id, status) {
+    const state = window.state || window.appState || {};
+    if (!Array.isArray(state.appointments)) return;
+    const appt = state.appointments.find(a => String(a.id) === String(id));
+    if (!appt) return;
+    appt.status = APPT_STATUSES.includes(status) ? status : 'Scheduled';
+    if (typeof window.saveState === 'function') window.saveState();
+    if (typeof window.renderAppointments === 'function') window.renderAppointments();
+    if (typeof window.renderDashboard === 'function') window.renderDashboard();
+  };
+
+  window.hasAppointmentConflict = function(date, time, excludeId) {
+    return getAppointmentsSafe().some(a =>
+      String(a.id) !== String(excludeId || '') &&
+      a.date === date &&
+      a.time === time &&
+      !['Cancelled','No Show'].includes(a.status || 'Scheduled')
+    );
+  };
+
+  window.getTodaysAppointments = function() {
+    const today = new Date().toISOString().slice(0,10);
+    return getAppointmentsSafe()
+      .filter(a => a.date === today)
+      .sort((a,b) => String(a.time || '').localeCompare(String(b.time || '')));
+  };
+
+  window.getAppointmentStatusBadge = function(status) {
+    const s = status || 'Scheduled';
+    return `<span class="status-badge status-${s.toLowerCase().replace(/\s+/g,'-')}">${s}</span>`;
+  };
+
+  window.createInvoiceFromAppointment = function(id) {
+    const appt = getAppointmentsSafe().find(a => String(a.id) === String(id));
+    if (!appt) return;
+    try {
+      if (typeof window.navigate === 'function') window.navigate('billing');
+      else if (typeof window.showSection === 'function') window.showSection('billing');
+    } catch(e) {}
+    setTimeout(() => {
+      const patientField = document.querySelector('[name="patient"], [name="patientId"], #invoicePatient');
+      const serviceField = document.querySelector('[name="service"], #invoiceService');
+      if (patientField) patientField.value = appt.patientId || appt.patient || '';
+      if (serviceField && appt.service) serviceField.value = appt.service;
+    }, 100);
+  };
+
+  const originalRenderAppointments = window.renderAppointments;
+  if (typeof originalRenderAppointments === 'function') {
+    window.renderAppointments = function() {
+      originalRenderAppointments();
+      enhanceAppointmentRows();
+    };
+  }
+
+  function enhanceAppointmentRows() {
+    ensureAppointmentFields();
+    const appointments = getAppointmentsSafe();
+
+    appointments.forEach(a => {
+      const selectors = [
+        `[data-appointment-id="${a.id}"]`,
+        `tr[data-id="${a.id}"]`,
+        `#appointment-${a.id}`
+      ];
+      let row = null;
+      for (const s of selectors) {
+        row = document.querySelector(s);
+        if (row) break;
+      }
+      if (!row || row.dataset.v7Enhanced === '1') return;
+
+      row.dataset.v7Enhanced = '1';
+
+      const cell = document.createElement('div');
+      cell.className = 'appt-v7-actions';
+      cell.innerHTML = `
+        <select onchange="setAppointmentStatus('${a.id}', this.value)" class="appt-status-select">
+          ${APPT_STATUSES.map(s => `<option value="${s}" ${s === (a.status || 'Scheduled') ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+        <button type="button" class="btn btn-sm" onclick="createInvoiceFromAppointment('${a.id}')">Create Invoice</button>
+      `;
+      row.appendChild(cell);
+    });
+  }
+
+  document.addEventListener('submit', function(e) {
+    const form = e.target;
+    if (!form) return;
+    const txt = ((form.id || '') + ' ' + (form.className || '')).toLowerCase();
+    if (!txt.includes('appointment')) return;
+
+    const dateField = form.querySelector('[name="date"], #appointmentDate');
+    const timeField = form.querySelector('[name="time"], #appointmentTime');
+    const idField = form.querySelector('[name="id"], [name="appointmentId"]');
+
+    if (dateField && timeField && window.hasAppointmentConflict(dateField.value, timeField.value, idField ? idField.value : '')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      alert('There is already an active appointment at the same date and time.');
+      return false;
+    }
+  }, true);
+
+  function injectV7Styles() {
+    if (document.getElementById('myaims-v7-style')) return;
+    const style = document.createElement('style');
+    style.id = 'myaims-v7-style';
+    style.textContent = `
+      .appt-v7-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+      .appt-status-select{padding:7px 10px;border:1px solid #d9dfe7;border-radius:8px;background:#fff}
+      .status-badge{display:inline-block;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700}
+      .status-scheduled{background:#eef4ff}
+      .status-confirmed{background:#eaf8ef}
+      .status-completed{background:#e8f7f1}
+      .status-cancelled{background:#fdeeee}
+      .status-no-show{background:#f3f3f3}
+      @media (max-width:700px){.appt-v7-actions{align-items:stretch}.appt-status-select,.appt-v7-actions .btn{width:100%}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function initV7() {
+    injectV7Styles();
+    ensureAppointmentFields();
+    setTimeout(enhanceAppointmentRows, 250);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initV7);
+  } else {
+    initV7();
+  }
+})();
