@@ -8898,3 +8898,294 @@ render();
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V32 - PATIENT PROFILE ROUTING FIX
+   Fixes the old V6 Patient 360 popup still opening from Profile.
+   Now:
+   - Profile button -> V31 Patient Workspace
+   - Patient name -> V31 Patient Workspace
+   - V22 Patient Profile action -> V31 Patient Workspace
+   - Old 360 modal is suppressed
+   - Financial summary from old 360 is preserved in Overview
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function resolvePatient(ref){
+    const list=S().patients||[];
+
+    if(typeof ref==='number' && list[ref]) return {patient:list[ref],index:ref};
+
+    if(typeof ref==='string'){
+      const byId=list.findIndex(p=>String(p.id)===String(ref));
+      if(byId>=0) return {patient:list[byId],index:byId};
+
+      const n=Number(ref);
+      if(Number.isInteger(n) && list[n]) return {patient:list[n],index:n};
+    }
+
+    return {patient:null,index:-1};
+  }
+
+  function suppressOld360(){
+    const old=document.getElementById('patientProfile360');
+    if(old){
+      old.style.display='none';
+      old.setAttribute('aria-hidden','true');
+    }
+  }
+
+  function financials(p){
+    try{
+      if(typeof patientFinancials==='function') return patientFinancials(p.name);
+    }catch(e){}
+
+    const invoices=(S().invoices||[]).filter(x=>x.patient===p.name || String(x.patientId)===String(p.id));
+    const receipts=(S().receipts||[]).filter(x=>x.patient===p.name || String(x.patientId)===String(p.id));
+    const appointments=(S().appointments||[]).filter(x=>x.patient===p.name || String(x.patientId)===String(p.id));
+
+    const invoiceAmount=x=>Number(x.amount||x.total||0);
+    const patientShare=x=>{
+      try{ if(typeof invPatientShare==='function') return Number(invPatientShare(x)||0); }catch(e){}
+      return Number(x.patientShare ?? x.amount ?? x.total ?? 0);
+    };
+    const balance=x=>{
+      try{ if(typeof invBalance==='function') return Number(invBalance(x)||0); }catch(e){}
+      return Math.max(0,patientShare(x)-Number(x.paid||0));
+    };
+
+    return {
+      invoices,receipts,appointments,
+      invoiced:invoices.reduce((a,x)=>a+invoiceAmount(x),0),
+      patientShare:invoices.reduce((a,x)=>a+patientShare(x),0),
+      collected:receipts.reduce((a,x)=>a+Number(x.amount||0),0),
+      outstanding:invoices.reduce((a,x)=>a+balance(x),0)
+    };
+  }
+
+  function moneyV32(v){
+    try{ if(typeof money==='function') return money(Number(v||0)); }catch(e){}
+    return 'BHD '+Number(v||0).toFixed(3);
+  }
+
+  function decorateWorkspace(patientId){
+    const w=document.getElementById('v31-workspace');
+    const body=document.getElementById('v31-body');
+    if(!w?.classList.contains('open') || !body) return;
+
+    const p=(S().patients||[]).find(x=>String(x.id)===String(patientId));
+    if(!p) return;
+
+    const active=[...w.querySelectorAll('.v31-tabs button')].find(x=>x.classList.contains('active'));
+    if((active?.textContent||'').trim()!=='Overview') return;
+    if(body.querySelector('.v32-financial-summary')) return;
+
+    const f=financials(p);
+
+    const box=document.createElement('section');
+    box.className='v32-financial-summary';
+    box.innerHTML=`
+      <div class="v32-fin-head">
+        <div>
+          <small>FINANCIAL SUMMARY</small>
+          <h3>Patient Account</h3>
+        </div>
+        <div class="v32-fin-actions">
+          <button onclick="v32AddInvoice('${p.id}')">+ Invoice</button>
+          ${Number(f.outstanding||0)>0?`<button onclick="v32RecordPayment('${p.id}')">Record Payment</button>`:''}
+          <button onclick="v32PrintStatement('${p.id}')">Print Statement</button>
+        </div>
+      </div>
+
+      <div class="v32-fin-kpis">
+        <div><small>TOTAL INVOICED</small><b>${moneyV32(f.invoiced)}</b></div>
+        <div><small>PATIENT SHARE</small><b>${moneyV32(f.patientShare)}</b></div>
+        <div><small>COLLECTED</small><b>${moneyV32(f.collected)}</b></div>
+        <div><small>OUTSTANDING</small><b>${moneyV32(f.outstanding)}</b></div>
+      </div>
+    `;
+
+    const firstGrid=body.querySelector('.v31-grid');
+    if(firstGrid) firstGrid.insertAdjacentElement('beforebegin',box);
+    else body.prepend(box);
+  }
+
+  // Critical fix: replace old V6 routing completely.
+  window.openPatientProfile=function(ref){
+    suppressOld360();
+    const r=resolvePatient(ref);
+    if(!r.patient) return;
+
+    if(typeof window.openV31PatientWorkspace==='function'){
+      window.openV31PatientWorkspace(r.patient.id,'overview');
+      setTimeout(()=>decorateWorkspace(r.patient.id),40);
+    }
+  };
+
+  window.v32PrintStatement=function(patientId){
+    const r=resolvePatient(patientId);
+    if(!r.patient) return;
+    if(typeof window.printPatientStatement==='function') window.printPatientStatement(r.index);
+  };
+
+  window.v32AddInvoice=function(patientId){
+    const r=resolvePatient(patientId);
+    if(!r.patient) return;
+
+    try{
+      if(typeof patientQuickAction==='function'){
+        patientQuickAction(r.index,'invoice');
+        return;
+      }
+    }catch(e){}
+
+    const modal=document.querySelector('#invoiceModal,.invoice-modal');
+    if(modal) modal.classList.add('open');
+  };
+
+  window.v32RecordPayment=function(patientId){
+    const r=resolvePatient(patientId);
+    if(!r.patient) return;
+
+    try{
+      if(typeof patientQuickAction==='function'){
+        patientQuickAction(r.index,'payment');
+        return;
+      }
+    }catch(e){}
+  };
+
+  function forceProfileButtons(){
+    const page=document.getElementById('page-patients');
+    if(!page) return;
+
+    page.querySelectorAll('tbody tr').forEach(tr=>{
+      const text=tr.textContent||'';
+      const p=(S().patients||[]).find(x=>{
+        const nm=x.name||x.fullName||x.patientName||'';
+        return (nm && text.includes(nm)) || text.includes(String(x.id));
+      });
+      if(!p) return;
+
+      const cells=[...tr.querySelectorAll('td')];
+      const nameCell=cells.find(td=>(td.textContent||'').includes(p.name||p.fullName||p.patientName||''));
+
+      if(nameCell && nameCell.dataset.v32!=='1'){
+        nameCell.dataset.v32='1';
+        nameCell.style.cursor='pointer';
+        nameCell.addEventListener('click',function(e){
+          if(e.target.closest('button')){
+            const txt=(e.target.textContent||'').trim().toLowerCase();
+            if(txt==='edit' || txt==='delete' || txt==='تعديل' || txt==='حذف') return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          openPatientProfile(p.id);
+        },true);
+      }
+
+      tr.querySelectorAll('button').forEach(btn=>{
+        const txt=(btn.textContent||'').trim().toLowerCase();
+        const isProfile=txt==='profile' || txt==='الملف';
+        if(!isProfile || btn.dataset.v32==='1') return;
+
+        btn.dataset.v32='1';
+        btn.removeAttribute('onclick');
+        btn.addEventListener('click',function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          openPatientProfile(p.id);
+        },true);
+      });
+    });
+  }
+
+  // Also repair V31 tab changes so financial summary is re-added on Overview.
+  const oldV31Tab=window.v31Tab;
+  if(typeof oldV31Tab==='function'){
+    window.v31Tab=function(pid,tab,btn){
+      oldV31Tab(pid,tab,btn);
+      if(tab==='overview') setTimeout(()=>decorateWorkspace(pid),20);
+    };
+  }
+
+  // Repair calls from V22 patient card that may pass patient ID.
+  document.addEventListener('click',function(e){
+    const btn=e.target.closest('button');
+    if(!btn) return;
+
+    const txt=(btn.textContent||'').trim().toLowerCase();
+    if(txt!=='patient profile' && txt!=='clinical journey') return;
+
+    const shade=document.getElementById('v22-card-shade');
+    if(!shade?.classList.contains('open')) return;
+
+    const html=shade.innerHTML||'';
+    let m=html.match(/openPatientProfile\('([^']+)'\)/);
+    if(!m) m=html.match(/openPatientProfile\((\d+)\)/);
+    if(!m) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    suppressOld360();
+
+    const r=resolvePatient(m[1]);
+    if(r.patient){
+      if(typeof window.closeV22PatientCard==='function') window.closeV22PatientCard();
+      openPatientProfile(r.patient.id);
+    }
+  },true);
+
+  function css(){
+    if(document.getElementById('v32-css')) return;
+    const st=document.createElement('style');
+    st.id='v32-css';
+    st.textContent=`
+      #patientProfile360{display:none!important}
+      .v32-financial-summary{background:linear-gradient(135deg,#fff,#f8fbfb);border:1px solid #dfe8ea;border-radius:11px;padding:10px;margin-bottom:9px;box-shadow:0 4px 12px rgba(28,66,75,.035)}
+      .v32-fin-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px}
+      .v32-fin-head small{font-size:6px;color:#a27a35;font-weight:900;letter-spacing:.8px}
+      .v32-fin-head h3{margin:2px 0;color:#31545c;font-size:10px}
+      .v32-fin-actions{display:flex;gap:5px;flex-wrap:wrap}
+      .v32-fin-actions button{border:1px solid #d8e3e5;background:#fff;border-radius:7px;padding:5px 7px;font-size:6px;font-weight:800;color:#587178}
+      .v32-fin-actions button:first-child{background:#c99a42;border-color:#c99a42;color:#fff}
+      .v32-fin-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+      .v32-fin-kpis>div{background:#f7fafb;border:1px solid #e2eaec;border-radius:8px;padding:8px}
+      .v32-fin-kpis small,.v32-fin-kpis b{display:block}
+      .v32-fin-kpis small{font-size:6px;color:#89979c;font-weight:800}
+      .v32-fin-kpis b{font-size:10px;color:#31545c;margin-top:3px}
+      @media(max-width:760px){.v32-fin-head{align-items:flex-start;flex-direction:column}.v32-fin-kpis{grid-template-columns:1fr 1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    suppressOld360();
+    forceProfileButtons();
+
+    const w=document.getElementById('v31-workspace');
+    if(w?.classList.contains('open') && w.dataset.pid){
+      decorateWorkspace(w.dataset.pid);
+    }
+  }
+
+  function init(){
+    css();
+    setTimeout(repair,250);
+
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v32repair);
+      window.__v32repair=setTimeout(repair,50);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
