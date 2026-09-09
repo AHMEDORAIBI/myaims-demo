@@ -4648,3 +4648,298 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V22 - ORBIT CALENDAR
+   A modern appointment experience:
+   Week Orbit -> Day Flow -> Patient Card
+   Capacity Pulse + Now Lens + Next 3 Hours
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const DAY_START=8, DAY_END=20;
+
+  function appts(){ return Array.isArray(S().appointments)?S().appointments:[]; }
+  function patients(){ return Array.isArray(S().patients)?S().patients:[]; }
+  function pname(a){
+    const p=patients().find(x=>String(x.id)===String(a.patientId||a.patient));
+    return p?(p.name||p.fullName||p.patientName||'Patient'):'Patient';
+  }
+  function initials(n){ return String(n||'P').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase(); }
+  function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function iso(d){ const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); }
+  function add(date,n){ const d=new Date(date+'T00:00:00'); d.setDate(d.getDate()+n); return iso(d); }
+  function startWeek(date){
+    const d=new Date(date+'T00:00:00'), day=(d.getDay()+6)%7;
+    d.setDate(d.getDate()-day); return iso(d);
+  }
+  function fmt(date,opt){ return new Date(date+'T00:00:00').toLocaleDateString(undefined,opt); }
+  function mins(t){ const [h,m]=String(t||'00:00').split(':').map(Number); return h*60+(m||0); }
+
+  window.__v22Date=window.__v22Date||window.__v16Date||iso(new Date());
+  window.__v22Mode=window.__v22Mode||'flow';
+
+  function dayAppointments(date){
+    return appts().filter(a=>a.date===date && a.status!=='Cancelled')
+      .sort((a,b)=>String(a.time).localeCompare(String(b.time)));
+  }
+
+  function capacity(date){
+    const list=dayAppointments(date);
+    const booked=list.reduce((s,a)=>s+Number(a.duration||60),0);
+    const capacityMinutes=(DAY_END-DAY_START)*60*3; // 3 treatment lanes
+    const pct=Math.min(100,Math.round(booked/capacityMinutes*100));
+    let label='Quiet';
+    if(pct>=80) label='Full';
+    else if(pct>=55) label='Busy';
+    else if(pct>=25) label='Balanced';
+    return {pct,label,count:list.length};
+  }
+
+  function nextThreeHours(){
+    const now=new Date(), today=iso(now), cur=now.getHours()*60+now.getMinutes();
+    return appts().filter(a=>{
+      if(a.date!==today || ['Cancelled','Completed','No Show'].includes(a.status)) return false;
+      const m=mins(a.time); return m>=cur && m<=cur+180;
+    }).sort((a,b)=>a.time.localeCompare(b.time)).slice(0,4);
+  }
+
+  function weekOrbit(){
+    const start=startWeek(window.__v22Date);
+    const days=Array.from({length:7},(_,i)=>add(start,i));
+    return `
+      <div class="v22-orbit">
+        <button class="v22-week-nav" onclick="moveV22Week(-7)">‹</button>
+        <div class="v22-days">
+          ${days.map(d=>{
+            const c=capacity(d), active=d===window.__v22Date, today=d===iso(new Date());
+            return `<button class="v22-day ${active?'active':''} ${today?'today':''}" onclick="selectV22Day('${d}')">
+              <div class="v22-day-top"><span>${fmt(d,{weekday:'short'})}</span><b>${fmt(d,{day:'2-digit'})}</b></div>
+              <div class="v22-ring" style="--p:${c.pct}">
+                <i>${c.count}</i>
+              </div>
+              <small>${c.label}</small>
+              <div class="v22-load"><i style="width:${c.pct}%"></i></div>
+            </button>`;
+          }).join('')}
+        </div>
+        <button class="v22-week-nav" onclick="moveV22Week(7)">›</button>
+      </div>`;
+  }
+
+  function nowLens(){
+    const today=window.__v22Date===iso(new Date());
+    if(!today) return '';
+    const now=new Date(), m=now.getHours()*60+now.getMinutes();
+    if(m<DAY_START*60 || m>DAY_END*60) return '';
+    const top=((m-DAY_START*60)/60)*76;
+    return `<div class="v22-now" style="top:${top}px"><span>NOW</span><i></i></div>`;
+  }
+
+  function dayFlow(){
+    const list=dayAppointments(window.__v22Date);
+    const hours=Array.from({length:DAY_END-DAY_START+1},(_,i)=>DAY_START+i);
+    const lanes=['Dr. Eman','Therapist 2','Therapist 3'];
+    const therapists=[...new Set([...lanes,...list.map(a=>a.therapist).filter(Boolean)])].slice(0,3);
+
+    return `
+      <div class="v22-flow-shell">
+        <div class="v22-flow-head">
+          <div class="v22-time-head">TIME</div>
+          ${therapists.map(t=>`<div><b>${esc(t)}</b><small>${list.filter(a=>a.therapist===t).length} visits</small></div>`).join('')}
+        </div>
+        <div class="v22-flow-body">
+          ${nowLens()}
+          <div class="v22-time-axis">
+            ${hours.map(h=>`<div style="height:76px"><span>${String(h).padStart(2,'0')}:00</span></div>`).join('')}
+          </div>
+          ${therapists.map(t=>`
+            <div class="v22-lane">
+              ${hours.map(h=>`<button class="v22-empty-slot" style="top:${(h-DAY_START)*76}px;height:76px" onclick="quickV22Appointment('${window.__v22Date}','${String(h).padStart(2,'0')}:00','${esc(t)}')" title="Book ${h}:00"></button>`).join('')}
+              ${list.filter(a=>(a.therapist||therapists[0])===t).map(a=>{
+                const start=(mins(a.time)-DAY_START*60)/60*76;
+                const height=Math.max(42,Number(a.duration||60)/60*76-5);
+                return `<button class="v22-appt ${String(a.status||'scheduled').toLowerCase().replace(/\s+/g,'-')}" style="top:${start}px;height:${height}px" onclick="openV22PatientCard('${a.id}')">
+                  <span class="v22-avatar">${esc(initials(pname(a)))}</span>
+                  <span class="v22-appt-copy"><b>${esc(pname(a))}</b><small>${esc(a.time)} · ${esc(a.visitType||'Session')}</small><em>${esc(a.room||'Treatment Room')}</em></span>
+                  <span class="v22-status-dot"></span>
+                </button>`;
+              }).join('')}
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  function nextPanel(){
+    const rows=nextThreeHours();
+    return `<div class="v22-next">
+      <div class="v22-next-title"><div><small>LIVE WINDOW</small><b>Next 3 Hours</b></div><span>${rows.length} upcoming</span></div>
+      <div class="v22-next-list">
+        ${rows.length?rows.map(a=>`<button onclick="openV22PatientCard('${a.id}')">
+          <span>${esc(a.time)}</span><div><b>${esc(pname(a))}</b><small>${esc(a.therapist||'Therapist')}</small></div><i>›</i>
+        </button>`).join(''):`<div class="v22-clear">No appointments in the next 3 hours</div>`}
+      </div>
+    </div>`;
+  }
+
+  function insightPanel(){
+    const c=capacity(window.__v22Date);
+    const list=dayAppointments(window.__v22Date);
+    const confirmed=list.filter(a=>a.status==='Confirmed').length;
+    const waiting=(S().waitingList||[]).filter(w=>w.status==='Waiting').length;
+    return `<div class="v22-insight">
+      <div class="v22-pulse"><div class="v22-pulse-ring" style="--p:${c.pct}"><b>${c.pct}%</b></div><div><small>CAPACITY PULSE</small><strong>${c.label}</strong><span>${c.count} scheduled visits</span></div></div>
+      <div class="v22-mini"><div><b>${confirmed}</b><span>Confirmed</span></div><div><b>${waiting}</b><span>Waiting</span></div><div><b>${list.length}</b><span>Total</span></div></div>
+    </div>`;
+  }
+
+  function render(){
+    const page=document.getElementById('page-appointments');
+    if(!page) return;
+
+    // Hide all legacy appointment presentation layers. Data/functions remain active.
+    [...page.children].forEach(el=>{
+      if(el.id!=='v22-orbit-calendar' && !el.classList.contains('page-title')) el.style.display='none';
+    });
+
+    let root=document.getElementById('v22-orbit-calendar');
+    if(!root){
+      root=document.createElement('div');
+      root.id='v22-orbit-calendar';
+      const title=page.querySelector(':scope > .page-title');
+      if(title) title.insertAdjacentElement('afterend',root); else page.prepend(root);
+    }
+    root.style.display='block';
+
+    const c=capacity(window.__v22Date);
+    root.innerHTML=`
+      <section class="v22-hero">
+        <div>
+          <small>MYAIMS ORBIT CALENDAR</small>
+          <h2>${fmt(window.__v22Date,{weekday:'long',month:'long',day:'numeric'})}</h2>
+          <p>See the clinic rhythm, patient flow and available capacity in one view.</p>
+        </div>
+        <div class="v22-hero-actions">
+          <button onclick="selectV22Day('${iso(new Date())}')">Today</button>
+          <button onclick="openV20WaitlistManager()">Waiting List</button>
+          <button onclick="openV21ReminderCenter()">Reminders</button>
+          <button class="gold" onclick="openV18Appointment()">+ New Appointment</button>
+        </div>
+      </section>
+
+      ${weekOrbit()}
+
+      <div class="v22-command">
+        <div class="v22-date-nav">
+          <button onclick="moveV22Day(-1)">‹</button>
+          <div><small>DAY FLOW</small><b>${fmt(window.__v22Date,{weekday:'long',day:'numeric',month:'short'})}</b></div>
+          <button onclick="moveV22Day(1)">›</button>
+        </div>
+        <div class="v22-command-pills">
+          <span class="quiet">Quiet</span><span class="balanced">Balanced</span><span class="busy">Busy</span><span class="full">Full</span>
+        </div>
+      </div>
+
+      <div class="v22-layout">
+        <main>${dayFlow()}</main>
+        <aside>${insightPanel()}${nextPanel()}</aside>
+      </div>`;
+  }
+
+  window.selectV22Day=function(d){ window.__v22Date=d; window.__v16Date=d; render(); };
+  window.moveV22Day=function(n){ selectV22Day(add(window.__v22Date,n)); };
+  window.moveV22Week=function(n){ selectV22Day(add(window.__v22Date,n)); };
+
+  window.quickV22Appointment=function(date,time,therapist){
+    window.__v16Date=date;
+    if(typeof window.openV18Appointment==='function'){
+      openV18Appointment();
+      setTimeout(()=>{
+        const d=document.getElementById('v18-date'), t=document.getElementById('v18-therapist');
+        if(d){d.value=date;}
+        if(t){
+          [...t.options].forEach((o,i)=>{ if(o.text===therapist)t.selectedIndex=i; });
+        }
+        if(typeof window.renderV18Slots==='function') window.renderV18Slots();
+        setTimeout(()=>{
+          const buttons=[...document.querySelectorAll('#v18-slots button')];
+          const b=buttons.find(x=>x.textContent.trim()===time);
+          if(b && typeof window.selectV18Slot==='function') window.selectV18Slot(time,b);
+        },40);
+      },40);
+    }
+  };
+
+  window.openV22PatientCard=function(id){
+    const a=appts().find(x=>String(x.id)===String(id));
+    if(!a) return;
+    let shade=document.getElementById('v22-card-shade');
+    if(!shade){ shade=document.createElement('div'); shade.id='v22-card-shade'; document.body.appendChild(shade); }
+    const n=pname(a);
+    shade.className='open';
+    shade.innerHTML=`
+      <div class="v22-card-back" onclick="closeV22PatientCard()"></div>
+      <section class="v22-patient-card">
+        <div class="v22-card-head"><span>${esc(initials(n))}</span><div><small>PATIENT VISIT</small><h3>${esc(n)}</h3><p>${esc(a.date)} · ${esc(a.time)}</p></div><button onclick="closeV22PatientCard()">×</button></div>
+        <div class="v22-card-status">${esc(a.status||'Scheduled')}</div>
+        <div class="v22-card-grid">
+          <div><small>THERAPIST</small><b>${esc(a.therapist||'—')}</b></div>
+          <div><small>ROOM</small><b>${esc(a.room||'—')}</b></div>
+          <div><small>VISIT</small><b>${esc(a.visitType||'Session')}</b></div>
+          <div><small>DURATION</small><b>${esc(a.duration||60)} min</b></div>
+        </div>
+        ${a.notes?`<div class="v22-card-note"><small>NOTES</small><p>${esc(a.notes)}</p></div>`:''}
+        <div class="v22-card-actions">
+          <button onclick="closeV22PatientCard();openV21Reminder('${a.id}')">Reminder</button>
+          <button onclick="closeV22PatientCard();if(window.openPatientProfile)openPatientProfile('${a.patientId}')">Patient Profile</button>
+          <button class="gold" onclick="closeV22PatientCard();if(window.openV16Appointment)openV16Appointment('${a.id}')">Manage Visit</button>
+        </div>
+      </section>`;
+  };
+  window.closeV22PatientCard=function(){ const x=document.getElementById('v22-card-shade'); if(x)x.className=''; };
+
+  function css(){
+    if(document.getElementById('v22-css')) return;
+    const st=document.createElement('style'); st.id='v22-css'; st.textContent=`
+      #page-appointments.active{display:block!important}
+      #v22-orbit-calendar{width:100%;font-family:inherit}
+      .v22-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:18px}.v22-hero small{font-size:9px;letter-spacing:1.8px;color:#b78c3e;font-weight:900}.v22-hero h2{font-size:26px;margin:5px 0 3px;color:#153f49}.v22-hero p{margin:0;color:#7d8c91;font-size:11px}.v22-hero-actions{display:flex;gap:7px;flex-wrap:wrap}.v22-hero-actions button{border:1px solid #dbe5e7;background:#fff;border-radius:9px;padding:9px 11px;font-weight:700;color:#35575f;cursor:pointer}.v22-hero-actions .gold{background:#c99a42;border-color:#c99a42;color:#fff}
+      .v22-orbit{display:grid;grid-template-columns:35px 1fr 35px;gap:8px;align-items:stretch;margin-bottom:16px}.v22-week-nav{border:0;background:#f0f5f6;border-radius:12px;font-size:22px;color:#47636a;cursor:pointer}.v22-days{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.v22-day{position:relative;border:1px solid #e0e8ea;background:#fff;border-radius:15px;padding:10px;text-align:left;cursor:pointer;min-height:126px;transition:.2s}.v22-day:hover{transform:translateY(-2px);box-shadow:0 9px 22px rgba(26,67,76,.08)}.v22-day.active{border-color:#174f5b;box-shadow:0 0 0 2px rgba(23,79,91,.08)}.v22-day.today:before{content:"TODAY";position:absolute;right:8px;top:7px;font-size:6px;font-weight:900;color:#b78c3e}.v22-day-top span,.v22-day-top b{display:block}.v22-day-top span{font-size:9px;color:#829095;text-transform:uppercase}.v22-day-top b{font-size:17px;color:#294e57;margin-top:1px}
+      .v22-ring,.v22-pulse-ring{--p:0;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#c99a42 calc(var(--p)*1%),#edf2f3 0);position:relative;margin:8px 0}.v22-ring:after,.v22-pulse-ring:after{content:"";position:absolute;inset:4px;border-radius:50%;background:#fff}.v22-ring i,.v22-pulse-ring b{z-index:1;font-style:normal;font-size:10px;color:#36565e}.v22-day>small{font-size:8px;color:#7f8f94}.v22-load{height:3px;background:#eef3f4;border-radius:99px;margin-top:6px;overflow:hidden}.v22-load i{display:block;height:100%;background:#174f5b;border-radius:99px}
+      .v22-command{display:flex;justify-content:space-between;align-items:center;border:1px solid #e0e8ea;background:#fff;border-radius:13px;padding:9px 12px;margin-bottom:10px}.v22-date-nav{display:flex;align-items:center;gap:10px}.v22-date-nav button{width:29px;height:29px;border:1px solid #dce5e7;background:#fff;border-radius:8px;cursor:pointer}.v22-date-nav small,.v22-date-nav b{display:block}.v22-date-nav small{font-size:7px;color:#b78c3e;font-weight:900;letter-spacing:1px}.v22-date-nav b{font-size:12px;color:#31545c}.v22-command-pills{display:flex;gap:5px}.v22-command-pills span{font-size:7px;border-radius:99px;padding:4px 7px;background:#f1f4f5}.v22-command-pills .balanced{background:#edf6f2}.v22-command-pills .busy{background:#fff5df}.v22-command-pills .full{background:#ffeded}
+      .v22-layout{display:grid;grid-template-columns:minmax(0,1fr) 245px;gap:12px}.v22-layout>aside{display:flex!important;flex-direction:column;gap:10px;position:static!important;width:auto!important;background:transparent!important;overflow:visible!important}
+      .v22-flow-shell{border:1px solid #dfe8ea;background:#fff;border-radius:15px;overflow:hidden}.v22-flow-head{display:grid;grid-template-columns:64px repeat(3,1fr);height:55px;border-bottom:1px solid #e4ebed;background:#fbfcfc}.v22-flow-head>div{padding:11px;border-left:1px solid #edf1f2}.v22-flow-head b,.v22-flow-head small{display:block}.v22-flow-head b{font-size:10px;color:#31545c}.v22-flow-head small{font-size:8px;color:#91a0a4;margin-top:2px}.v22-time-head{font-size:8px!important;font-weight:900;color:#9aa6aa!important;display:flex;align-items:center}
+      .v22-flow-body{display:grid;grid-template-columns:64px repeat(3,1fr);height:988px;position:relative}.v22-time-axis{background:#fafcfc}.v22-time-axis>div{border-bottom:1px solid #edf2f3;box-sizing:border-box;padding:7px}.v22-time-axis span{font-size:8px;color:#96a3a7}.v22-lane{position:relative;border-left:1px solid #e8edef;background:linear-gradient(to bottom,transparent 75px,#edf2f3 76px);background-size:100% 76px}.v22-empty-slot{position:absolute;left:0;right:0;width:100%;border:0;background:transparent;cursor:crosshair}.v22-empty-slot:hover{background:rgba(201,154,66,.055)}
+      .v22-appt{position:absolute;left:6px;right:6px;width:calc(100% - 12px);border:1px solid #dce7e9;background:#f5f9fa;border-radius:10px;padding:7px;display:flex;gap:7px;text-align:left;cursor:pointer;overflow:hidden;z-index:3;box-shadow:0 3px 8px rgba(31,70,79,.05)}.v22-appt:hover{z-index:5;transform:scale(1.015);box-shadow:0 8px 18px rgba(31,70,79,.12)}.v22-avatar{width:26px;height:26px;min-width:26px;border-radius:8px;background:#174f5b;color:#fff;display:grid;place-items:center;font-size:8px;font-weight:900}.v22-appt-copy{min-width:0}.v22-appt-copy b,.v22-appt-copy small,.v22-appt-copy em{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v22-appt-copy b{font-size:9px;color:#294e57}.v22-appt-copy small{font-size:7px;color:#73858a;margin-top:2px}.v22-appt-copy em{font-size:7px;color:#9a7b40;font-style:normal;margin-top:3px}.v22-status-dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:#c99a42}.v22-appt.confirmed .v22-status-dot,.v22-appt.completed .v22-status-dot{background:#2d8b68}.v22-appt.no-show .v22-status-dot{background:#bd5360}
+      .v22-now{position:absolute;left:56px;right:0;height:1px;background:#c85c5c;z-index:8;pointer-events:none}.v22-now span{position:absolute;left:-3px;top:-8px;background:#c85c5c;color:#fff;border-radius:99px;padding:2px 5px;font-size:6px;font-weight:900}.v22-now i{position:absolute;left:0;top:-3px;width:7px;height:7px;border-radius:50%;background:#c85c5c}
+      .v22-insight,.v22-next{border:1px solid #dfe8ea;background:#fff;border-radius:15px;padding:13px}.v22-pulse{display:flex;align-items:center;gap:10px}.v22-pulse-ring{width:62px;height:62px;margin:0}.v22-pulse-ring:after{inset:6px}.v22-pulse-ring b{font-size:12px}.v22-pulse small,.v22-pulse strong,.v22-pulse span{display:block}.v22-pulse small{font-size:7px;color:#b78c3e;font-weight:900;letter-spacing:1px}.v22-pulse strong{font-size:14px;color:#294e57;margin:2px 0}.v22-pulse span{font-size:8px;color:#89979b}.v22-mini{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:12px}.v22-mini div{background:#f7f9fa;border-radius:8px;padding:7px;text-align:center}.v22-mini b,.v22-mini span{display:block}.v22-mini b{font-size:13px;color:#31545c}.v22-mini span{font-size:7px;color:#8a989d}
+      .v22-next-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}.v22-next-title small,.v22-next-title b{display:block}.v22-next-title small{font-size:7px;color:#b78c3e;font-weight:900}.v22-next-title b{font-size:12px;color:#31545c}.v22-next-title>span{font-size:7px;color:#8a989d}.v22-next-list{display:grid;gap:5px}.v22-next-list button{display:grid;grid-template-columns:40px 1fr 12px;align-items:center;gap:6px;border:0;background:#f7f9fa;border-radius:9px;padding:8px;text-align:left;cursor:pointer}.v22-next-list>button>span{font-size:9px;font-weight:900;color:#b78c3e}.v22-next-list b,.v22-next-list small{display:block}.v22-next-list b{font-size:9px;color:#31545c}.v22-next-list small{font-size:7px;color:#8a989d}.v22-next-list i{font-style:normal}.v22-clear{text-align:center;font-size:8px;color:#8a989d;padding:15px}
+      #v22-card-shade{display:none}#v22-card-shade.open{display:block;position:fixed;inset:0;z-index:100010}.v22-card-back{position:absolute;inset:0;background:rgba(14,34,40,.35);backdrop-filter:blur(2px)}.v22-patient-card{position:absolute;right:0;top:0;bottom:0;width:min(390px,94vw);background:#fff;padding:22px;box-shadow:-20px 0 60px rgba(0,0,0,.16);overflow:auto}.v22-card-head{display:grid;grid-template-columns:48px 1fr 32px;gap:10px;align-items:center}.v22-card-head>span{width:48px;height:48px;border-radius:14px;background:#174f5b;color:#fff;display:grid;place-items:center;font-weight:900}.v22-card-head small{font-size:7px;color:#b78c3e;font-weight:900}.v22-card-head h3{margin:2px 0;color:#294e57}.v22-card-head p{margin:0;font-size:9px;color:#89979b}.v22-card-head button{border:0;background:#f1f4f5;border-radius:50%;width:30px;height:30px;font-size:18px}.v22-card-status{display:inline-block;margin:18px 0 12px;background:#edf6f2;color:#287458;border-radius:99px;padding:5px 9px;font-size:8px;font-weight:900}.v22-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.v22-card-grid>div,.v22-card-note{border:1px solid #e3eaec;border-radius:10px;padding:10px}.v22-card-grid small,.v22-card-grid b{display:block}.v22-card-grid small,.v22-card-note small{font-size:7px;color:#9aa5a9}.v22-card-grid b{font-size:10px;color:#36575f;margin-top:3px}.v22-card-note{margin-top:8px}.v22-card-note p{font-size:10px;color:#65777c;line-height:1.5}.v22-card-actions{display:grid;gap:7px;margin-top:16px}.v22-card-actions button{border:1px solid #dce5e7;background:#fff;border-radius:9px;padding:10px;font-weight:700;color:#36575f;cursor:pointer}.v22-card-actions .gold{background:#c99a42;border-color:#c99a42;color:#fff}
+      @media(max-width:1050px){.v22-layout{grid-template-columns:1fr}.v22-layout>aside{display:grid!important;grid-template-columns:1fr 1fr}.v22-days{overflow-x:auto;grid-template-columns:repeat(7,minmax(110px,1fr))}.v22-orbit{grid-template-columns:1fr}.v22-week-nav{display:none}}
+      @media(max-width:700px){.v22-hero{align-items:flex-start;flex-direction:column}.v22-command{align-items:flex-start;gap:10px;flex-direction:column}.v22-command-pills{display:none}.v22-layout>aside{grid-template-columns:1fr}.v22-flow-shell{overflow-x:auto}.v22-flow-head,.v22-flow-body{min-width:760px}.v22-days{grid-template-columns:repeat(7,100px)}}
+    `; document.head.appendChild(st);
+  }
+
+  function bindNav(){
+    const nav=document.querySelector('.nav-item[data-page="appointments"]');
+    if(nav && nav.dataset.v22Bound!=='1'){
+      nav.dataset.v22Bound='1';
+      nav.addEventListener('click',()=>setTimeout(render,60));
+    }
+  }
+
+  function init(){
+    css(); bindNav();
+    if(document.getElementById('page-appointments')?.classList.contains('active')) render();
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v22Repair);
+      window.__v22Repair=setTimeout(()=>{
+        bindNav();
+        if(document.getElementById('page-appointments')?.classList.contains('active')) render();
+      },80);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+})();
