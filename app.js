@@ -7370,3 +7370,454 @@ render();
   else init();
 
 })();
+
+
+/* =========================================================
+   myAIMS V28 - PATIENT CLINICAL JOURNEY
+   Unified patient -> plan -> sessions -> appointments -> progress
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{ if(typeof window.saveState==='function') window.saveState(); };
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function ensure(){
+    if(!Array.isArray(S().treatmentPlans)) S().treatmentPlans=[];
+    if(!Array.isArray(S().sessionNotes)) S().sessionNotes=[];
+    if(!Array.isArray(S().appointments)) S().appointments=[];
+    if(!Array.isArray(S().patients)) S().patients=[];
+    save();
+  }
+
+  function patient(id){ return (S().patients||[]).find(p=>String(p.id)===String(id)); }
+  function pname(id){
+    const p=patient(id);
+    return p?(p.name||p.fullName||p.patientName||'Patient'):'Patient';
+  }
+  function planForPatient(id){
+    return (S().treatmentPlans||[])
+      .filter(x=>String(x.patientId)===String(id) && x.status!=='Closed')
+      .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0];
+  }
+  function notesForPatient(id){
+    return (S().sessionNotes||[])
+      .filter(x=>String(x.patientId)===String(id))
+      .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  }
+  function apptsForPatient(id){
+    return (S().appointments||[])
+      .filter(x=>String(x.patientId)===String(id))
+      .sort((a,b)=>(String(b.date||'')+String(b.time||'')).localeCompare(String(a.date||'')+String(a.time||'')));
+  }
+
+  function progressSeries(id){
+    return notesForPatient(id).slice().reverse().map(n=>({
+      date:n.date,
+      pain:Number(n.painScore||0),
+      progress:Number(n.progressScore||0)
+    }));
+  }
+
+  function areaTrend(id){
+    const notes=notesForPatient(id).slice().reverse();
+    const map={};
+    notes.forEach(n=>{
+      (n.areas||[]).forEach(area=>{
+        if(!map[area]) map[area]=[];
+        const sev=n.bodyAreaSeverity?.[area];
+        const pain=sev!=null ? [0,3,6,9][Number(sev)] : Number(n.painScore||0);
+        map[area].push({date:n.date,pain});
+      });
+    });
+    return map;
+  }
+
+  function root(){
+    let el=document.getElementById('v28-journey');
+    if(!el){
+      el=document.createElement('div');
+      el.id='v28-journey';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function spark(points, key='pain', inverse=false){
+    if(!points.length) return '<div class="v28-empty-chart">No progress data yet</div>';
+    const w=320,h=90,p=10;
+    const vals=points.map(x=>Number(x[key]||0));
+    const max=Math.max(10,...vals), min=0;
+    const coords=points.map((x,i)=>{
+      const xx=p+(i*(w-2*p)/Math.max(1,points.length-1));
+      let norm=(Number(x[key]||0)-min)/(max-min||1);
+      if(inverse) norm=1-norm;
+      const yy=h-p-norm*(h-2*p);
+      return [xx,yy];
+    });
+    const poly=coords.map(x=>x.join(',')).join(' ');
+    return `
+      <svg viewBox="0 0 ${w} ${h}" class="v28-spark">
+        <line x1="${p}" y1="${h-p}" x2="${w-p}" y2="${h-p}" class="axis"/>
+        <polyline points="${poly}" class="line"/>
+        ${coords.map((c,i)=>`<circle cx="${c[0]}" cy="${c[1]}" r="3"><title>${points[i].date} · ${points[i][key]}</title></circle>`).join('')}
+      </svg>`;
+  }
+
+  function overviewHtml(patientId){
+    const p=patient(patientId);
+    const plan=planForPatient(patientId);
+    const notes=notesForPatient(patientId);
+    const appts=apptsForPatient(patientId);
+    const completed=appts.filter(a=>a.status==='Completed').length;
+    const next=appts.filter(a=>a.status!=='Completed' && a.status!=='Cancelled' && a.date>=new Date().toISOString().slice(0,10))
+      .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];
+    const latest=notes[0];
+    const planned=Number(plan?.plannedSessions||0);
+    const remaining=Math.max(0,planned-completed);
+
+    return `
+      <div class="v28-kpis">
+        <div><small>ACTIVE PLAN</small><b>${esc(plan?.title||'No active plan')}</b><span>${esc((plan?.areas||[]).slice(0,3).join(', ')||'No areas selected')}</span></div>
+        <div><small>SESSIONS</small><b>${completed}${planned?` / ${planned}`:''}</b><span>${remaining} remaining</span></div>
+        <div><small>LATEST PAIN</small><b>${latest?Number(latest.painScore||0)+'/10':'—'}</b><span>${latest?.date||'No clinical note yet'}</span></div>
+        <div><small>NEXT APPOINTMENT</small><b>${next?esc(next.date):'—'}</b><span>${next?esc(next.time||''):'Not scheduled'}</span></div>
+      </div>
+
+      <div class="v28-overview-grid">
+        <section class="v28-card">
+          <div class="v28-card-head"><div><small>CLINICAL SNAPSHOT</small><h3>Latest Patient Update</h3></div>${latest?`<span>${esc(latest.date)}</span>`:''}</div>
+          ${latest?`
+            <div class="v28-latest">
+              <div><small>Patient Report</small><p>${esc(latest.subjective||'—')}</p></div>
+              <div><small>Clinical Findings</small><p>${esc(latest.objective||'—')}</p></div>
+              <div><small>Response</small><p>${esc(latest.response||'—')}</p></div>
+              <div><small>Next Session</small><p>${esc(latest.nextSession||'—')}</p></div>
+            </div>
+          `:`<div class="v28-empty">No clinical session updates have been added yet.</div>`}
+        </section>
+
+        <section class="v28-card">
+          <div class="v28-card-head"><div><small>PROGRESS</small><h3>Pain Trend</h3></div></div>
+          ${spark(progressSeries(patientId),'pain',true)}
+          <div class="v28-trend-foot">
+            <span>First ${progressSeries(patientId)[0]?.pain ?? '—'}/10</span>
+            <b>→</b>
+            <span>Latest ${progressSeries(patientId).slice(-1)[0]?.pain ?? '—'}/10</span>
+          </div>
+        </section>
+      </div>`;
+  }
+
+  function planHtml(patientId){
+    const plan=planForPatient(patientId);
+    const completed=apptsForPatient(patientId).filter(a=>a.status==='Completed').length;
+    if(!plan) return `
+      <div class="v28-empty-panel">
+        <h3>No active treatment plan</h3>
+        <p>Create the first treatment plan directly from here.</p>
+        <button onclick="openV28PlanEditor('${patientId}')">+ Create Treatment Plan</button>
+      </div>`;
+
+    const pct=Math.min(100,Math.round(completed/Math.max(1,Number(plan.plannedSessions||1))*100));
+    return `
+      <div class="v28-plan-hero">
+        <div>
+          <small>ACTIVE TREATMENT PLAN</small>
+          <h2>${esc(plan.title||'Treatment Plan')}</h2>
+          <p>${esc(plan.comments||'')}</p>
+        </div>
+        <button onclick="openV28PlanEditor('${patientId}')">Edit Plan</button>
+      </div>
+      <div class="v28-plan-grid">
+        <div class="v28-card">
+          <small>GOALS</small>
+          <p>${esc(plan.goals||'No goals documented yet.')}</p>
+        </div>
+        <div class="v28-card">
+          <small>HOME ADVICE</small>
+          <p>${esc(plan.homeAdvice||'No home advice documented yet.')}</p>
+        </div>
+        <div class="v28-card">
+          <small>TREATMENT AREAS</small>
+          <div class="v28-tags">${(plan.areas||[]).map(x=>`<span>${esc(x)}</span>`).join('')||'<span>None</span>'}</div>
+        </div>
+        <div class="v28-card">
+          <small>SESSION PROGRESS</small>
+          <div class="v28-progress"><i style="width:${pct}%"></i></div>
+          <b>${completed} completed · ${Math.max(0,Number(plan.plannedSessions||0)-completed)} remaining</b>
+        </div>
+      </div>
+      <div class="v28-plan-actions">
+        <button onclick="openV28AddSession('${patientId}')">+ Add Session</button>
+        <button onclick="openV19RecurringPlan && openV19RecurringPlan()">Recurring Sessions</button>
+      </div>`;
+  }
+
+  function sessionsHtml(patientId){
+    const notes=notesForPatient(patientId);
+    const appts=apptsForPatient(patientId);
+    const rows=appts.map(a=>({
+      a,
+      n:(S().sessionNotes||[]).find(n=>String(n.appointmentId)===String(a.id))
+    }));
+    return `
+      <div class="v28-section-top">
+        <div><small>SESSIONS</small><h3>${rows.length} appointment${rows.length===1?'':'s'}</h3></div>
+        <button onclick="openV28AddSession('${patientId}')">+ Add Session</button>
+      </div>
+      <div class="v28-session-list">
+        ${rows.length?rows.map(({a,n})=>`
+          <article class="v28-session-row">
+            <div class="v28-session-date"><b>${esc(a.date)}</b><span>${esc(a.time||'')}</span></div>
+            <div class="v28-session-main">
+              <div class="v28-session-title"><b>${esc(a.visitType||'Session')}</b><span>${esc(a.status||'Scheduled')}</span></div>
+              <small>${esc(a.therapist||'Therapist')} · ${esc(a.room||'')}</small>
+              ${n?`<p>${esc(n.subjective||n.response||'Clinical session documented.')}</p>`:'<p class="muted">No clinical note saved yet.</p>'}
+            </div>
+            <div class="v28-session-actions">
+              ${n?`<button onclick="previewV24SessionReport('${a.id}')">Report</button>`:''}
+              <button class="primary" onclick="openV24ClinicalNote('${a.id}')">${n?'Open Note':'Start Session'}</button>
+            </div>
+          </article>`).join(''):`<div class="v28-empty">No sessions scheduled yet.</div>`}
+      </div>`;
+  }
+
+  function progressHtml(patientId){
+    const series=progressSeries(patientId);
+    const trends=areaTrend(patientId);
+    return `
+      <div class="v28-progress-grid">
+        <section class="v28-card">
+          <div class="v28-card-head"><div><small>PAIN</small><h3>Pain Score Over Time</h3></div></div>
+          ${spark(series,'pain',true)}
+        </section>
+        <section class="v28-card">
+          <div class="v28-card-head"><div><small>FUNCTION</small><h3>Session Progress</h3></div></div>
+          ${spark(series,'progress',false)}
+        </section>
+      </div>
+      <section class="v28-card">
+        <div class="v28-card-head"><div><small>BODY AREAS</small><h3>Area-by-Area Trend</h3></div></div>
+        <div class="v28-area-trends">
+          ${Object.keys(trends).length?Object.entries(trends).map(([area,pts])=>`
+            <div class="v28-area-trend">
+              <div><b>${esc(area)}</b><small>${pts.length} session${pts.length===1?'':'s'}</small></div>
+              <span>${pts[0].pain}/10</span><i>→</i><strong>${pts.slice(-1)[0].pain}/10</strong>
+            </div>`).join(''):`<div class="v28-empty">No body-area trend data yet.</div>`}
+        </div>
+      </section>`;
+  }
+
+  function reportsHtml(patientId){
+    const notes=notesForPatient(patientId);
+    return `
+      <div class="v28-section-top">
+        <div><small>REPORTS</small><h3>Clinical Reports</h3></div>
+      </div>
+      <div class="v28-report-list">
+        ${notes.length?notes.map(n=>`
+          <button onclick="previewV24SessionReport('${n.appointmentId}')">
+            <div><small>SESSION REPORT</small><b>${esc(n.date)}</b><span>${esc(n.therapist||'Therapist')}</span></div>
+            <em>${Number(n.painScore||0)}/10</em><i>›</i>
+          </button>`).join(''):`<div class="v28-empty">No reports available yet.</div>`}
+      </div>`;
+  }
+
+  window.openV28Journey=function(patientId,tab='overview'){
+    ensure();
+    const p=patient(patientId);
+    if(!p) return;
+
+    const r=root();
+    r.className='open';
+    r.dataset.patientId=patientId;
+    r.innerHTML=`
+      <div class="v28-back" onclick="closeV28Journey()"></div>
+      <section class="v28-shell">
+        <header class="v28-head">
+          <div class="v28-patient-id">
+            <span>${esc((pname(patientId).split(/\s+/).slice(0,2).map(x=>x[0]||'').join('')||'P').toUpperCase())}</span>
+            <div>
+              <small>PATIENT CLINICAL JOURNEY</small>
+              <h2>${esc(pname(patientId))}</h2>
+              <p>${esc(p.phone||p.mobile||'No mobile')} · ${esc(p.id||'')}</p>
+            </div>
+          </div>
+          <div class="v28-head-actions">
+            <button onclick="openV28AddSession('${patientId}')">+ Add Session</button>
+            <button class="primary" onclick="openV28PlanEditor('${patientId}')">Treatment Plan</button>
+            <button onclick="closeV28Journey()">×</button>
+          </div>
+        </header>
+
+        <nav class="v28-tabs">
+          ${['overview','plan','sessions','progress','reports'].map(t=>`<button class="${t===tab?'active':''}" onclick="switchV28Tab('${t}',this)">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}
+        </nav>
+
+        <main id="v28-content">
+          ${tab==='overview'?overviewHtml(patientId):tab==='plan'?planHtml(patientId):tab==='sessions'?sessionsHtml(patientId):tab==='progress'?progressHtml(patientId):reportsHtml(patientId)}
+        </main>
+      </section>`;
+  };
+
+  window.closeV28Journey=function(){
+    const r=document.getElementById('v28-journey');
+    if(r) r.className='';
+  };
+
+  window.switchV28Tab=function(tab,btn){
+    const r=document.getElementById('v28-journey');
+    if(!r) return;
+    const patientId=r.dataset.patientId;
+    r.querySelectorAll('.v28-tabs button').forEach(x=>x.classList.remove('active'));
+    btn?.classList.add('active');
+    const c=document.getElementById('v28-content');
+    if(c) c.innerHTML=tab==='overview'?overviewHtml(patientId):tab==='plan'?planHtml(patientId):tab==='sessions'?sessionsHtml(patientId):tab==='progress'?progressHtml(patientId):reportsHtml(patientId);
+  };
+
+  window.openV28AddSession=function(patientId){
+    closeV28Journey();
+    if(typeof window.openV18Appointment==='function'){
+      window.openV18Appointment();
+      setTimeout(()=>{
+        if(typeof window.selectV23Patient==='function') window.selectV23Patient(patientId);
+      },60);
+    }
+  };
+
+  window.openV28PlanEditor=function(patientId){
+    const p=planForPatient(patientId)||{};
+    let r=document.getElementById('v28-plan-editor');
+    if(!r){
+      r=document.createElement('div');
+      r.id='v28-plan-editor';
+      document.body.appendChild(r);
+    }
+    r.className='open';
+    r.dataset.patientId=patientId;
+    r.innerHTML=`
+      <div class="v28-back" onclick="closeV28PlanEditor()"></div>
+      <section class="v28-plan-editor-card">
+        <header><div><small>TREATMENT PLAN</small><h3>${esc(pname(patientId))}</h3></div><button onclick="closeV28PlanEditor()">×</button></header>
+        <label><span>Plan Title</span><input id="v28-pe-title" value="${esc(p.title||'')}"></label>
+        <label><span>Main Clinical Comments</span><textarea id="v28-pe-comments" rows="3">${esc(p.comments||'')}</textarea></label>
+        <label><span>Treatment Goals</span><textarea id="v28-pe-goals" rows="3">${esc(p.goals||'')}</textarea></label>
+        <div class="v28-pe-grid">
+          <label><span>Planned Sessions</span><input id="v28-pe-sessions" type="number" min="1" value="${Number(p.plannedSessions||10)}"></label>
+          <label><span>Review After</span><input id="v28-pe-review" type="number" min="1" value="${Number(p.reviewAfter||4)}"></label>
+        </div>
+        <label><span>Home Advice</span><textarea id="v28-pe-home" rows="3">${esc(p.homeAdvice||'')}</textarea></label>
+        <footer><button onclick="closeV28PlanEditor()">Cancel</button><button class="primary" onclick="saveV28PlanEditor()">Save Plan</button></footer>
+      </section>`;
+  };
+
+  window.closeV28PlanEditor=function(){
+    const r=document.getElementById('v28-plan-editor');
+    if(r) r.className='';
+  };
+
+  window.saveV28PlanEditor=function(){
+    const r=document.getElementById('v28-plan-editor');
+    if(!r) return;
+    const patientId=r.dataset.patientId;
+    let p=planForPatient(patientId);
+    if(!p){
+      p={id:'TP-'+Date.now(),patientId,createdAt:new Date().toISOString(),status:'Active',areas:[]};
+      S().treatmentPlans.push(p);
+    }
+    Object.assign(p,{
+      title:document.getElementById('v28-pe-title')?.value.trim()||'Treatment Plan',
+      comments:document.getElementById('v28-pe-comments')?.value.trim()||'',
+      goals:document.getElementById('v28-pe-goals')?.value.trim()||'',
+      plannedSessions:Number(document.getElementById('v28-pe-sessions')?.value||10),
+      reviewAfter:Number(document.getElementById('v28-pe-review')?.value||4),
+      homeAdvice:document.getElementById('v28-pe-home')?.value.trim()||'',
+      updatedAt:new Date().toISOString(),
+      status:'Active'
+    });
+    save();
+    closeV28PlanEditor();
+    openV28Journey(patientId,'plan');
+  };
+
+  function enhancePatientCard(){
+    const card=document.querySelector('#v22-card-shade.open .v22-patient-card');
+    if(!card || card.dataset.v28==='1') return;
+    const shade=document.getElementById('v22-card-shade');
+    const html=shade?.innerHTML||'';
+    const m=html.match(/openPatientProfile\('([^']+)'\)/);
+    if(!m) return;
+    const patientId=m[1];
+    card.dataset.v28='1';
+
+    const actions=card.querySelector('.v22-card-actions');
+    if(actions){
+      const b=document.createElement('button');
+      b.textContent='Clinical Journey';
+      b.onclick=()=>{ closeV22PatientCard(); openV28Journey(patientId,'overview'); };
+      actions.prepend(b);
+    }
+  }
+
+  // Add a Clinical Journey button to patient profile if V6 profile is present.
+  function enhancePatientProfile(){
+    document.querySelectorAll('[data-patient-id], .patient-profile, .v6-patient-profile').forEach(el=>{
+      if(el.dataset.v28Journey==='1') return;
+      const pid=el.dataset.patientId;
+      if(!pid) return;
+      const target=el.querySelector('.actions,.profile-actions,.v6-actions');
+      if(!target) return;
+      el.dataset.v28Journey='1';
+      const b=document.createElement('button');
+      b.className='v28-open-journey';
+      b.textContent='Clinical Journey';
+      b.onclick=()=>openV28Journey(pid,'overview');
+      target.prepend(b);
+    });
+  }
+
+  function css(){
+    if(document.getElementById('v28-css')) return;
+    const st=document.createElement('style');
+    st.id='v28-css';
+    st.textContent=`
+      #v28-journey,#v28-plan-editor{display:none}
+      #v28-journey.open,#v28-plan-editor.open{display:block;position:fixed;inset:0;z-index:100050}
+      .v28-back{position:absolute;inset:0;background:rgba(11,31,37,.48);backdrop-filter:blur(4px)}
+      .v28-shell{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1180px,97vw);height:min(920px,95vh);background:#f4f8f9;border-radius:20px;box-shadow:0 30px 100px rgba(0,0,0,.25);overflow:hidden;display:flex;flex-direction:column}
+      .v28-head{display:flex;justify-content:space-between;gap:15px;align-items:center;padding:17px 20px;background:linear-gradient(135deg,#fff,#f4fafb);border-bottom:1px solid #dfe8ea}
+      .v28-patient-id{display:flex;align-items:center;gap:11px}.v28-patient-id>span{width:46px;height:46px;border-radius:14px;background:linear-gradient(145deg,#174f5b,#286b78);color:#fff;display:grid;place-items:center;font-weight:900}.v28-patient-id small{font-size:7px;color:#b48637;font-weight:900;letter-spacing:1.2px}.v28-patient-id h2{margin:2px 0;color:#214a54}.v28-patient-id p{margin:0;font-size:8px;color:#85969b}.v28-head-actions{display:flex;gap:7px}.v28-head-actions button{border:1px solid #d9e4e6;background:#fff;border-radius:8px;padding:8px 10px;font-size:8px;font-weight:800;color:#536d74;cursor:pointer}.v28-head-actions .primary{background:#c99a42;border-color:#c99a42;color:#fff}
+      .v28-tabs{display:flex;gap:5px;padding:9px 20px;background:#fff;border-bottom:1px solid #e2eaec}.v28-tabs button{border:0;background:#f0f5f6;border-radius:8px;padding:7px 11px;font-size:8px;font-weight:800;color:#60767d;cursor:pointer}.v28-tabs button.active{background:#174f5b;color:#fff}
+      #v28-content{overflow:auto;padding:16px 20px;flex:1}
+      .v28-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:12px}.v28-kpis>div,.v28-card{background:#fff;border:1px solid #dfe8ea;border-radius:12px;padding:11px;box-shadow:0 5px 14px rgba(28,66,75,.04)}.v28-kpis small,.v28-kpis b,.v28-kpis span{display:block}.v28-kpis small{font-size:7px;color:#a07a36;font-weight:900}.v28-kpis b{font-size:13px;color:#31545c;margin:3px 0}.v28-kpis span{font-size:7px;color:#89979c}
+      .v28-overview-grid,.v28-progress-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.v28-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.v28-card-head small{font-size:7px;color:#b48637;font-weight:900}.v28-card-head h3{margin:2px 0;color:#31545c;font-size:12px}.v28-card-head>span{font-size:7px;color:#8b999d}.v28-latest{display:grid;grid-template-columns:1fr 1fr;gap:7px}.v28-latest>div{background:#f7fafb;border-radius:8px;padding:8px}.v28-latest small{font-size:7px;color:#8c999d}.v28-latest p{font-size:8px;color:#60767c;line-height:1.45;margin:4px 0 0}.v28-spark{width:100%;height:100px}.v28-spark .axis{stroke:#dbe6e8}.v28-spark .line{fill:none;stroke:#174f5b;stroke-width:2.5}.v28-spark circle{fill:#c99a42}.v28-trend-foot{display:flex;justify-content:center;gap:10px;font-size:8px;color:#64797f}
+      .v28-plan-hero{display:flex;justify-content:space-between;align-items:center;gap:15px;background:linear-gradient(135deg,#174f5b,#2b6d79);color:#fff;border-radius:14px;padding:15px;margin-bottom:11px}.v28-plan-hero small{font-size:7px;letter-spacing:1px;opacity:.72}.v28-plan-hero h2{margin:3px 0}.v28-plan-hero p{font-size:8px;opacity:.78;max-width:760px}.v28-plan-hero button{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:8px 10px}.v28-plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.v28-card>small{font-size:7px;color:#a07831;font-weight:900}.v28-card>p{font-size:9px;color:#60767c;line-height:1.5}.v28-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}.v28-tags span{font-size:7px;background:#edf5f5;color:#547178;border-radius:99px;padding:4px 7px}.v28-progress{height:6px;background:#edf2f3;border-radius:99px;overflow:hidden;margin:9px 0}.v28-progress i{display:block;height:100%;background:linear-gradient(90deg,#174f5b,#c99a42);border-radius:99px}.v28-plan-actions{display:flex;gap:7px;margin-top:10px}.v28-plan-actions button,.v28-section-top button{border:1px solid #d8e3e5;background:#fff;border-radius:8px;padding:8px 10px;font-size:8px;font-weight:800;color:#536d74}
+      .v28-section-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}.v28-section-top small{font-size:7px;color:#b48637;font-weight:900}.v28-section-top h3{margin:2px 0;color:#31545c}.v28-session-list{display:grid;gap:7px}.v28-session-row{display:grid;grid-template-columns:90px 1fr auto;gap:10px;align-items:center;background:#fff;border:1px solid #dfe8ea;border-radius:11px;padding:9px}.v28-session-date b,.v28-session-date span{display:block}.v28-session-date b{font-size:9px;color:#36575f}.v28-session-date span{font-size:7px;color:#9a7c45}.v28-session-title{display:flex;gap:7px;align-items:center}.v28-session-title b{font-size:9px;color:#31545c}.v28-session-title span{font-size:6px;background:#edf6f2;color:#287359;border-radius:99px;padding:3px 6px}.v28-session-main>small{font-size:7px;color:#8c999d}.v28-session-main p{font-size:8px;color:#60767c;margin:4px 0 0}.v28-session-main p.muted{color:#9aa6aa}.v28-session-actions{display:flex;gap:5px}.v28-session-actions button{border:1px solid #d9e4e6;background:#fff;border-radius:7px;padding:6px 8px;font-size:7px;font-weight:800;color:#5b7177}.v28-session-actions .primary{background:#174f5b;border-color:#174f5b;color:#fff}
+      .v28-area-trends{display:grid;gap:6px}.v28-area-trend{display:grid;grid-template-columns:1fr auto 18px auto;gap:8px;align-items:center;background:#f8fbfb;border:1px solid #e3eaec;border-radius:8px;padding:8px}.v28-area-trend b,.v28-area-trend small{display:block}.v28-area-trend b{font-size:8px;color:#36575f}.v28-area-trend small{font-size:7px;color:#8b999d}.v28-area-trend span{font-size:9px;color:#a04c55}.v28-area-trend strong{font-size:10px;color:#29765b}.v28-area-trend i{font-style:normal;color:#9a8a67;text-align:center}
+      .v28-report-list{display:grid;gap:6px}.v28-report-list button{display:grid;grid-template-columns:1fr auto 12px;align-items:center;gap:8px;text-align:left;border:1px solid #dfe8ea;background:#fff;border-radius:9px;padding:9px}.v28-report-list small,.v28-report-list b,.v28-report-list span{display:block}.v28-report-list small{font-size:6px;color:#a07831;font-weight:900}.v28-report-list b{font-size:9px;color:#36575f}.v28-report-list span{font-size:7px;color:#8b999d}.v28-report-list em{font-style:normal;font-size:9px;background:#eef5f5;color:#31545c;border-radius:99px;padding:4px 6px}
+      .v28-empty,.v28-empty-chart{text-align:center;color:#8f9da1;font-size:8px;padding:26px}.v28-empty-panel{text-align:center;background:#fff;border:1px dashed #ccdadd;border-radius:12px;padding:35px}.v28-empty-panel h3{color:#31545c}.v28-empty-panel p{font-size:8px;color:#8a989d}.v28-empty-panel button{border:1px solid #c99a42;background:#fff8ea;color:#8b6729;border-radius:8px;padding:8px 10px}
+      .v28-plan-editor-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,94vw);background:#fff;border-radius:17px;padding:18px;box-shadow:0 30px 90px rgba(0,0,0,.24)}.v28-plan-editor-card header{display:flex;justify-content:space-between;border-bottom:1px solid #e4ebed;padding-bottom:10px;margin-bottom:12px}.v28-plan-editor-card header small{font-size:7px;color:#b48637;font-weight:900}.v28-plan-editor-card header h3{margin:2px 0;color:#31545c}.v28-plan-editor-card header button{border:0;background:#f1f4f5;border-radius:50%;width:29px;height:29px;font-size:18px}.v28-plan-editor-card label{display:flex;flex-direction:column;gap:4px;margin:8px 0}.v28-plan-editor-card label span{font-size:8px;font-weight:800;color:#5d7379}.v28-plan-editor-card input,.v28-plan-editor-card textarea{border:1px solid #dbe5e7;border-radius:8px;padding:8px;font:inherit;font-size:9px}.v28-pe-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.v28-plan-editor-card footer{display:flex;justify-content:flex-end;gap:7px;border-top:1px solid #e5ecee;margin-top:12px;padding-top:11px}.v28-plan-editor-card footer button{border:1px solid #dbe5e7;background:#fff;border-radius:8px;padding:8px 10px;font-size:8px;font-weight:800}.v28-plan-editor-card footer .primary{background:#c99a42;border-color:#c99a42;color:#fff}
+      @media(max-width:800px){.v28-kpis{grid-template-columns:1fr 1fr}.v28-overview-grid,.v28-progress-grid,.v28-plan-grid{grid-template-columns:1fr}.v28-session-row{grid-template-columns:1fr}.v28-head{align-items:flex-start;flex-direction:column}.v28-head-actions{width:100%;flex-wrap:wrap}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    enhancePatientCard();
+    enhancePatientProfile();
+  }
+
+  function init(){
+    ensure();
+    css();
+    setTimeout(repair,350);
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v28repair);
+      window.__v28repair=setTimeout(repair,60);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
