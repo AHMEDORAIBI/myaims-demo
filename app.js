@@ -1278,3 +1278,261 @@ render();
     init();
   }
 })();
+
+
+/* =========================================================
+   myAIMS V12 - NAVIGATION FIX
+   Adds Insurance / Cash Closing / Alerts safely to sidebar
+   and opens each feature in the MAIN workspace.
+   ========================================================= */
+(function () {
+  const ITEMS = [
+    { id:'insurance', label:'Insurance', icon:'♢' },
+    { id:'cash-closing', label:'Cash Closing', icon:'▣' },
+    { id:'alerts', label:'Alerts', icon:'♧' }
+  ];
+
+  function getSidebar() {
+    return document.querySelector('aside, .sidebar, #sidebar, .side-nav');
+  }
+
+  function getMain() {
+    return document.querySelector('main, .main-content, #main-content, .app-main, #content, .content');
+  }
+
+  function navContainer() {
+    const side = getSidebar();
+    if (!side) return null;
+    return side.querySelector('nav') || side;
+  }
+
+  function findNavByText(text) {
+    const nav = navContainer();
+    if (!nav) return null;
+    return [...nav.querySelectorAll('a,button,[role="button"],.nav-item')]
+      .find(x => (x.textContent || '').trim().toLowerCase().includes(text.toLowerCase()));
+  }
+
+  function makeNavItem(item) {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'v12-nav-item';
+    el.dataset.v12Page = item.id;
+    el.innerHTML = `<span class="v12-icon">${item.icon}</span><span>${item.label}</span>`;
+    el.addEventListener('click', () => openV12Page(item.id));
+    return el;
+  }
+
+  function installNav() {
+    const nav = navContainer();
+    if (!nav) return;
+
+    ITEMS.forEach(item => {
+      if (nav.querySelector(`[data-v12-page="${item.id}"]`)) return;
+
+      const node = makeNavItem(item);
+
+      if (item.id === 'insurance') {
+        const reports = findNavByText('Reports');
+        if (reports) nav.insertBefore(node, reports);
+        else nav.appendChild(node);
+      } else if (item.id === 'cash-closing') {
+        const settings = findNavByText('Settings');
+        if (settings) nav.insertBefore(node, settings);
+        else nav.appendChild(node);
+      } else if (item.id === 'alerts') {
+        const settings = findNavByText('Settings');
+        if (settings) nav.insertBefore(node, settings);
+        else nav.appendChild(node);
+      }
+    });
+  }
+
+  function hideMainChildren() {
+    const main = getMain();
+    if (!main) return;
+    [...main.children].forEach(el => {
+      if (el.id !== 'v12-feature-host') {
+        if (!el.dataset.v12Display) el.dataset.v12Display = el.style.display || '';
+        el.style.display = 'none';
+      }
+    });
+  }
+
+  function restoreMainChildren() {
+    const main = getMain();
+    if (!main) return;
+    [...main.children].forEach(el => {
+      if (el.id !== 'v12-feature-host') {
+        el.style.display = el.dataset.v12Display || '';
+      }
+    });
+    const host = document.getElementById('v12-feature-host');
+    if (host) host.style.display = 'none';
+  }
+
+  function host() {
+    const main = getMain();
+    if (!main) return null;
+    let h = document.getElementById('v12-feature-host');
+    if (!h) {
+      h = document.createElement('div');
+      h.id = 'v12-feature-host';
+      h.className = 'v12-feature-host';
+      main.appendChild(h);
+    }
+    h.style.display = 'block';
+    return h;
+  }
+
+  function setActive(id) {
+    document.querySelectorAll('[data-v12-page]').forEach(x =>
+      x.classList.toggle('active', x.dataset.v12Page === id)
+    );
+  }
+
+  function insuranceHTML() {
+    let sm = {claims:0, claimed:0, received:0, outstanding:0};
+    try {
+      if (typeof window.getInsuranceSummary === 'function') sm = window.getInsuranceSummary();
+    } catch(e){}
+
+    return `
+      <div class="v12-title">
+        <div><small>FINANCE & INSURANCE</small><h2>Insurance Claims</h2>
+        <p>Track insurer claims, collections and outstanding balances.</p></div>
+      </div>
+      <div class="v12-grid">
+        <div class="v12-card"><span>Total Claims</span><b>${sm.claims || 0}</b></div>
+        <div class="v12-card"><span>Claimed</span><b>BHD ${Number(sm.claimed||0).toFixed(3)}</b></div>
+        <div class="v12-card"><span>Received</span><b>BHD ${Number(sm.received||0).toFixed(3)}</b></div>
+        <div class="v12-card"><span>Outstanding</span><b>BHD ${Number(sm.outstanding||0).toFixed(3)}</b></div>
+      </div>
+      <div class="v12-white">
+        <h3>Claims Overview</h3>
+        <p class="v12-muted">Insurance-related invoices and claim statuses are managed from Billing. This page provides the financial overview for follow-up.</p>
+      </div>`;
+  }
+
+  function cashHTML() {
+    const date = new Date().toISOString().slice(0,10);
+    let sm = {totalReceipts:0,totalExpenses:0,netCash:0};
+    try {
+      if (typeof window.getClosingSummary === 'function') sm = window.getClosingSummary(date);
+    } catch(e){}
+
+    return `
+      <div class="v12-title">
+        <div><small>DAILY FINANCIAL CONTROL</small><h2>Cash Closing</h2>
+        <p>Reconcile today's receipts, expenses and physical cash.</p></div>
+        <div class="v12-actions">
+          <button onclick="saveCashClosing('${date}')">Close Today</button>
+          <button class="secondary" onclick="printCashClosing('${date}')">Print Closing</button>
+        </div>
+      </div>
+      <div class="v12-grid">
+        <div class="v12-card"><span>Today's Receipts</span><b>BHD ${Number(sm.totalReceipts||0).toFixed(3)}</b></div>
+        <div class="v12-card"><span>Today's Expenses</span><b>BHD ${Number(sm.totalExpenses||0).toFixed(3)}</b></div>
+        <div class="v12-card"><span>Net Cash</span><b>BHD ${Number(sm.netCash||0).toFixed(3)}</b></div>
+        <div class="v12-card"><span>Date</span><b>${date}</b></div>
+      </div>`;
+  }
+
+  function alertsHTML() {
+    let alerts = [];
+    try {
+      if (typeof window.getSmartAlerts === 'function') alerts = window.getSmartAlerts();
+    } catch(e){}
+
+    return `
+      <div class="v12-title">
+        <div><small>FOLLOW-UP CENTER</small><h2>Smart Alerts</h2>
+        <p>Items that require operational or financial attention.</p></div>
+      </div>
+      <div class="v12-white">
+        ${alerts.length ? alerts.map(a => `
+          <div class="v12-alert ${a.priority || 'low'}">
+            <span></span><div><b>${a.title}</b><small>${a.text}</small></div>
+          </div>`).join('') :
+          `<div class="v12-empty">No urgent follow-up items.</div>`}
+      </div>`;
+  }
+
+  window.openV12Page = function(id) {
+    const h = host();
+    if (!h) return;
+    hideMainChildren();
+    h.style.display = 'block';
+    setActive(id);
+
+    if (id === 'insurance') h.innerHTML = insuranceHTML();
+    if (id === 'cash-closing') h.innerHTML = cashHTML();
+    if (id === 'alerts') h.innerHTML = alertsHTML();
+
+    window.scrollTo({top:0, behavior:'smooth'});
+  };
+
+  function bindOriginalNav() {
+    const nav = navContainer();
+    if (!nav || nav.dataset.v12Bound) return;
+    nav.dataset.v12Bound = '1';
+
+    nav.addEventListener('click', function(e) {
+      const custom = e.target.closest('[data-v12-page]');
+      if (custom) return;
+
+      const original = e.target.closest('a,button,[role="button"],.nav-item');
+      if (original) {
+        restoreMainChildren();
+        setActive('');
+      }
+    }, true);
+  }
+
+  function css() {
+    if (document.getElementById('myaims-v12-css')) return;
+    const st = document.createElement('style');
+    st.id = 'myaims-v12-css';
+    st.textContent = `
+      .v12-nav-item{
+        appearance:none;border:0;background:transparent;color:inherit;
+        width:100%;display:flex;align-items:center;gap:12px;
+        padding:12px 18px;border-radius:9px;cursor:pointer;
+        font:inherit;text-align:left;opacity:.94;
+      }
+      .v12-nav-item:hover,.v12-nav-item.active{background:rgba(255,255,255,.11)}
+      .v12-icon{width:16px;text-align:center;opacity:.9}
+      .v12-feature-host{padding:28px 30px;min-height:calc(100vh - 80px);background:#f4f8f9}
+      .v12-title{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:22px}
+      .v12-title small{letter-spacing:1.5px;font-weight:700;opacity:.6}
+      .v12-title h2{font-size:30px;margin:5px 0 5px}
+      .v12-title p{margin:0;opacity:.65}
+      .v12-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+      .v12-card,.v12-white{background:#fff;border:1px solid #dfe8eb;border-radius:14px;padding:18px}
+      .v12-card span{display:block;font-size:12px;opacity:.65;margin-bottom:8px}
+      .v12-card b{font-size:21px}
+      .v12-white h3{margin-top:0}
+      .v12-muted{opacity:.65}
+      .v12-actions{display:flex;gap:9px}
+      .v12-actions button{border:0;border-radius:9px;padding:10px 14px;background:#c99a42;color:#fff;font-weight:700;cursor:pointer}
+      .v12-actions button.secondary{background:#fff;color:#173b45;border:1px solid #dbe4e7}
+      .v12-alert{display:flex;gap:12px;padding:13px 4px;border-bottom:1px solid #edf1f2}
+      .v12-alert>span{width:9px;height:9px;border-radius:50%;margin-top:5px;background:#2980b9}
+      .v12-alert.high>span{background:#c0392b}.v12-alert.medium>span{background:#d68910}
+      .v12-alert b,.v12-alert small{display:block}.v12-alert small{opacity:.65;margin-top:3px}
+      .v12-empty{padding:25px;text-align:center;opacity:.6}
+      @media(max-width:900px){.v12-grid{grid-template-columns:1fr 1fr}}
+      @media(max-width:650px){.v12-grid{grid-template-columns:1fr}.v12-title{align-items:flex-start;flex-direction:column}.v12-feature-host{padding:18px}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function init() {
+    css();
+    installNav();
+    bindOriginalNav();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
