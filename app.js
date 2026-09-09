@@ -1116,3 +1116,165 @@ render();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V11 - SIDEBAR / DASHBOARD LAYOUT FIX
+   Fixes V8-V10 panels accidentally rendering inside sidebar
+   ========================================================= */
+(function () {
+  function sidebar() {
+    return document.querySelector('aside, .sidebar, #sidebar, .side-nav, nav.sidebar');
+  }
+
+  function mainArea() {
+    return document.querySelector('main, .main-content, #main-content, .content, #content, .app-main');
+  }
+
+  function activePageContainer(name) {
+    const main = mainArea();
+    if (!main) return null;
+    return (
+      main.querySelector(`#${name}`) ||
+      main.querySelector(`.${name}-page`) ||
+      main.querySelector(`[data-page-content="${name}"]`) ||
+      main.querySelector(`[data-view="${name}"]`) ||
+      main
+    );
+  }
+
+  function removeBrokenSidebarPanels() {
+    const side = sidebar();
+    if (!side) return;
+    ['insurance-claims-panel','cash-closing-panel','smart-alerts-panel'].forEach(id => {
+      const el = side.querySelector('#' + id);
+      if (el) el.remove();
+    });
+  }
+
+  function movePanel(id, pageName) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const side = sidebar();
+    if (side && side.contains(el)) {
+      const target = activePageContainer(pageName);
+      if (target && target !== side) target.prepend(el);
+      else el.remove();
+    }
+  }
+
+  function normalizeSidebar() {
+    const side = sidebar();
+    if (!side) return;
+
+    // Never allow dashboard/report cards to affect sidebar width/flow.
+    side.querySelectorAll(
+      '.v8-panel,.v9-panel,.v10-panel,.v8-cards,.v9-cards,.v10-list,' +
+      '.dashboard-card,.metric-card,.chart-card,.report-card'
+    ).forEach(el => {
+      if (!el.closest('.nav-item') && !el.matches('a,button')) el.remove();
+    });
+  }
+
+  function repair() {
+    removeBrokenSidebarPanels();
+    normalizeSidebar();
+    movePanel('insurance-claims-panel', 'billing');
+    movePanel('cash-closing-panel', 'reports');
+    movePanel('smart-alerts-panel', 'dashboard');
+  }
+
+  function injectFixCSS() {
+    if (document.getElementById('myaims-v11-layout-fix')) return;
+    const st = document.createElement('style');
+    st.id = 'myaims-v11-layout-fix';
+    st.textContent = `
+      /* Sidebar must remain a clean navigation column */
+      aside, .sidebar, #sidebar, .side-nav, nav.sidebar {
+        overflow-x: hidden !important;
+        min-width: 228px;
+        width: 228px;
+        flex: 0 0 228px;
+        box-sizing: border-box;
+      }
+
+      aside .v8-panel, aside .v9-panel, aside .v10-panel,
+      .sidebar .v8-panel, .sidebar .v9-panel, .sidebar .v10-panel,
+      #sidebar .v8-panel, #sidebar .v9-panel, #sidebar .v10-panel {
+        display: none !important;
+      }
+
+      /* Keep navigation rows inside sidebar */
+      aside a, aside button, .sidebar a, .sidebar button, #sidebar a, #sidebar button {
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+
+      /* Main workspace must take remaining width only */
+      main, .main-content, #main-content, .app-main {
+        min-width: 0 !important;
+        width: auto;
+        flex: 1 1 auto;
+        box-sizing: border-box;
+      }
+
+      /* Prevent cards from overflowing their grid */
+      .v8-panel,.v9-panel,.v10-panel,
+      .v8-cards>div,.v9-cards>div {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+
+      /* Restore clean sidebar nav stacking */
+      aside nav, .sidebar nav, #sidebar nav {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+      }
+
+      @media (max-width: 900px) {
+        aside, .sidebar, #sidebar, .side-nav, nav.sidebar {
+          min-width: 210px;
+          width: 210px;
+          flex-basis: 210px;
+        }
+      }
+
+      @media (max-width: 700px) {
+        aside, .sidebar, #sidebar, .side-nav, nav.sidebar {
+          min-width: 0;
+          width: 100%;
+          max-width: 100%;
+        }
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  // Override only the panel placement functions from later versions.
+  // They now search strictly inside the main workspace.
+  window.myaimsSafePanelTarget = activePageContainer;
+
+  function init() {
+    injectFixCSS();
+    repair();
+
+    // Repair again after page renders/navigation without visible flicker.
+    const observer = new MutationObserver(() => {
+      clearTimeout(window.__myaimsV11RepairTimer);
+      window.__myaimsV11RepairTimer = setTimeout(repair, 20);
+    });
+    observer.observe(document.body, {childList:true, subtree:true});
+
+    document.addEventListener('click', () => setTimeout(repair, 60), true);
+    setTimeout(repair, 250);
+    setTimeout(repair, 700);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
