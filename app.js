@@ -3870,3 +3870,421 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V20 - WAITING LIST + CANCELLATION FILL
+   Smart waitlist matching for cancelled / available slots.
+   ========================================================= */
+(function(){
+  const S = () => window.state || window.appState || {};
+  const save = () => { if (typeof window.saveState === 'function') window.saveState(); };
+
+  function ensureV20(){
+    if(!Array.isArray(S().waitingList)) S().waitingList = [];
+    if(!Array.isArray(S().appointments)) S().appointments = [];
+    if(!Array.isArray(S().patients)) S().patients = [];
+  }
+
+  function pname(id){
+    const p=(S().patients||[]).find(x=>String(x.id)===String(id));
+    return p ? (p.name||p.fullName||p.patientName||'Patient') : 'Patient';
+  }
+
+  function pphone(id){
+    const p=(S().patients||[]).find(x=>String(x.id)===String(id));
+    return p ? (p.phone||p.mobile||p.contact||'—') : '—';
+  }
+
+  function esc(s){
+    return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function modalRoot(){
+    let r=document.getElementById('v20-modal');
+    if(!r){
+      r=document.createElement('div');
+      r.id='v20-modal';
+      document.body.appendChild(r);
+    }
+    return r;
+  }
+
+  function patientOptions(){
+    return (S().patients||[]).map(p=>
+      `<option value="${p.id}">${esc(pname(p.id))}</option>`
+    ).join('');
+  }
+
+  window.openV20Waitlist=function(){
+    ensureV20();
+    const r=modalRoot();
+    const date=window.__v16Date || new Date().toISOString().slice(0,10);
+
+    r.className='open';
+    r.innerHTML=`
+      <div class="v20-backdrop" onclick="closeV20Modal()"></div>
+      <section class="v20-dialog">
+        <div class="v20-head">
+          <div>
+            <small>WAITING LIST</small>
+            <h2>Add Patient to Waiting List</h2>
+            <p>Record preferred timing and priority for earlier appointment opportunities.</p>
+          </div>
+          <button onclick="closeV20Modal()">×</button>
+        </div>
+
+        <div class="v20-grid">
+          <label class="span2">
+            <span>Patient</span>
+            <select id="v20-patient">
+              <option value="">Select patient</option>
+              ${patientOptions()}
+            </select>
+          </label>
+
+          <label>
+            <span>Preferred From</span>
+            <input id="v20-from" type="date" value="${date}">
+          </label>
+
+          <label>
+            <span>Preferred To</span>
+            <input id="v20-to" type="date" value="${date}">
+          </label>
+
+          <label>
+            <span>Preferred Time</span>
+            <select id="v20-time-pref">
+              <option>Any Time</option>
+              <option>Morning</option>
+              <option>Afternoon</option>
+              <option>Evening</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Priority</span>
+            <select id="v20-priority">
+              <option>Normal</option>
+              <option>High</option>
+              <option>Urgent</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Therapist Preference</span>
+            <input id="v20-therapist" placeholder="Optional">
+          </label>
+
+          <label>
+            <span>Visit Type</span>
+            <input id="v20-visit" value="Physiotherapy Session">
+          </label>
+
+          <label class="span2">
+            <span>Notes</span>
+            <textarea id="v20-notes" rows="3" placeholder="Reason, flexibility, contact preference..."></textarea>
+          </label>
+        </div>
+
+        <div id="v20-warning" class="v20-warning"></div>
+
+        <div class="v20-footer">
+          <button class="secondary" onclick="closeV20Modal()">Cancel</button>
+          <button class="primary" onclick="saveV20Waitlist()">Add to Waiting List</button>
+        </div>
+      </section>`;
+  };
+
+  window.closeV20Modal=function(){
+    const r=document.getElementById('v20-modal');
+    if(r) r.className='';
+  };
+
+  window.saveV20Waitlist=function(){
+    const patientId=document.getElementById('v20-patient')?.value;
+    const warning=document.getElementById('v20-warning');
+    if(!patientId){
+      if(warning) warning.textContent='Please select a patient.';
+      return;
+    }
+
+    S().waitingList.push({
+      id:'WAIT-'+Date.now(),
+      patientId,
+      from:document.getElementById('v20-from')?.value,
+      to:document.getElementById('v20-to')?.value,
+      timePreference:document.getElementById('v20-time-pref')?.value || 'Any Time',
+      priority:document.getElementById('v20-priority')?.value || 'Normal',
+      therapist:document.getElementById('v20-therapist')?.value || '',
+      visitType:document.getElementById('v20-visit')?.value || 'Physiotherapy Session',
+      notes:document.getElementById('v20-notes')?.value || '',
+      status:'Waiting',
+      createdAt:new Date().toISOString()
+    });
+
+    save();
+    if(typeof window.logAudit==='function'){
+      window.logAudit('Add Waiting List','Appointments',pname(patientId));
+    }
+    closeV20Modal();
+    renderV20WaitlistStrip();
+  };
+
+  function slotFitsTimePreference(time,pref){
+    if(pref==='Any Time') return true;
+    const h=Number(String(time||'00:00').split(':')[0]||0);
+    if(pref==='Morning') return h<12;
+    if(pref==='Afternoon') return h>=12 && h<17;
+    if(pref==='Evening') return h>=17;
+    return true;
+  }
+
+  function candidateScore(w,a){
+    let score=0;
+    if(w.priority==='Urgent') score+=50;
+    else if(w.priority==='High') score+=25;
+
+    if(w.therapist && a.therapist && w.therapist===a.therapist) score+=20;
+    if(w.visitType && a.visitType && w.visitType===a.visitType) score+=10;
+    if(slotFitsTimePreference(a.time,w.timePreference)) score+=15;
+
+    const created=new Date(w.createdAt||0).getTime();
+    score += Math.max(0,10-Math.floor((Date.now()-created)/86400000));
+    return score;
+  }
+
+  function matchesForAppointment(a){
+    return (S().waitingList||[])
+      .filter(w=>w.status==='Waiting')
+      .filter(w=>!w.from || a.date>=w.from)
+      .filter(w=>!w.to || a.date<=w.to)
+      .filter(w=>slotFitsTimePreference(a.time,w.timePreference))
+      .map(w=>({...w,score:candidateScore(w,a)}))
+      .sort((x,y)=>y.score-x.score);
+  }
+
+  window.openV20FillSlot=function(apptId){
+    ensureV20();
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(apptId));
+    if(!a) return;
+
+    const matches=matchesForAppointment(a);
+    const r=modalRoot();
+    r.className='open';
+    r.innerHTML=`
+      <div class="v20-backdrop" onclick="closeV20Modal()"></div>
+      <section class="v20-dialog">
+        <div class="v20-head">
+          <div>
+            <small>CANCELLATION FILL</small>
+            <h2>Fill Available Slot</h2>
+            <p>${esc(a.date)} · ${esc(a.time)} · ${esc(a.therapist||'Therapist')} · ${esc(a.room||'Room')}</p>
+          </div>
+          <button onclick="closeV20Modal()">×</button>
+        </div>
+
+        <div class="v20-match-list">
+          ${matches.length ? matches.map((w,i)=>`
+            <article class="v20-match-card">
+              <div class="v20-rank">${i+1}</div>
+              <div class="v20-match-main">
+                <div class="v20-match-top">
+                  <div>
+                    <h3>${esc(pname(w.patientId))}</h3>
+                    <p>${esc(pphone(w.patientId))}</p>
+                  </div>
+                  <span class="${String(w.priority).toLowerCase()}">${esc(w.priority)}</span>
+                </div>
+                <div class="v20-match-meta">
+                  <span>${esc(w.timePreference)}</span>
+                  <span>${esc(w.visitType)}</span>
+                  ${w.therapist?`<span>${esc(w.therapist)}</span>`:''}
+                </div>
+                ${w.notes?`<div class="v20-match-note">${esc(w.notes)}</div>`:''}
+              </div>
+              <button class="v20-assign" onclick="assignV20Waitlist('${w.id}','${a.id}')">Assign</button>
+            </article>`).join('') :
+            `<div class="v20-empty">No suitable patients found on the waiting list.</div>`}
+        </div>
+      </section>`;
+  };
+
+  window.assignV20Waitlist=function(waitId,apptId){
+    const w=(S().waitingList||[]).find(x=>String(x.id)===String(waitId));
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(apptId));
+    if(!w || !a) return;
+
+    a.patientId=w.patientId;
+    a.visitType=w.visitType || a.visitType;
+    a.status='Scheduled';
+    a.notes=[a.notes,w.notes].filter(Boolean).join(' | ');
+    w.status='Booked';
+    w.bookedAppointmentId=a.id;
+    w.bookedAt=new Date().toISOString();
+
+    save();
+    if(typeof window.logAudit==='function'){
+      window.logAudit('Fill Cancelled Slot','Appointments',`${pname(w.patientId)} — ${a.date} ${a.time}`);
+    }
+
+    closeV20Modal();
+    if(typeof window.renderV16Timeline==='function') try{window.renderV16Timeline();}catch(e){}
+    renderV20WaitlistStrip();
+  };
+
+  window.openV20WaitlistManager=function(){
+    ensureV20();
+    const r=modalRoot();
+    const items=(S().waitingList||[]).slice().reverse();
+
+    r.className='open';
+    r.innerHTML=`
+      <div class="v20-backdrop" onclick="closeV20Modal()"></div>
+      <section class="v20-dialog manager">
+        <div class="v20-head">
+          <div>
+            <small>WAITING LIST MANAGER</small>
+            <h2>Patient Waiting List</h2>
+            <p>Track patients waiting for an earlier or more suitable appointment.</p>
+          </div>
+          <button onclick="closeV20Modal()">×</button>
+        </div>
+
+        <div class="v20-manager-list">
+          ${items.length ? items.map(w=>`
+            <article class="v20-wait-row">
+              <div>
+                <b>${esc(pname(w.patientId))}</b>
+                <small>${esc(w.from||'Any date')} → ${esc(w.to||'Any date')}</small>
+              </div>
+              <div><small>Preference</small><b>${esc(w.timePreference)}</b></div>
+              <div><small>Priority</small><b>${esc(w.priority)}</b></div>
+              <div><small>Status</small><span class="${String(w.status).toLowerCase()}">${esc(w.status)}</span></div>
+            </article>`).join('') :
+            `<div class="v20-empty">Waiting list is empty.</div>`}
+        </div>
+
+        <div class="v20-footer">
+          <button class="primary" onclick="closeV20Modal();openV20Waitlist()">+ Add Patient</button>
+        </div>
+      </section>`;
+  };
+
+  function renderV20WaitlistStrip(){
+    const page=document.getElementById('page-appointments');
+    if(!page) return;
+
+    let strip=document.getElementById('v20-wait-strip');
+    if(!strip){
+      strip=document.createElement('div');
+      strip.id='v20-wait-strip';
+      strip.className='v20-wait-strip';
+      const pkg=document.getElementById('v19-package-strip');
+      if(pkg) pkg.insertAdjacentElement('afterend',strip);
+      else {
+        const timeline=document.getElementById('v16-timeline');
+        if(timeline) timeline.insertAdjacentElement('afterend',strip);
+      }
+    }
+
+    const waiting=(S().waitingList||[]).filter(w=>w.status==='Waiting');
+    if(!waiting.length){
+      strip.style.display='none';
+      return;
+    }
+
+    const urgent=waiting.filter(w=>w.priority==='Urgent').length;
+    strip.style.display='flex';
+    strip.innerHTML=`
+      <div>
+        <small>WAITING LIST</small>
+        <b>${waiting.length}</b>
+        <span>${urgent ? urgent+' urgent request'+(urgent>1?'s':'') : 'Patients waiting for earlier slots'}</span>
+      </div>
+      <button onclick="openV20WaitlistManager()">View Waiting List</button>`;
+  }
+
+  function installButtons(){
+    const controls=document.querySelector('#page-appointments #v16-timeline .v16-controls');
+    if(controls && !document.getElementById('v20-wait-btn')){
+      const btn=document.createElement('button');
+      btn.id='v20-wait-btn';
+      btn.className='v20-toolbar-btn';
+      btn.textContent='+ Waiting List';
+      btn.onclick=openV20Waitlist;
+      controls.prepend(btn);
+    }
+  }
+
+  function enhanceCancelledEvents(){
+    document.querySelectorAll('#page-appointments .v16-event.cancelled').forEach(btn=>{
+      if(btn.dataset.v20Enhanced==='1') return;
+      btn.dataset.v20Enhanced='1';
+      btn.title='Cancelled slot — click to find waiting-list patient';
+      const old=btn.getAttribute('onclick')||'';
+      const m=old.match(/openV16Appointment\('([^']+)'\)/);
+      if(m){
+        const id=m[1];
+        btn.onclick=function(e){
+          e.preventDefault();
+          openV20FillSlot(id);
+        };
+      }
+    });
+  }
+
+  function css(){
+    if(document.getElementById('v20-css')) return;
+    const st=document.createElement('style');
+    st.id='v20-css';
+    st.textContent=`
+      #v20-modal{display:none}
+      #v20-modal.open{display:block;position:fixed;inset:0;z-index:100002}
+      .v20-backdrop{position:absolute;inset:0;background:rgba(12,31,37,.46);backdrop-filter:blur(3px)}
+      .v20-dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(780px,95vw);max-height:92vh;overflow:auto;background:#fff;border-radius:19px;padding:22px;box-shadow:0 30px 90px rgba(0,0,0,.24)}
+      .v20-dialog.manager{width:min(900px,95vw)}
+      .v20-head{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid #e6edef;padding-bottom:15px;margin-bottom:16px}
+      .v20-head small{font-size:9px;letter-spacing:1.5px;font-weight:800;color:#b68a3b}.v20-head h2{margin:4px 0;color:#173f49}.v20-head p{margin:0;font-size:12px;color:#78898e}
+      .v20-head>button{border:0;background:#f1f5f6;width:34px;height:34px;border-radius:50%;font-size:22px;cursor:pointer}
+      .v20-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.v20-grid label{display:flex;flex-direction:column;gap:5px}.v20-grid label>span{font-size:11px;font-weight:700;color:#526b72}.v20-grid .span2{grid-column:1/-1}
+      .v20-grid input,.v20-grid select,.v20-grid textarea{border:1px solid #d9e4e7;border-radius:9px;padding:10px;background:#fff;font:inherit;color:#2d4e56}
+      .v20-warning{min-height:18px;margin-top:9px;color:#b44747;font-size:11px;font-weight:700}
+      .v20-footer{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e8edef;margin-top:12px;padding-top:14px}.v20-footer button{border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}.v20-footer .secondary{border:1px solid #d9e3e6;background:#fff;color:#385961}.v20-footer .primary{border:1px solid #c99a42;background:#c99a42;color:#fff}
+      .v20-toolbar-btn{height:38px!important;border:1px solid #d9e4e7!important;background:#fff!important;color:#31545c!important;border-radius:9px!important;padding:0 12px!important;font-weight:700;cursor:pointer;white-space:nowrap}
+      .v20-wait-strip{display:flex;align-items:center;justify-content:space-between;gap:15px;background:#fff;border:1px solid #dfe8ea;border-radius:13px;padding:13px 15px;margin:0 0 16px}
+      .v20-wait-strip small,.v20-wait-strip b,.v20-wait-strip span{display:block}.v20-wait-strip small{font-size:9px;color:#a17e3d;font-weight:800;letter-spacing:1px}.v20-wait-strip b{font-size:20px;color:#173f49;margin:2px 0}.v20-wait-strip span{font-size:10px;color:#7d8c91}.v20-wait-strip button{border:1px solid #d9e4e7;background:#fff;border-radius:8px;padding:8px 11px;cursor:pointer}
+      .v20-match-list{display:grid;gap:9px}.v20-match-card{display:grid;grid-template-columns:34px 1fr auto;gap:11px;align-items:center;border:1px solid #e1e9eb;border-radius:12px;padding:12px}.v20-rank{width:30px;height:30px;border-radius:9px;background:#eef4f5;color:#174f5b;display:flex;align-items:center;justify-content:center;font-weight:800}
+      .v20-match-top{display:flex;justify-content:space-between;gap:10px}.v20-match-top h3,.v20-match-top p{margin:0}.v20-match-top p{font-size:10px;color:#829095;margin-top:2px}.v20-match-top span{font-size:9px;border-radius:999px;padding:4px 7px;background:#f1f4f5}.v20-match-top span.high{background:#fff4dd;color:#966b19}.v20-match-top span.urgent{background:#ffecef;color:#b84555}
+      .v20-match-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.v20-match-meta span{font-size:9px;background:#f5f8f9;border-radius:999px;padding:4px 7px;color:#687b80}.v20-match-note{margin-top:7px;font-size:10px;color:#6f8186}
+      .v20-assign{border:1px solid #c99a42;background:#c99a42;color:#fff;border-radius:8px;padding:8px 11px;font-weight:700;cursor:pointer}
+      .v20-manager-list{display:grid;gap:7px}.v20-wait-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;align-items:center;border:1px solid #e3eaec;border-radius:10px;padding:11px}.v20-wait-row b,.v20-wait-row small{display:block}.v20-wait-row small{font-size:9px;color:#8a989d}.v20-wait-row span{display:inline-block;font-size:9px;padding:4px 7px;border-radius:999px;background:#f2f5f6}.v20-wait-row span.waiting{background:#fff5df;color:#966b19}.v20-wait-row span.booked{background:#eaf7f0;color:#257355}
+      .v20-empty{text-align:center;padding:35px;color:#8a989d}
+      #page-appointments .v16-event.cancelled:after{content:"WAITLIST";position:absolute;right:5px;bottom:4px;font-size:7px;font-weight:800;color:#b84555;background:#fff;padding:2px 4px;border-radius:4px}
+      @media(max-width:680px){.v20-dialog{padding:15px}.v20-grid{grid-template-columns:1fr}.v20-grid .span2{grid-column:auto}.v20-match-card{grid-template-columns:30px 1fr}.v20-assign{grid-column:1/-1}.v20-wait-row{grid-template-columns:1fr 1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    installButtons();
+    renderV20WaitlistStrip();
+    enhanceCancelledEvents();
+  }
+
+  function init(){
+    ensureV20();
+    css();
+    setTimeout(repair,350);
+
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v20t);
+      window.__v20t=setTimeout(repair,40);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
