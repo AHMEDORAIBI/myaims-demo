@@ -9189,3 +9189,339 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V33 - LARGER READABLE TYPOGRAPHY
+   Improves readability across the new Patient Workspace.
+   Focus: larger text without breaking layout.
+   ========================================================= */
+(function(){
+  function css(){
+    if(document.getElementById('v33-typography-css')) return;
+
+    const st=document.createElement('style');
+    st.id='v33-typography-css';
+    st.textContent=`
+      /* ================================
+         GLOBAL PATIENT WORKSPACE TYPE
+         ================================ */
+      #v31-workspace{
+        font-size:14px !important;
+      }
+
+      /* Patient header */
+      #v31-workspace .v31-identity small{
+        font-size:10px !important;
+        letter-spacing:1.2px !important;
+      }
+      #v31-workspace .v31-identity h2{
+        font-size:24px !important;
+        line-height:1.2 !important;
+        margin:3px 0 !important;
+      }
+      #v31-workspace .v31-identity p{
+        font-size:12px !important;
+        line-height:1.4 !important;
+      }
+      #v31-workspace .v31-identity>span{
+        width:52px !important;
+        height:52px !important;
+        font-size:14px !important;
+      }
+
+      /* Main top actions */
+      #v31-workspace .v31-back,
+      #v31-workspace .v31-top-actions button{
+        font-size:12px !important;
+        padding:10px 14px !important;
+        min-height:38px !important;
+      }
+
+      /* Tabs */
+      #v31-workspace .v31-tabs{
+        gap:7px !important;
+        padding:8px !important;
+      }
+      #v31-workspace .v31-tabs button{
+        font-size:12px !important;
+        padding:10px 15px !important;
+        line-height:1.2 !important;
+      }
+
+      /* KPI cards */
+      #v31-workspace .v31-kpis>div{
+        padding:14px !important;
+        min-height:88px !important;
+      }
+      #v31-workspace .v31-kpis small{
+        font-size:9px !important;
+        line-height:1.3 !important;
+      }
+      #v31-workspace .v31-kpis b{
+        font-size:18px !important;
+        margin:6px 0 4px !important;
+        line-height:1.2 !important;
+      }
+      #v31-workspace .v31-kpis span{
+        font-size:11px !important;
+        line-height:1.35 !important;
+      }
+
+      /* Card headings and content */
+      #v31-workspace .v31-card{
+        padding:15px !important;
+      }
+      #v31-workspace .v31-card small,
+      #v31-workspace .v31-section-head small{
+        font-size:9px !important;
+      }
+      #v31-workspace .v31-card-head h3,
+      #v31-workspace .v31-section-head h3{
+        font-size:17px !important;
+        line-height:1.3 !important;
+        margin:4px 0 6px !important;
+      }
+      #v31-workspace .v31-card p{
+        font-size:13px !important;
+        line-height:1.6 !important;
+      }
+      #v31-workspace .v31-date{
+        font-size:10px !important;
+      }
+
+      /* Card buttons */
+      #v31-workspace .v31-card-head button,
+      #v31-workspace .v31-section-head button{
+        font-size:11px !important;
+        padding:8px 12px !important;
+        min-height:34px !important;
+      }
+
+      /* Tags */
+      #v31-workspace .v31-tags{
+        gap:6px !important;
+      }
+      #v31-workspace .v31-tags span{
+        font-size:10px !important;
+        padding:5px 9px !important;
+      }
+
+      /* Recent sessions mini rows */
+      #v31-workspace .v31-mini-row{
+        padding:10px 0 !important;
+      }
+      #v31-workspace .v31-mini-row b{
+        font-size:12px !important;
+      }
+      #v31-workspace .v31-mini-row small,
+      #v31-workspace .v31-mini-row span{
+        font-size:10px !important;
+      }
+
+      /* Goals */
+      #v31-workspace .v31-goal{
+        padding:10px 0 !important;
+        gap:10px !important;
+      }
+      #v31-workspace .v31-goal b{
+        font-size:12px !important;
+      }
+      #v31-workspace .v31-goal small{
+        font-size:10px !important;
+      }
+      #v31-workspace .v31-goal strong{
+        font-size:12px !important;
+      }
+      #v31-workspace .v31-bar{
+        height:7px !important;
+      }
+
+      /* Treatment plan details */
+      #v31-workspace .v31-plan-grid>div{
+        padding:12px !important;
+      }
+      #v31-workspace .v31-plan-grid small{
+        font-size:9px !important;
+      }
+      #v31-workspace .v31-plan-grid p{
+        font-size:13px !important;
+        line-height:1.55 !important;
+      }
+
+      /* Session list */
+      #v31-workspace .v31-session-list article{
+        grid-template-columns:110px 1fr auto !important;
+        padding:13px !important;
+        gap:13px !important;
+      }
+      #v31-workspace .v31-session-date b,
+      #v31-workspace .v31-session-list article>div:nth-child(2)>b{
+        font-size:13px !important;
+      }
+      #v31-workspace .v31-session-date span,
+      #v31-workspace .v31-session-list article>div:nth-child(2)>small{
+        font-size:10px !important;
+      }
+      #v31-workspace .v31-session-list p{
+        font-size:12px !important;
+        line-height:1.5 !important;
+      }
+      #v31-workspace .v31-actions button{
+        font-size:10px !important;
+        padding:8px 10px !important;
+      }
+
+      /* Reports */
+      #v31-workspace .v31-report-list>button{
+        padding:13px !important;
+      }
+      #v31-workspace .v31-report-list small{
+        font-size:9px !important;
+      }
+      #v31-workspace .v31-report-list b{
+        font-size:13px !important;
+      }
+      #v31-workspace .v31-report-list span{
+        font-size:10px !important;
+      }
+      #v31-workspace .v31-report-list strong{
+        font-size:12px !important;
+      }
+
+      /* Financial summary - V32 */
+      #v31-workspace .v32-financial-summary{
+        padding:15px !important;
+      }
+      #v31-workspace .v32-fin-head small{
+        font-size:9px !important;
+      }
+      #v31-workspace .v32-fin-head h3{
+        font-size:17px !important;
+        margin:4px 0 !important;
+      }
+      #v31-workspace .v32-fin-actions button{
+        font-size:11px !important;
+        padding:8px 12px !important;
+      }
+      #v31-workspace .v32-fin-kpis>div{
+        padding:12px !important;
+        min-height:70px !important;
+      }
+      #v31-workspace .v32-fin-kpis small{
+        font-size:9px !important;
+      }
+      #v31-workspace .v32-fin-kpis b{
+        font-size:16px !important;
+        margin-top:6px !important;
+      }
+
+      /* Clinical Timeline V29 when rendered inside workspace */
+      #v31-workspace .v29-timeline-top small{
+        font-size:9px !important;
+      }
+      #v31-workspace .v29-timeline-top h3{
+        font-size:17px !important;
+      }
+      #v31-workspace .v29-timeline-top button{
+        font-size:11px !important;
+        padding:8px 12px !important;
+      }
+      #v31-workspace .v29-time-head small{
+        font-size:9px !important;
+      }
+      #v31-workspace .v29-time-head h4{
+        font-size:14px !important;
+      }
+      #v31-workspace .v29-time-head>span{
+        font-size:10px !important;
+      }
+      #v31-workspace .v29-time-card p{
+        font-size:12px !important;
+        line-height:1.55 !important;
+      }
+      #v31-workspace .v29-pain-chip{
+        font-size:10px !important;
+        padding:5px 8px !important;
+      }
+      #v31-workspace .v29-time-actions button{
+        font-size:10px !important;
+        padding:7px 9px !important;
+      }
+
+      /* Empty states */
+      #v31-workspace .v31-empty,
+      #v31-workspace .v29-empty,
+      #v31-workspace .v30-empty{
+        font-size:12px !important;
+        line-height:1.5 !important;
+      }
+
+      /* General patient table readability too */
+      #page-patients table{
+        font-size:13px !important;
+      }
+      #page-patients th{
+        font-size:11px !important;
+        padding:13px 12px !important;
+      }
+      #page-patients td{
+        font-size:13px !important;
+        padding:14px 12px !important;
+      }
+      #page-patients td button{
+        font-size:11px !important;
+        padding:7px 10px !important;
+      }
+
+      /* Larger workspace spacing so text does not feel cramped */
+      #v31-workspace.open{
+        padding:18px !important;
+      }
+      #v31-workspace .v31-top{
+        padding:15px 17px !important;
+      }
+      #v31-workspace .v31-grid{
+        gap:12px !important;
+        margin-bottom:12px !important;
+      }
+      #v31-workspace .v31-kpis{
+        gap:10px !important;
+        margin-bottom:12px !important;
+      }
+
+      /* Responsive */
+      @media(max-width:900px){
+        #v31-workspace .v31-identity h2{
+          font-size:21px !important;
+        }
+        #v31-workspace .v31-tabs button{
+          font-size:11px !important;
+          padding:9px 12px !important;
+        }
+      }
+
+      @media(max-width:760px){
+        #v31-workspace{
+          font-size:13px !important;
+        }
+        #v31-workspace .v31-kpis{
+          grid-template-columns:1fr 1fr !important;
+        }
+        #v31-workspace .v32-fin-kpis{
+          grid-template-columns:1fr 1fr !important;
+        }
+        #v31-workspace .v31-session-list article{
+          grid-template-columns:1fr !important;
+        }
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',css);
+  }else{
+    css();
+  }
+})();
