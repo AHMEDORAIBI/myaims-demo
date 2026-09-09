@@ -7821,3 +7821,541 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
 })();
+
+
+/* =========================================================
+   myAIMS V29 - CLINICAL UPDATES + GOAL TRACKING
+   Adds:
+   - Quick patient clinical updates independent of appointments
+   - Treatment goals with status + progress %
+   - Clinical timeline inside Patient Journey
+   - Update from patient / session view
+   - Goal progress included in patient overview
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{ if(typeof window.saveState==='function') window.saveState(); };
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function ensure(){
+    if(!Array.isArray(S().clinicalUpdates)) S().clinicalUpdates=[];
+    if(!Array.isArray(S().treatmentGoals)) S().treatmentGoals=[];
+    save();
+  }
+
+  function patient(id){ return (S().patients||[]).find(p=>String(p.id)===String(id)); }
+  function pname(id){
+    const p=patient(id);
+    return p?(p.name||p.fullName||p.patientName||'Patient'):'Patient';
+  }
+  function planForPatient(id){
+    return (S().treatmentPlans||[])
+      .filter(x=>String(x.patientId)===String(id) && x.status!=='Closed')
+      .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0];
+  }
+
+  function updatesForPatient(id){
+    return (S().clinicalUpdates||[])
+      .filter(x=>String(x.patientId)===String(id))
+      .sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  }
+
+  function goalsForPatient(id){
+    return (S().treatmentGoals||[])
+      .filter(x=>String(x.patientId)===String(id))
+      .sort((a,b)=>Number(a.order||0)-Number(b.order||0));
+  }
+
+  function statusTone(s){
+    const x=String(s||'Active').toLowerCase();
+    if(x.includes('achiev')) return 'achieved';
+    if(x.includes('hold')) return 'hold';
+    if(x.includes('cancel')) return 'cancelled';
+    return 'active';
+  }
+
+  function formatDateTime(x){
+    if(!x) return '';
+    try{
+      return new Date(x).toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    }catch(e){ return x; }
+  }
+
+  function getJourneyPatient(){
+    return document.getElementById('v28-journey')?.dataset.patientId || '';
+  }
+
+  function addJourneyHeaderButtons(){
+    const journey=document.querySelector('#v28-journey.open .v28-head-actions');
+    if(!journey || journey.dataset.v29==='1') return;
+    journey.dataset.v29='1';
+    const pid=getJourneyPatient();
+    if(!pid) return;
+
+    const update=document.createElement('button');
+    update.className='v29-update-btn';
+    update.textContent='+ Clinical Update';
+    update.onclick=()=>openV29ClinicalUpdate(pid);
+    journey.prepend(update);
+
+    const goal=document.createElement('button');
+    goal.className='v29-goal-btn';
+    goal.textContent='+ Goal';
+    goal.onclick=()=>openV29GoalEditor(pid);
+    journey.prepend(goal);
+  }
+
+  function addJourneyTimelineTab(){
+    const nav=document.querySelector('#v28-journey.open .v28-tabs');
+    if(!nav || nav.querySelector('[data-v29-tab="timeline"]')) return;
+
+    const b=document.createElement('button');
+    b.dataset.v29Tab='timeline';
+    b.textContent='Clinical Timeline';
+    b.onclick=function(){
+      nav.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      const c=document.getElementById('v28-content');
+      const pid=getJourneyPatient();
+      if(c && pid) c.innerHTML=renderV29ClinicalTimeline(pid);
+    };
+    nav.appendChild(b);
+  }
+
+  function enhanceJourneyOverview(){
+    const c=document.getElementById('v28-content');
+    const journey=document.getElementById('v28-journey');
+    if(!c || !journey?.classList.contains('open')) return;
+
+    const pid=journey.dataset.patientId;
+    if(!pid || c.querySelector('.v29-goal-overview')) return;
+
+    const activeTab=[...journey.querySelectorAll('.v28-tabs button')].find(x=>x.classList.contains('active'));
+    if(!activeTab || activeTab.textContent.trim().toLowerCase()!=='overview') return;
+
+    const goals=goalsForPatient(pid);
+    const updates=updatesForPatient(pid);
+    const avg=goals.length ? Math.round(goals.reduce((s,g)=>s+Number(g.progress||0),0)/goals.length) : 0;
+
+    const block=document.createElement('section');
+    block.className='v29-goal-overview';
+    block.innerHTML=`
+      <div class="v29-overview-head">
+        <div>
+          <small>TREATMENT GOALS</small>
+          <h3>Goal Progress</h3>
+        </div>
+        <button onclick="openV29GoalEditor('${pid}')">+ Add Goal</button>
+      </div>
+
+      <div class="v29-goal-summary">
+        <div class="v29-goal-ring" style="--p:${avg}"><b>${avg}%</b></div>
+        <div class="v29-goal-summary-copy">
+          <b>${goals.length} goal${goals.length===1?'':'s'} tracked</b>
+          <span>${goals.filter(g=>statusTone(g.status)==='achieved').length} achieved</span>
+        </div>
+        <div class="v29-latest-update">
+          <small>LATEST UPDATE</small>
+          <b>${updates[0]?esc(updates[0].title||'Clinical Update'):'No updates yet'}</b>
+          <span>${updates[0]?formatDateTime(updates[0].createdAt):'Add the first patient update'}</span>
+        </div>
+      </div>
+
+      <div class="v29-goal-mini-list">
+        ${goals.slice(0,4).map(g=>`
+          <button onclick="openV29GoalEditor('${pid}','${g.id}')">
+            <div><b>${esc(g.title)}</b><small>${esc(g.status||'Active')}</small></div>
+            <span>${Number(g.progress||0)}%</span>
+          </button>`).join('') || `<div class="v29-empty">No treatment goals added yet.</div>`}
+      </div>`;
+    c.appendChild(block);
+  }
+
+  window.renderV29ClinicalTimeline=function(patientId){
+    ensure();
+
+    const updates=updatesForPatient(patientId);
+    const sessions=(S().sessionNotes||[])
+      .filter(x=>String(x.patientId)===String(patientId))
+      .map(x=>({
+        type:'session',
+        date:x.updatedAt||x.createdAt||x.date,
+        title:'Clinical Session',
+        body:x.subjective||x.response||'Clinical session documented.',
+        meta:`${x.date||''}${x.therapist?' · '+x.therapist:''}`,
+        pain:Number(x.painScore||0),
+        appointmentId:x.appointmentId
+      }));
+
+    const updateRows=updates.map(x=>({
+      type:'update',
+      date:x.createdAt,
+      title:x.title||'Clinical Update',
+      body:x.note||'',
+      meta:x.category||'Patient Update',
+      pain:x.painScore,
+      updateId:x.id
+    }));
+
+    const rows=[...updateRows,...sessions].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+
+    return `
+      <div class="v29-timeline-top">
+        <div>
+          <small>CLINICAL TIMELINE</small>
+          <h3>Patient Updates & Session History</h3>
+        </div>
+        <button onclick="openV29ClinicalUpdate('${patientId}')">+ Add Update</button>
+      </div>
+
+      <div class="v29-timeline">
+        ${rows.length?rows.map(r=>`
+          <article class="v29-time-item ${r.type}">
+            <div class="v29-time-dot"></div>
+            <div class="v29-time-card">
+              <div class="v29-time-head">
+                <div>
+                  <small>${esc(r.meta||'')}</small>
+                  <h4>${esc(r.title)}</h4>
+                </div>
+                <span>${formatDateTime(r.date)}</span>
+              </div>
+              <p>${esc(r.body||'')}</p>
+              ${r.pain!=null?`<div class="v29-pain-chip">Pain ${Number(r.pain)}/10</div>`:''}
+              <div class="v29-time-actions">
+                ${r.type==='session' && r.appointmentId?`<button onclick="previewV24SessionReport('${r.appointmentId}')">Open Session Report</button>`:''}
+                ${r.type==='update' && r.updateId?`<button onclick="openV29ClinicalUpdate('${patientId}','${r.updateId}')">Edit Update</button>`:''}
+              </div>
+            </div>
+          </article>`).join(''):`<div class="v29-empty">No clinical history available yet.</div>`}
+      </div>`;
+  };
+
+  window.openV29ClinicalUpdate=function(patientId,updateId=''){
+    ensure();
+
+    const old=(S().clinicalUpdates||[]).find(x=>String(x.id)===String(updateId))||{};
+    let r=document.getElementById('v29-update-modal');
+    if(!r){
+      r=document.createElement('div');
+      r.id='v29-update-modal';
+      document.body.appendChild(r);
+    }
+    r.className='open';
+    r.dataset.patientId=patientId;
+    r.dataset.updateId=updateId;
+
+    r.innerHTML=`
+      <div class="v29-back" onclick="closeV29ClinicalUpdate()"></div>
+      <section class="v29-modal">
+        <header>
+          <div>
+            <small>CLINICAL UPDATE</small>
+            <h3>${esc(pname(patientId))}</h3>
+            <p>Add a patient update without creating a new appointment.</p>
+          </div>
+          <button onclick="closeV29ClinicalUpdate()">×</button>
+        </header>
+
+        <div class="v29-form-grid">
+          <label class="wide">
+            <span>Update Title</span>
+            <input id="v29-up-title" value="${esc(old.title||'')}" placeholder="e.g. Improved mobility after home exercise">
+          </label>
+
+          <label>
+            <span>Category</span>
+            <select id="v29-up-category">
+              ${['General Update','Pain Update','Mobility','Functional Progress','Home Exercise','Caregiver Feedback','Medical Follow-up','Other'].map(x=>`<option ${old.category===x?'selected':''}>${x}</option>`).join('')}
+            </select>
+          </label>
+
+          <label>
+            <span>Pain Score</span>
+            <input id="v29-up-pain" type="number" min="0" max="10" value="${old.painScore??''}" placeholder="0 - 10">
+          </label>
+
+          <label class="wide">
+            <span>Clinical Update / Patient Status</span>
+            <textarea id="v29-up-note" rows="5" placeholder="Document the latest change in the patient's condition...">${esc(old.note||'')}</textarea>
+          </label>
+
+          <label class="wide">
+            <span>Next Action / Recommendation</span>
+            <textarea id="v29-up-next" rows="3" placeholder="Recommended next action, follow-up or change to treatment...">${esc(old.nextAction||'')}</textarea>
+          </label>
+        </div>
+
+        <footer>
+          <button onclick="closeV29ClinicalUpdate()">Cancel</button>
+          <button class="primary" onclick="saveV29ClinicalUpdate()">Save Update</button>
+        </footer>
+      </section>`;
+  };
+
+  window.closeV29ClinicalUpdate=function(){
+    const r=document.getElementById('v29-update-modal');
+    if(r) r.className='';
+  };
+
+  window.saveV29ClinicalUpdate=function(){
+    const r=document.getElementById('v29-update-modal');
+    if(!r) return;
+
+    const patientId=r.dataset.patientId;
+    const updateId=r.dataset.updateId;
+    let x=(S().clinicalUpdates||[]).find(a=>String(a.id)===String(updateId));
+
+    if(!x){
+      x={
+        id:'CU-'+Date.now(),
+        patientId,
+        createdAt:new Date().toISOString()
+      };
+      S().clinicalUpdates.push(x);
+    }
+
+    Object.assign(x,{
+      title:document.getElementById('v29-up-title')?.value.trim()||'Clinical Update',
+      category:document.getElementById('v29-up-category')?.value||'General Update',
+      painScore:document.getElementById('v29-up-pain')?.value!==''?Number(document.getElementById('v29-up-pain')?.value):null,
+      note:document.getElementById('v29-up-note')?.value.trim()||'',
+      nextAction:document.getElementById('v29-up-next')?.value.trim()||'',
+      updatedAt:new Date().toISOString()
+    });
+
+    save();
+    closeV29ClinicalUpdate();
+
+    if(document.getElementById('v28-journey')?.classList.contains('open')){
+      const c=document.getElementById('v28-content');
+      if(c) c.innerHTML=renderV29ClinicalTimeline(patientId);
+      const nav=document.querySelector('#v28-journey .v28-tabs');
+      nav?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.v29Tab==='timeline'));
+    }
+  };
+
+  window.openV29GoalEditor=function(patientId,goalId=''){
+    ensure();
+    const old=(S().treatmentGoals||[]).find(x=>String(x.id)===String(goalId))||{};
+    let r=document.getElementById('v29-goal-modal');
+    if(!r){
+      r=document.createElement('div');
+      r.id='v29-goal-modal';
+      document.body.appendChild(r);
+    }
+
+    r.className='open';
+    r.dataset.patientId=patientId;
+    r.dataset.goalId=goalId;
+
+    r.innerHTML=`
+      <div class="v29-back" onclick="closeV29GoalEditor()"></div>
+      <section class="v29-modal goal">
+        <header>
+          <div>
+            <small>TREATMENT GOAL</small>
+            <h3>${esc(pname(patientId))}</h3>
+            <p>Track measurable rehabilitation goals.</p>
+          </div>
+          <button onclick="closeV29GoalEditor()">×</button>
+        </header>
+
+        <div class="v29-form-grid">
+          <label class="wide">
+            <span>Goal</span>
+            <input id="v29-goal-title" value="${esc(old.title||'')}" placeholder="e.g. Walk independently for 10 minutes">
+          </label>
+
+          <label>
+            <span>Status</span>
+            <select id="v29-goal-status">
+              ${['Active','Achieved','On Hold','Cancelled'].map(x=>`<option ${old.status===x?'selected':''}>${x}</option>`).join('')}
+            </select>
+          </label>
+
+          <label>
+            <span>Target Date</span>
+            <input id="v29-goal-date" type="date" value="${esc(old.targetDate||'')}">
+          </label>
+
+          <label class="wide">
+            <span>Progress</span>
+            <div class="v29-goal-range">
+              <input id="v29-goal-progress" type="range" min="0" max="100" step="5" value="${Number(old.progress||0)}" oninput="document.getElementById('v29-goal-progress-val').textContent=this.value+'%'">
+              <b id="v29-goal-progress-val">${Number(old.progress||0)}%</b>
+            </div>
+          </label>
+
+          <label class="wide">
+            <span>Measurement / Criteria</span>
+            <textarea id="v29-goal-measure" rows="3" placeholder="How will achievement be measured?">${esc(old.measurement||'')}</textarea>
+          </label>
+
+          <label class="wide">
+            <span>Therapist Comment</span>
+            <textarea id="v29-goal-comment" rows="3" placeholder="Progress notes or relevant comments...">${esc(old.comment||'')}</textarea>
+          </label>
+        </div>
+
+        <footer>
+          ${goalId?`<button class="danger" onclick="deleteV29Goal()">Delete</button>`:''}
+          <span></span>
+          <button onclick="closeV29GoalEditor()">Cancel</button>
+          <button class="primary" onclick="saveV29Goal()">Save Goal</button>
+        </footer>
+      </section>`;
+  };
+
+  window.closeV29GoalEditor=function(){
+    const r=document.getElementById('v29-goal-modal');
+    if(r) r.className='';
+  };
+
+  window.saveV29Goal=function(){
+    const r=document.getElementById('v29-goal-modal');
+    if(!r) return;
+
+    const patientId=r.dataset.patientId;
+    const goalId=r.dataset.goalId;
+    let x=(S().treatmentGoals||[]).find(a=>String(a.id)===String(goalId));
+
+    if(!x){
+      x={
+        id:'TG-'+Date.now(),
+        patientId,
+        createdAt:new Date().toISOString(),
+        order:goalsForPatient(patientId).length
+      };
+      S().treatmentGoals.push(x);
+    }
+
+    Object.assign(x,{
+      title:document.getElementById('v29-goal-title')?.value.trim()||'Treatment Goal',
+      status:document.getElementById('v29-goal-status')?.value||'Active',
+      targetDate:document.getElementById('v29-goal-date')?.value||'',
+      progress:Number(document.getElementById('v29-goal-progress')?.value||0),
+      measurement:document.getElementById('v29-goal-measure')?.value.trim()||'',
+      comment:document.getElementById('v29-goal-comment')?.value.trim()||'',
+      updatedAt:new Date().toISOString()
+    });
+
+    save();
+    closeV29GoalEditor();
+
+    if(document.getElementById('v28-journey')?.classList.contains('open')){
+      const pid=getJourneyPatient();
+      const c=document.getElementById('v28-content');
+      if(c && pid) c.innerHTML=`
+        ${c.innerHTML}
+      `;
+      window.openV28Journey(pid,'overview');
+      setTimeout(()=>{ addJourneyHeaderButtons(); addJourneyTimelineTab(); enhanceJourneyOverview(); },80);
+    }
+  };
+
+  window.deleteV29Goal=function(){
+    const r=document.getElementById('v29-goal-modal');
+    if(!r) return;
+    const id=r.dataset.goalId;
+    if(!confirm('Delete this treatment goal?')) return;
+
+    S().treatmentGoals=(S().treatmentGoals||[]).filter(x=>String(x.id)!==String(id));
+    save();
+    closeV29GoalEditor();
+
+    const pid=getJourneyPatient();
+    if(pid){
+      window.openV28Journey(pid,'overview');
+      setTimeout(()=>{ addJourneyHeaderButtons(); addJourneyTimelineTab(); enhanceJourneyOverview(); },80);
+    }
+  };
+
+  function enhanceV24Session(){
+    const modal=document.querySelector('#v24-clinical-modal.open .v24-dialog');
+    if(!modal || modal.dataset.v29==='1') return;
+
+    const pText=modal.querySelector('.v24-head h2')?.textContent?.trim();
+    if(!pText) return;
+
+    const p=(S().patients||[]).find(x=>(x.name||x.fullName||x.patientName||'').trim()===pText);
+    if(!p) return;
+
+    modal.dataset.v29='1';
+    const tabs=modal.querySelector('.v24-tabs');
+    if(tabs){
+      const b=document.createElement('button');
+      b.textContent='Patient Updates';
+      b.onclick=function(){
+        modal.querySelectorAll('.v24-tab').forEach(x=>x.classList.remove('active'));
+        tabs.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+
+        let panel=modal.querySelector('#v29-session-updates');
+        if(!panel){
+          panel=document.createElement('div');
+          panel.id='v29-session-updates';
+          panel.className='v24-tab active';
+          modal.querySelector('.v24-footer').insertAdjacentElement('beforebegin',panel);
+        }else panel.classList.add('active');
+
+        const updates=updatesForPatient(p.id).slice(0,8);
+        panel.innerHTML=`
+          <div class="v29-session-update-head">
+            <div><small>PATIENT UPDATES</small><h3>Recent Clinical Changes</h3></div>
+            <button onclick="openV29ClinicalUpdate('${p.id}')">+ Add Update</button>
+          </div>
+          <div class="v29-session-update-list">
+            ${updates.length?updates.map(u=>`
+              <article><div><small>${esc(u.category||'Update')}</small><b>${esc(u.title||'Clinical Update')}</b><span>${formatDateTime(u.createdAt)}</span></div>${u.painScore!=null?`<em>${u.painScore}/10</em>`:''}<p>${esc(u.note||'')}</p></article>`).join(''):`<div class="v29-empty">No patient updates yet.</div>`}
+          </div>`;
+      };
+      tabs.appendChild(b);
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v29-css')) return;
+    const st=document.createElement('style');
+    st.id='v29-css';
+    st.textContent=`
+      #v29-update-modal,#v29-goal-modal{display:none}
+      #v29-update-modal.open,#v29-goal-modal.open{display:block;position:fixed;inset:0;z-index:100070}
+      .v29-back{position:absolute;inset:0;background:rgba(11,31,37,.48);backdrop-filter:blur(4px)}
+      .v29-modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,94vw);background:#fff;border-radius:18px;padding:18px;box-shadow:0 30px 90px rgba(0,0,0,.25)}
+      .v29-modal header{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e4ebed;padding-bottom:11px;margin-bottom:13px}.v29-modal header small{font-size:7px;color:#b48637;font-weight:900;letter-spacing:1.1px}.v29-modal header h3{margin:2px 0;color:#31545c}.v29-modal header p{margin:0;font-size:8px;color:#89979c}.v29-modal header button{border:0;background:#f1f4f5;width:30px;height:30px;border-radius:50%;font-size:18px}
+      .v29-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.v29-form-grid label{display:flex;flex-direction:column;gap:5px}.v29-form-grid label.wide{grid-column:1/-1}.v29-form-grid label>span{font-size:8px;font-weight:800;color:#60767c}.v29-form-grid input,.v29-form-grid textarea,.v29-form-grid select{border:1px solid #dbe5e7;border-radius:8px;padding:8px;font:inherit;font-size:9px;color:#36575f}
+      .v29-modal footer{display:flex;align-items:center;gap:7px;border-top:1px solid #e6edef;margin-top:13px;padding-top:11px}.v29-modal footer span{flex:1}.v29-modal footer button{border:1px solid #dbe5e7;background:#fff;border-radius:8px;padding:8px 10px;font-size:8px;font-weight:800}.v29-modal footer .primary{background:#c99a42;border-color:#c99a42;color:#fff}.v29-modal footer .danger{border-color:#efc8cd;color:#a84a54;background:#fff4f5}
+      .v29-goal-range{display:grid;grid-template-columns:1fr 48px;align-items:center;gap:10px;border:1px solid #dbe5e7;border-radius:9px;padding:8px}.v29-goal-range input{border:0;padding:0;accent-color:#174f5b}.v29-goal-range b{text-align:center;color:#31545c}
+      .v29-goal-overview{margin-top:11px;background:linear-gradient(135deg,#fff,#f4faf9);border:1px solid #dce8e9;border-radius:12px;padding:11px;box-shadow:0 5px 14px rgba(28,66,75,.04)}.v29-overview-head{display:flex;justify-content:space-between;align-items:center}.v29-overview-head small{font-size:7px;color:#b48637;font-weight:900}.v29-overview-head h3{margin:2px 0;color:#31545c}.v29-overview-head button{border:1px solid #d7e3e5;background:#fff;border-radius:8px;padding:6px 8px;font-size:7px;font-weight:800}
+      .v29-goal-summary{display:grid;grid-template-columns:70px 1fr 1.4fr;align-items:center;gap:10px;margin-top:10px}.v29-goal-ring{--p:0;width:60px;height:60px;border-radius:50%;background:conic-gradient(#174f5b calc(var(--p)*1%),#e8eff0 0);display:grid;place-items:center;position:relative}.v29-goal-ring:after{content:"";position:absolute;inset:6px;background:#fff;border-radius:50%}.v29-goal-ring b{z-index:1;color:#31545c;font-size:11px}.v29-goal-summary-copy b,.v29-goal-summary-copy span,.v29-latest-update small,.v29-latest-update b,.v29-latest-update span{display:block}.v29-goal-summary-copy b{font-size:9px;color:#31545c}.v29-goal-summary-copy span{font-size:7px;color:#89979c}.v29-latest-update{border-left:1px solid #e1e9eb;padding-left:10px}.v29-latest-update small{font-size:6px;color:#b48637;font-weight:900}.v29-latest-update b{font-size:8px;color:#36575f;margin:2px 0}.v29-latest-update span{font-size:6px;color:#8c999d}
+      .v29-goal-mini-list{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:9px}.v29-goal-mini-list button{display:grid;grid-template-columns:1fr auto;align-items:center;text-align:left;border:1px solid #e0e8ea;background:#fff;border-radius:8px;padding:7px}.v29-goal-mini-list b,.v29-goal-mini-list small{display:block}.v29-goal-mini-list b{font-size:8px;color:#36575f}.v29-goal-mini-list small{font-size:6px;color:#8a989d}.v29-goal-mini-list span{font-size:8px;font-weight:900;color:#174f5b}
+      .v29-timeline-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.v29-timeline-top small{font-size:7px;color:#b48637;font-weight:900}.v29-timeline-top h3{margin:2px 0;color:#31545c}.v29-timeline-top button{border:1px solid #c99a42;background:#fff8ea;color:#8e6829;border-radius:8px;padding:7px 9px;font-size:7px;font-weight:800}
+      .v29-timeline{position:relative;padding-left:24px}.v29-timeline:before{content:"";position:absolute;left:8px;top:4px;bottom:4px;width:2px;background:#dce7e9}.v29-time-item{position:relative;margin-bottom:10px}.v29-time-dot{position:absolute;left:-21px;top:13px;width:9px;height:9px;border-radius:50%;background:#174f5b;box-shadow:0 0 0 4px #edf5f6}.v29-time-item.update .v29-time-dot{background:#c99a42}.v29-time-card{background:#fff;border:1px solid #dfe8ea;border-radius:11px;padding:10px}.v29-time-head{display:flex;justify-content:space-between;gap:10px}.v29-time-head small{font-size:6px;color:#a17a35;font-weight:900}.v29-time-head h4{margin:2px 0;color:#31545c}.v29-time-head>span{font-size:6px;color:#8d9a9e}.v29-time-card p{font-size:8px;color:#60767c;line-height:1.45}.v29-pain-chip{display:inline-block;background:#fff1f2;color:#a64a55;border-radius:99px;padding:3px 6px;font-size:6px;font-weight:900}.v29-time-actions{display:flex;gap:5px;margin-top:7px}.v29-time-actions button{border:1px solid #dbe5e7;background:#fff;border-radius:7px;padding:5px 7px;font-size:6px;font-weight:800;color:#5f747a}
+      .v29-update-btn,.v29-goal-btn{background:#fff!important}.v29-session-update-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}.v29-session-update-head small{font-size:7px;color:#b48637;font-weight:900}.v29-session-update-head h3{margin:2px 0;color:#31545c}.v29-session-update-head button{border:1px solid #c99a42;background:#fff8ea;color:#8e6829;border-radius:8px;padding:6px 8px;font-size:7px;font-weight:800}.v29-session-update-list{display:grid;gap:6px}.v29-session-update-list article{display:grid;grid-template-columns:1fr auto;gap:6px;border:1px solid #dfe8ea;background:#fff;border-radius:9px;padding:8px}.v29-session-update-list article p{grid-column:1/-1;font-size:8px;color:#60767c;margin:2px 0}.v29-session-update-list small,.v29-session-update-list b,.v29-session-update-list span{display:block}.v29-session-update-list small{font-size:6px;color:#a07831;font-weight:900}.v29-session-update-list b{font-size:8px;color:#36575f}.v29-session-update-list span{font-size:6px;color:#8a989d}.v29-session-update-list em{font-style:normal;font-size:7px;background:#fff1f2;color:#a64a55;border-radius:99px;padding:4px 6px;height:max-content}
+      @media(max-width:720px){.v29-form-grid{grid-template-columns:1fr}.v29-form-grid label.wide{grid-column:auto}.v29-goal-summary{grid-template-columns:65px 1fr}.v29-latest-update{grid-column:1/-1;border-left:0;border-top:1px solid #e1e9eb;padding:8px 0 0}.v29-goal-mini-list{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function repair(){
+    addJourneyHeaderButtons();
+    addJourneyTimelineTab();
+    enhanceJourneyOverview();
+    enhanceV24Session();
+  }
+
+  function init(){
+    ensure();
+    css();
+    setTimeout(repair,300);
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v29repair);
+      window.__v29repair=setTimeout(repair,60);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
