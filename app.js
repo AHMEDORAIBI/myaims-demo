@@ -5892,3 +5892,412 @@ render();
   else init();
 
 })();
+
+
+/* =========================================================
+   myAIMS V25 - COLORED APPOINTMENTS UI
+   Implements the approved visual direction:
+   - Stronger visual hierarchy
+   - Color-coded appointment cards
+   - More distinct day cards
+   - Status legend
+   - Softer tinted panels instead of a white screen
+   - Highlighted selected day
+   - Available-slot cards
+   ========================================================= */
+(function(){
+
+  const STATUS_CLASS = {
+    'Scheduled':'scheduled',
+    'Confirmed':'confirmed',
+    'Checked In':'checked-in',
+    'In Session':'in-session',
+    'Completed':'completed',
+    'Cancelled':'cancelled',
+    'No Show':'no-show'
+  };
+
+  function statusClass(s){
+    return STATUS_CLASS[s] || String(s||'Scheduled').toLowerCase().replace(/\s+/g,'-');
+  }
+
+  function enhanceOrbitCards(){
+    document.querySelectorAll('#page-appointments .v22-day').forEach(day=>{
+      const small=day.querySelector('small');
+      const txt=(small?.textContent||'').trim().toLowerCase();
+      day.classList.remove('quiet','balanced','busy','full');
+      if(txt.includes('full')) day.classList.add('full');
+      else if(txt.includes('busy')) day.classList.add('busy');
+      else if(txt.includes('balanced')) day.classList.add('balanced');
+      else day.classList.add('quiet');
+    });
+  }
+
+  function enhanceAppointments(){
+    document.querySelectorAll('#page-appointments .v22-appt').forEach(card=>{
+      const onclick=card.getAttribute('onclick')||'';
+      const m=onclick.match(/openV22PatientCard\('([^']+)'\)/);
+      if(!m) return;
+
+      const id=m[1];
+      const db=window.state||window.appState||{};
+      const a=(db.appointments||[]).find(x=>String(x.id)===String(id));
+      if(!a) return;
+
+      card.classList.add('v25-appt');
+      Object.values(STATUS_CLASS).forEach(c=>card.classList.remove('v25-'+c));
+      card.classList.add('v25-'+statusClass(a.status));
+
+      // Treatment-area accent if available
+      const note=(db.sessionNotes||[]).find(n=>String(n.appointmentId)===String(id));
+      const visit=String(a.visitType||'').toLowerCase();
+      const areas=(note?.areas||[]).join(' ').toLowerCase();
+
+      let theme='general';
+      if(areas.includes('back') || visit.includes('back')) theme='back';
+      else if(areas.includes('shoulder') || visit.includes('shoulder')) theme='shoulder';
+      else if(areas.includes('knee') || visit.includes('knee')) theme='knee';
+      else if(areas.includes('neck') || visit.includes('neck')) theme='neck';
+      else if(visit.includes('assessment')) theme='assessment';
+      else if(visit.includes('pediatric')) theme='pediatric';
+      else if(visit.includes('post')) theme='postop';
+      card.dataset.v25Theme=theme;
+
+      const copy=card.querySelector('.v22-appt-copy');
+      if(copy && !copy.querySelector('.v25-meta')){
+        const meta=document.createElement('div');
+        meta.className='v25-meta';
+        meta.innerHTML=`
+          <span>${a.status||'Scheduled'}</span>
+          ${a.room?`<span>${a.room}</span>`:''}
+        `;
+        copy.appendChild(meta);
+      }
+    });
+  }
+
+  function addVisualHeader(){
+    const root=document.getElementById('v22-orbit-calendar');
+    if(!root || root.querySelector('.v25-viewbar')) return;
+
+    const hero=root.querySelector('.v22-hero');
+    if(!hero) return;
+
+    const viewbar=document.createElement('div');
+    viewbar.className='v25-viewbar';
+    viewbar.innerHTML=`
+      <div class="v25-period">
+        <button type="button" onclick="moveV22Week(-7)">‹</button>
+        <div>
+          <small>CALENDAR</small>
+          <b>${new Date(window.__v22Date+'T00:00:00').toLocaleDateString(undefined,{month:'long',year:'numeric'})}</b>
+        </div>
+        <button type="button" onclick="moveV22Week(7)">›</button>
+      </div>
+      <div class="v25-modes">
+        <button class="active">Day</button>
+        <button>Week</button>
+        <button>Month</button>
+        <button>Timeline</button>
+      </div>
+      <div class="v25-legend">
+        <span><i class="scheduled"></i>Scheduled</span>
+        <span><i class="confirmed"></i>Confirmed</span>
+        <span><i class="in-session"></i>In Progress</span>
+        <span><i class="completed"></i>Completed</span>
+        <span><i class="cancelled"></i>Cancelled</span>
+      </div>`;
+    hero.insertAdjacentElement('afterend',viewbar);
+  }
+
+  function addSummaryTitle(){
+    const command=document.querySelector('#page-appointments .v22-command');
+    if(!command || command.querySelector('.v25-day-summary')) return;
+
+    const db=window.state||window.appState||{};
+    const list=(db.appointments||[]).filter(a=>a.date===window.__v22Date && a.status!=='Cancelled');
+    const available=Math.max(0,10-list.length);
+
+    const sum=document.createElement('div');
+    sum.className='v25-day-summary';
+    sum.innerHTML=`
+      <div class="v25-calendar-icon">▦</div>
+      <div>
+        <b>${new Date(window.__v22Date+'T00:00:00').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</b>
+        <small>${list.length} appointments · ${available} available slots</small>
+      </div>`;
+    command.prepend(sum);
+  }
+
+  function tintSidePanels(){
+    document.querySelectorAll('#page-appointments .v22-insight,#page-appointments .v22-next').forEach((x,i)=>{
+      x.classList.add(i%2===0?'v25-panel-teal':'v25-panel-sand');
+    });
+  }
+
+  function addSlotLabels(){
+    document.querySelectorAll('#page-appointments .v22-empty-slot').forEach(slot=>{
+      if(slot.dataset.v25==='1') return;
+      slot.dataset.v25='1';
+      slot.addEventListener('mouseenter',()=>{
+        if(slot.querySelector('.v25-slot-label')) return;
+        const tag=document.createElement('span');
+        tag.className='v25-slot-label';
+        tag.textContent='+ Add Appointment';
+        slot.appendChild(tag);
+      });
+      slot.addEventListener('mouseleave',()=>{
+        slot.querySelector('.v25-slot-label')?.remove();
+      });
+    });
+  }
+
+  function repair(){
+    enhanceOrbitCards();
+    enhanceAppointments();
+    addVisualHeader();
+    addSummaryTitle();
+    tintSidePanels();
+    addSlotLabels();
+  }
+
+  function css(){
+    if(document.getElementById('v25-css')) return;
+    const st=document.createElement('style');
+    st.id='v25-css';
+    st.textContent=`
+      /* ===== Overall appointment page depth ===== */
+      #page-appointments{
+        background:
+          radial-gradient(circle at 82% 8%, rgba(201,154,66,.08), transparent 22%),
+          linear-gradient(180deg,#f7fbfc 0%,#f1f7f8 100%)!important;
+        border-radius:18px;
+        padding:18px!important;
+      }
+
+      #page-appointments .v22-hero{
+        background:linear-gradient(135deg,#ffffff 0%,#f4fafb 100%);
+        border:1px solid #dbe8eb;
+        border-radius:18px;
+        padding:16px 18px;
+        box-shadow:0 8px 24px rgba(28,72,82,.06);
+      }
+
+      #page-appointments .v22-hero h2{color:#0f4050!important}
+      #page-appointments .v22-hero p{color:#698087!important}
+
+      /* ===== New view bar ===== */
+      .v25-viewbar{
+        display:grid;
+        grid-template-columns:auto auto 1fr;
+        gap:14px;
+        align-items:center;
+        margin:12px 0 14px;
+        padding:10px 12px;
+        border:1px solid #d9e6e9;
+        background:rgba(255,255,255,.92);
+        border-radius:14px;
+        box-shadow:0 5px 18px rgba(31,72,80,.05);
+      }
+      .v25-period{display:flex;align-items:center;gap:10px}
+      .v25-period button{
+        width:33px;height:33px;border:1px solid #d6e2e5;background:#fff;
+        border-radius:9px;color:#264f59;font-size:18px;cursor:pointer
+      }
+      .v25-period small,.v25-period b{display:block}
+      .v25-period small{font-size:7px;color:#b48637;font-weight:900;letter-spacing:1px}
+      .v25-period b{font-size:11px;color:#244b55;margin-top:2px}
+      .v25-modes{display:flex;background:#edf4f5;border-radius:9px;padding:3px}
+      .v25-modes button{
+        border:0;background:transparent;border-radius:7px;padding:7px 11px;
+        font-size:8px;font-weight:800;color:#597078;cursor:pointer
+      }
+      .v25-modes button.active{background:#174f5b;color:#fff;box-shadow:0 4px 12px rgba(23,79,91,.18)}
+      .v25-legend{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+      .v25-legend span{display:flex;align-items:center;gap:4px;font-size:7px;color:#62777d}
+      .v25-legend i{width:8px;height:8px;border-radius:50%;display:block}
+      .v25-legend i.scheduled{background:#4c9be8}
+      .v25-legend i.confirmed{background:#3cba84}
+      .v25-legend i.in-session{background:#19a78d}
+      .v25-legend i.completed{background:#6a927d}
+      .v25-legend i.cancelled{background:#e76d78}
+
+      /* ===== Day orbit cards ===== */
+      #page-appointments .v22-day{
+        min-height:132px!important;
+        border:1px solid #dce7e9!important;
+        background:#fff!important;
+        box-shadow:0 6px 17px rgba(34,74,83,.055);
+      }
+      #page-appointments .v22-day.quiet{background:linear-gradient(180deg,#ffffff,#f8fbfc)!important}
+      #page-appointments .v22-day.balanced{background:linear-gradient(180deg,#f8fffc,#eef9f4)!important}
+      #page-appointments .v22-day.busy{background:linear-gradient(180deg,#fffdf6,#fff6df)!important}
+      #page-appointments .v22-day.full{background:linear-gradient(180deg,#fff9f9,#ffeded)!important}
+      #page-appointments .v22-day.active{
+        background:linear-gradient(145deg,#174f5b,#0f4050)!important;
+        border-color:#174f5b!important;
+        box-shadow:0 12px 28px rgba(23,79,91,.22)!important;
+      }
+      #page-appointments .v22-day.active *{color:#fff!important}
+      #page-appointments .v22-day.active .v22-ring:after{background:#174f5b!important}
+      #page-appointments .v22-day.active .v22-load{background:rgba(255,255,255,.22)!important}
+      #page-appointments .v22-day.active .v22-load i{background:#d8aa52!important}
+      #page-appointments .v22-day.today:not(.active){
+        box-shadow:inset 0 0 0 2px rgba(201,154,66,.35),0 6px 17px rgba(34,74,83,.055)
+      }
+
+      /* ===== Day summary ===== */
+      #page-appointments .v22-command{
+        background:linear-gradient(135deg,#ffffff,#f7fbfc)!important;
+        border:1px solid #dce8ea!important;
+        box-shadow:0 5px 16px rgba(34,74,83,.05);
+      }
+      .v25-day-summary{display:flex;align-items:center;gap:10px;margin-right:auto}
+      .v25-calendar-icon{
+        width:34px;height:34px;border-radius:10px;
+        background:#e8f3f6;color:#174f5b;display:grid;place-items:center;
+        font-size:16px;font-weight:900
+      }
+      .v25-day-summary b,.v25-day-summary small{display:block}
+      .v25-day-summary b{font-size:11px;color:#224a54}
+      .v25-day-summary small{font-size:8px;color:#799096;margin-top:2px}
+
+      /* ===== Main calendar area ===== */
+      #page-appointments .v22-flow-shell{
+        border:1px solid #d8e5e8!important;
+        background:#fff!important;
+        box-shadow:0 10px 30px rgba(23,65,74,.07);
+      }
+      #page-appointments .v22-flow-head{
+        background:linear-gradient(180deg,#f9fcfd,#f0f6f7)!important;
+      }
+      #page-appointments .v22-time-axis{background:#f8fbfc!important}
+      #page-appointments .v22-lane{
+        background:
+          linear-gradient(to bottom,transparent 75px,#eaf1f2 76px),
+          linear-gradient(180deg,#ffffff,#fbfdfd)!important;
+        background-size:100% 76px,100% 100%!important;
+      }
+
+      /* ===== Appointment cards - modern pastel ===== */
+      #page-appointments .v22-appt.v25-appt{
+        border-width:1px!important;
+        border-left-width:4px!important;
+        border-radius:11px!important;
+        box-shadow:0 5px 14px rgba(35,72,80,.08)!important;
+        transition:.18s ease!important;
+      }
+      #page-appointments .v22-appt.v25-appt:hover{
+        transform:translateY(-2px) scale(1.01)!important;
+        box-shadow:0 11px 24px rgba(35,72,80,.14)!important;
+      }
+
+      #page-appointments .v22-appt.v25-scheduled{
+        background:linear-gradient(135deg,#eef7ff,#dfefff)!important;
+        border-color:#67a9eb!important;
+      }
+      #page-appointments .v22-appt.v25-confirmed{
+        background:linear-gradient(135deg,#effbf5,#dcf5e8)!important;
+        border-color:#47b782!important;
+      }
+      #page-appointments .v22-appt.v25-checked-in{
+        background:linear-gradient(135deg,#fff9e9,#ffefc3)!important;
+        border-color:#d6a83e!important;
+      }
+      #page-appointments .v22-appt.v25-in-session{
+        background:linear-gradient(135deg,#eafaf7,#d4f2eb)!important;
+        border-color:#1aa58c!important;
+      }
+      #page-appointments .v22-appt.v25-completed{
+        background:linear-gradient(135deg,#f0f7f4,#e3efe9)!important;
+        border-color:#6a947d!important;
+      }
+      #page-appointments .v22-appt.v25-cancelled{
+        background:linear-gradient(135deg,#fff2f3,#ffe3e6)!important;
+        border-color:#e56b78!important;
+        opacity:.86
+      }
+      #page-appointments .v22-appt.v25-no-show{
+        background:linear-gradient(135deg,#fff0f7,#f6dfef)!important;
+        border-color:#b86aa0!important;
+      }
+
+      /* Treatment type subtle tone */
+      #page-appointments .v22-appt[data-v25-theme="back"]{box-shadow:inset 0 0 0 1px rgba(92,153,211,.10),0 5px 14px rgba(35,72,80,.08)!important}
+      #page-appointments .v22-appt[data-v25-theme="shoulder"] .v22-avatar{background:#458fca!important}
+      #page-appointments .v22-appt[data-v25-theme="knee"] .v22-avatar{background:#b18a39!important}
+      #page-appointments .v22-appt[data-v25-theme="neck"] .v22-avatar{background:#7e68ba!important}
+      #page-appointments .v22-appt[data-v25-theme="assessment"] .v22-avatar{background:#2b8e7d!important}
+      #page-appointments .v22-appt[data-v25-theme="pediatric"] .v22-avatar{background:#bc719e!important}
+      #page-appointments .v22-appt[data-v25-theme="postop"] .v22-avatar{background:#5c7f9f!important}
+
+      .v25-meta{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+      .v25-meta span{
+        font-size:6px!important;
+        padding:2px 5px;border-radius:99px;
+        background:rgba(255,255,255,.66);
+        color:#587078!important;
+        border:1px solid rgba(255,255,255,.7)
+      }
+
+      /* ===== Available slot hover ===== */
+      #page-appointments .v22-empty-slot:hover{
+        background:linear-gradient(90deg,rgba(23,79,91,.035),rgba(201,154,66,.07))!important;
+        outline:1px dashed rgba(23,79,91,.20);
+        outline-offset:-5px;
+      }
+      .v25-slot-label{
+        position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+        border:1px dashed #8ab2b8;background:rgba(255,255,255,.9);
+        color:#4b7078;border-radius:8px;padding:5px 9px;
+        font-size:7px;font-weight:800;pointer-events:none
+      }
+
+      /* ===== Side panels ===== */
+      #page-appointments .v22-insight.v25-panel-teal{
+        background:linear-gradient(145deg,#f2faf9,#e7f5f2)!important;
+        border-color:#cfe7e1!important;
+      }
+      #page-appointments .v22-next.v25-panel-sand{
+        background:linear-gradient(145deg,#fffdf8,#fbf4e7)!important;
+        border-color:#eadfc8!important;
+      }
+      #page-appointments .v22-insight,
+      #page-appointments .v22-next{
+        box-shadow:0 8px 22px rgba(33,71,80,.06)
+      }
+
+      /* ===== Main page title ===== */
+      #page-appointments > .page-title{
+        background:transparent!important;
+      }
+
+      /* ===== Responsive ===== */
+      @media(max-width:1100px){
+        .v25-viewbar{grid-template-columns:1fr}
+        .v25-legend{justify-content:flex-start}
+      }
+      @media(max-width:700px){
+        #page-appointments{padding:10px!important}
+        .v25-modes{overflow:auto}
+        .v25-legend{display:none}
+        .v25-day-summary{display:none}
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function init(){
+    css();
+    setTimeout(repair,250);
+    const obs=new MutationObserver(()=>{
+      clearTimeout(window.__v25repair);
+      window.__v25repair=setTimeout(repair,60);
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+
+})();
