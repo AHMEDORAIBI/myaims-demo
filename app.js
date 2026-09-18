@@ -11851,3 +11851,135 @@ body.myaims-ar #v57-comments{direction:rtl;text-align:right}@media(max-width:100
   `;
   document.head.appendChild(css);
 })();
+
+/* =========================================================
+   myAIMS V59 — PROFESSIONAL CLINICAL UI + 3D BODY VIEW
+   Code-only upgrade. Built on V58 true entry fix.
+   ========================================================= */
+(function(){
+const T=(en,ar)=>(document.documentElement.dir==="rtl"||document.documentElement.lang==="ar"||document.body.classList.contains("myaims-ar"))?ar:en;
+
+/* ---------- Professional icons for the V55 clinical launcher ---------- */
+const ICONS={
+ assessment:`<svg viewBox="0 0 24 24"><path d="M12 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM9 8h6l2 5-2 1-1-3v10h-2v-6h-1v6H9V11l-1 3-2-1 3-5Z"/></svg>`,
+ plan:`<svg viewBox="0 0 24 24"><path d="M7 3h10v3h3v15H4V6h3V3Zm2 2v2h6V5H9Zm0 6v2h6v-2H9Zm0 4v2h6v-2H9Z"/></svg>`,
+ note:`<svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5V3Zm9 2v3h3l-3-3ZM8 11h8v2H8v-2Zm0 4h8v2H8v-2Z"/></svg>`,
+ progress:`<svg viewBox="0 0 24 24"><path d="M4 19h16v2H2V5h2v14Zm3-3 4-4 3 2 5-7 2 1-6 9-4-2-3 3-1-2Z"/></svg>`,
+ hep:`<svg viewBox="0 0 24 24"><path d="M3 9h3V6h2v12H6v-3H3V9Zm15-3v3h3v6h-3v3h-2V6h2ZM9 11h6v2H9v-2Z"/></svg>`,
+ history:`<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 1-7.4 5H2l3.5-4L9 9H6.7A6 6 0 1 0 12 6v4l4 2-1 1.7-5-2.7V4h2Z"/></svg>`
+};
+function polishLauncher(){
+ const shell=document.querySelector("#v55-clinical-launcher"); if(!shell)return;
+ shell.querySelectorAll("[data-v55]").forEach(b=>{
+   const k=b.dataset.v55, i=b.querySelector("i");
+   if(i&&ICONS[k]){i.innerHTML=ICONS[k];i.classList.add("v59-icon")}
+ });
+ const top=shell.querySelector(".v55-top");
+ if(top&&!top.querySelector(".v59-session-actions")){
+   const d=document.createElement("div");d.className="v59-session-actions";
+   d.innerHTML=`<button type="button" data-v59-draft>▣ ${T("Save Draft","حفظ مسودة")}</button><button type="button" data-v59-preview>◉ ${T("Preview Note","معاينة التقرير")}</button>`;
+   top.insertBefore(d,top.querySelector(".v55-close"));
+ }
+}
+const oldOpen=window.openV55ClinicalLauncher;
+if(typeof oldOpen==="function") window.openV55ClinicalLauncher=function(){
+ oldOpen.apply(this,arguments); setTimeout(polishLauncher,0);
+};
+
+/* ---------- V59 professional Pain / Treatment workspace ---------- */
+function ctx(){
+ const sh=document.querySelector("#v55-clinical-launcher"),db=window.state||window.appState||{};
+ return {p:(db.patients||[]).find(x=>String(x.id)===String(sh?.dataset.patientId))||{},
+ a:(db.appointments||[]).find(x=>String(x.id)===String(sh?.dataset.appointmentId))||{}};
+}
+let mode="pain", view="front", selected={};
+const quick=["Neck","Shoulder","Upper Back","Lower Back","Elbow","Wrist","Hip","Knee","Ankle"];
+const points={
+ "Neck":[50,18],"Shoulder":[36,25],"Upper Back":[50,32],"Lower Back":[50,48],
+ "Elbow":[27,43],"Wrist":[22,58],"Hip":[42,56],"Knee":[41,75],"Ankle":[41,92]
+};
+function body3d(){
+ return `<div class="v59-body-stage">
+   <div class="v59-body-shadow"></div>
+   <div class="v59-human ${view}">
+     <div class="v59-head"></div><div class="v59-neck"></div>
+     <div class="v59-torso"><span class="v59-muscle m1"></span><span class="v59-muscle m2"></span><span class="v59-muscle m3"></span><span class="v59-muscle m4"></span></div>
+     <div class="v59-arm left"><i></i><b></b></div><div class="v59-arm right"><i></i><b></b></div>
+     <div class="v59-pelvis"></div><div class="v59-leg left"><i></i><b></b></div><div class="v59-leg right"><i></i><b></b></div>
+     ${Object.entries(points).map(([n,[x,y]])=>`<button type="button" class="v59-hot ${selected[n]?"on":""}" data-body="${n}" style="left:${x}%;top:${y}%">${selected[n]||"+"}</button>`).join("")}
+   </div>
+   <div class="v59-depth-label">3D</div>
+ </div>`;
+}
+function open3d(){
+ let o=document.getElementById("v59-pain3d");
+ if(!o){o=document.createElement("div");o.id="v59-pain3d";document.body.appendChild(o)}
+ render3d();o.classList.add("open");
+}
+function render3d(){
+ const o=document.getElementById("v59-pain3d"),{p,a}=ctx(); if(!o)return;
+ const list=Object.entries(selected);
+ o.innerHTML=`<section>
+ <header><div><small>${T("MYAIMS · CLINICAL ASSESSMENT","أهدافي · التقييم السريري")}</small><h2>${T("Pain & Treatment Areas","مناطق الألم والعلاج")}</h2><p>${p.name||""} · ${a.date||""} ${a.time||""}</p></div><div class="v59-head-actions"><button data-v59-save>▣ ${T("Save Draft","حفظ مسودة")}</button><button data-v59-close>×</button></div></header>
+ <div class="v59-tabs"><button class="${mode==="pain"?"active":""}" data-mode="pain">${T("Pain Map","خريطة الألم")}</button><button class="${mode==="treatment"?"active":""}" data-mode="treatment">${T("Treatment Map","خريطة العلاج")}</button></div>
+ <main>
+   <aside class="v59-tools"><small>${T("QUICK AREA SELECTION","اختيار سريع للمناطق")}</small><h3>${T("Select an area","حدد المنطقة")}</h3><div class="v59-quick">${quick.map(n=>`<button data-area="${n}" class="${selected[n]?"on":""}"><span>${areaIcon(n)}</span>${n}</button>`).join("")}</div><button class="v59-clear" data-clear>⌫ ${T("Clear All Areas","مسح جميع المناطق")}</button></aside>
+   <section class="v59-viewer">
+    <div class="v59-viewbar"><div><button class="active">${T("3D View","عرض 3D")}</button><button data-view="front" class="${view==="front"?"on":""}">${T("Front","أمامي")}</button><button data-view="back" class="${view==="back"?"on":""}">${T("Back","خلفي")}</button></div><span>${T("Tap the body to select an area","اضغط على الجسم لتحديد المنطقة")}</span></div>
+    ${body3d()}
+    <div class="v59-legend"><span><i class="pain"></i>${T("Pain","ألم")}</span><span><i class="treat"></i>${T("Treatment","علاج")}</span><span>↻ ${T("Front / Back anatomical view","عرض تشريحي أمامي / خلفي")}</span></div>
+   </section>
+   <aside class="v59-summary"><div class="v59-sumhead"><div><small>${T("SELECTED AREAS","المناطق المحددة")}</small><h3>${list.length} ${T("Areas","مناطق")}</h3></div><button data-clear>${T("Clear","مسح")}</button></div>
+    <div class="v59-selected">${list.length?list.map(([n,v])=>`<article><i class="${mode}"></i><div><b>${n}</b><small>${T("Pain Level","شدة الألم")}</small><input type="range" min="1" max="10" value="${v}" data-range="${n}"></div><strong>${v}/10</strong><button data-remove="${n}">×</button></article>`).join(""):`<div class="v59-empty">${T("Select an area from the body or quick list.","حدد منطقة من الجسم أو من القائمة السريعة.")}</div>`}</div>
+    <section class="v59-overall"><small>${T("OVERALL PAIN LEVEL","مستوى الألم العام")}</small><div><b>${overall()}/10</b><span><i style="width:${overall()*10}%"></i></span></div></section>
+    <section class="v59-desc"><small>${T("PAIN DESCRIPTION","وصف الألم")}</small><div>${["Aching","Sharp","Stiff","Burning","Numbness","Tingling"].map(x=>`<button>${x}</button>`).join("")}</div></section>
+    <label class="v59-notes">${T("Additional Notes","ملاحظات إضافية")}<textarea placeholder="${T("Pain location, triggers or patterns...","موقع الألم، المحفزات أو النمط...")}"></textarea></label>
+   </aside>
+ </main>
+ <footer><button data-v59-back>← ${T("Back","رجوع")}</button><div><span class="done">1</span>${T("Assessment","التقييم")}<i></i><span>2</span>${T("Treatment Plan","الخطة العلاجية")}<i></i><span>3</span>${T("Documentation","التوثيق")}<i></i><span>4</span>${T("Review","المراجعة")}</div><button class="next" data-v59-next>${T("Next","التالي")} →</button></footer>
+ </section>`;
+ bind3d();
+}
+function overall(){const a=Object.values(selected);return a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):0}
+function areaIcon(n){return ({Neck:"♙",Shoulder:"⌁","Upper Back":"♢","Lower Back":"♧",Elbow:"⌞",Wrist:"✋",Hip:"◇",Knee:"♧",Ankle:"⌟"})[n]||"◎"}
+function toggle(n){selected[n]=selected[n]?Math.min(10,selected[n]+1):Math.max(1,overall()||4);render3d()}
+function bind3d(){
+ const o=document.getElementById("v59-pain3d");
+ o.querySelector("[data-v59-close]").onclick=()=>o.classList.remove("open");
+ o.querySelector("[data-v59-back]").onclick=()=>o.classList.remove("open");
+ o.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{mode=b.dataset.mode;render3d()});
+ o.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>{view=b.dataset.view;render3d()});
+ o.querySelectorAll("[data-area],[data-body]").forEach(b=>b.onclick=()=>toggle(b.dataset.area||b.dataset.body));
+ o.querySelectorAll("[data-clear]").forEach(b=>b.onclick=()=>{selected={};render3d()});
+ o.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{delete selected[b.dataset.remove];render3d()});
+ o.querySelectorAll("[data-range]").forEach(r=>r.oninput=()=>{selected[r.dataset.range]=+r.value;render3d()});
+ o.querySelector("[data-v59-save]").onclick=save3d;
+ o.querySelector("[data-v59-next]").onclick=()=>{save3d();o.classList.remove("open")};
+}
+function save3d(){
+ const db=window.state||window.appState||{}, {p,a}=ctx();db.painAssessments=db.painAssessments||[];
+ const rec={id:"PA-"+Date.now(),patientId:p.id||"",appointmentId:a.id||"",date:a.date||new Date().toISOString().slice(0,10),mode,view,overallPain:overall(),areas:Object.entries(selected).map(([area,intensity])=>({area,intensity})),updatedAt:new Date().toISOString()};
+ const ix=db.painAssessments.findIndex(x=>a.id&&String(x.appointmentId)===String(a.id));if(ix>=0)db.painAssessments[ix]=rec;else db.painAssessments.push(rec);
+ try{window.saveState&&window.saveState()}catch(e){}
+}
+
+/* Route the V55 Assessment card AND V55/V56 pain entry to V59 */
+document.addEventListener("click",function(e){
+ const b=e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]');
+ if(!b)return;e.preventDefault();e.stopImmediatePropagation();open3d();
+},true);
+
+const css=document.createElement("style");css.textContent=`
+.v59-icon svg{width:29px;height:29px;fill:currentColor}.v59-session-actions{margin-inline-start:auto;display:flex;gap:7px}.v59-session-actions button{height:36px!important;padding:0 12px!important;border:1px solid rgba(255,255,255,.22)!important;background:rgba(255,255,255,.09)!important;color:#fff!important;border-radius:8px!important;font-size:9px!important}.v55-top{gap:9px}
+#v59-pain3d{display:none;position:fixed;inset:0;z-index:600000;background:#eef4f5;padding:0}#v59-pain3d.open{display:block}#v59-pain3d>section{height:100vh;display:grid;grid-template-rows:auto auto 1fr auto;overflow:hidden;background:#f5f8f8}
+#v59-pain3d header{display:flex;align-items:center;background:#fff;border-bottom:1px solid #dbe6e8;padding:12px 22px}#v59-pain3d header>div:first-child{flex:1}#v59-pain3d header small,.v59-tools>small,.v59-sumhead small,.v59-overall small,.v59-desc small{font-size:8px;font-weight:900;letter-spacing:.08em;color:#b17c2b}#v59-pain3d header h2{font-size:24px!important;color:#173f49!important;margin:2px 0!important}#v59-pain3d header p{font-size:9px!important;color:#789095;margin:0}.v59-head-actions{display:flex;gap:7px}.v59-head-actions button{height:38px!important;border:1px solid #d7e3e5!important;background:#fff!important;border-radius:8px!important;padding:0 12px!important;color:#31565e!important}.v59-head-actions [data-v59-close]{width:38px;padding:0!important;font-size:20px!important}
+.v59-tabs{display:flex;justify-content:center;background:#fff;border-bottom:1px solid #dbe6e8;padding:7px}.v59-tabs button{height:34px!important;min-width:130px!important;border:0!important;background:#edf3f3!important;font-size:9px!important;font-weight:900!important}.v59-tabs button:first-child{border-radius:8px 0 0 8px!important}.v59-tabs button:last-child{border-radius:0 8px 8px 0!important}.v59-tabs button.active{background:#17606a!important;color:#fff!important}
+#v59-pain3d main{min-height:0;display:grid;grid-template-columns:250px minmax(420px,1fr) 310px;gap:10px;padding:10px 16px;overflow:hidden}.v59-tools,.v59-viewer,.v59-summary{background:#fff;border:1px solid #dbe6e8;border-radius:13px;min-height:0}.v59-tools{padding:14px;overflow:auto}.v59-tools h3,.v59-sumhead h3{font-size:15px!important;color:#173f49!important;margin:2px 0 12px!important}.v59-quick{display:grid;grid-template-columns:1fr 1fr;gap:7px}.v59-quick button{min-height:67px!important;border:1px solid #dce6e8!important;background:#f8fbfb!important;border-radius:10px!important;color:#466970!important;font-size:9px!important}.v59-quick button span{display:block;font-size:22px;color:#286b77;margin-bottom:4px}.v59-quick button.on{border-color:#2879d0!important;background:#eef6ff!important;color:#1f61a7!important}.v59-clear{width:100%;height:36px!important;margin-top:10px;border:1px solid #dbe5e6!important;background:#fff!important;border-radius:8px!important;font-size:9px!important}
+.v59-viewer{position:relative;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden;background:radial-gradient(circle at 50% 42%,#fff 0,#eef5f5 55%,#e4eeee 100%)}.v59-viewbar{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(255,255,255,.88);border-bottom:1px solid #dbe6e8;z-index:3}.v59-viewbar button{height:30px!important;border:0!important;background:#f0f5f5!important;padding:0 10px!important;font-size:8px!important}.v59-viewbar button.active{background:#17606a!important;color:#fff!important;border-radius:7px!important}.v59-viewbar button.on{color:#17606a!important;font-weight:900!important}.v59-viewbar>span{font-size:8px;color:#7b9195}
+.v59-body-stage{position:relative;min-height:0;perspective:900px;overflow:hidden}.v59-human{position:absolute;left:50%;top:48%;width:210px;height:465px;transform:translate(-50%,-50%) rotateY(-8deg);filter:drop-shadow(0 18px 16px rgba(26,62,67,.18));transition:.35s}.v59-human.back{transform:translate(-50%,-50%) rotateY(188deg)}.v59-head{position:absolute;left:83px;top:3px;width:45px;height:55px;border-radius:48% 48% 45% 45%;background:linear-gradient(90deg,#b86f59,#e5a286 47%,#a95e4c);box-shadow:inset 8px 0 10px rgba(83,31,23,.18),inset -5px 0 8px rgba(255,222,201,.35)}.v59-neck{position:absolute;left:93px;top:50px;width:26px;height:32px;background:linear-gradient(90deg,#a95c4a,#db9074,#a45847)}.v59-torso{position:absolute;left:52px;top:75px;width:108px;height:170px;clip-path:polygon(18% 0,82% 0,100% 35%,77% 100%,23% 100%,0 35%);background:linear-gradient(90deg,#9e5144,#dc8a70 18%,#f0b096 48%,#d47b65 75%,#93493e);box-shadow:inset 15px 0 16px rgba(77,24,19,.2),inset -10px 0 13px rgba(255,215,194,.25)}.v59-muscle{position:absolute;border:1px solid rgba(103,44,34,.35);border-radius:50%}.m1{left:12px;top:25px;width:40px;height:45px}.m2{right:12px;top:25px;width:40px;height:45px}.m3{left:28px;top:80px;width:24px;height:65px}.m4{right:28px;top:80px;width:24px;height:65px}.v59-pelvis{position:absolute;left:69px;top:228px;width:73px;height:52px;border-radius:18px 18px 28px 28px;background:linear-gradient(90deg,#9c5145,#df8f75,#a65345)}.v59-arm{position:absolute;top:87px;width:34px;height:190px;transform-origin:top}.v59-arm.left{left:31px;transform:rotate(7deg)}.v59-arm.right{right:31px;transform:rotate(-7deg)}.v59-arm i,.v59-arm b{display:block;background:linear-gradient(90deg,#9d5043,#e49a7e,#a65748);border-radius:45%;border:1px solid rgba(105,45,36,.18)}.v59-arm i{height:96px}.v59-arm b{height:94px;width:27px;margin:0 auto}.v59-leg{position:absolute;top:267px;width:47px;height:193px}.v59-leg.left{left:61px}.v59-leg.right{right:61px}.v59-leg i,.v59-leg b{display:block;background:linear-gradient(90deg,#9d5043,#e59c80,#a65748);border-radius:45%;border:1px solid rgba(105,45,36,.18)}.v59-leg i{height:101px}.v59-leg b{height:92px;width:34px;margin:auto}.v59-hot{position:absolute!important;z-index:6;width:25px!important;height:25px!important;min-height:25px!important;border-radius:50%!important;border:2px solid #17606a!important;background:#fff!important;color:#17606a!important;padding:0!important;font-size:9px!important;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.18)}.v59-hot.on{background:#ef454e!important;border-color:#fff!important;color:#fff!important}.v59-body-shadow{position:absolute;left:50%;bottom:4%;width:180px;height:25px;transform:translateX(-50%);border-radius:50%;background:rgba(24,64,70,.12);filter:blur(8px)}.v59-depth-label{position:absolute;right:12px;bottom:12px;background:#17606a;color:#fff;border-radius:99px;padding:5px 9px;font-size:8px;font-weight:900}.v59-legend{display:flex;justify-content:center;gap:15px;padding:7px;font-size:8px;color:#688287}.v59-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-inline-end:4px}.v59-legend .pain{background:#ef454e}.v59-legend .treat{background:#3188df}
+.v59-summary{padding:12px;overflow:auto}.v59-sumhead{display:flex;justify-content:space-between}.v59-sumhead button{border:0!important;background:none!important;color:#c64e54!important;font-size:8px!important}.v59-selected{display:grid;gap:7px}.v59-selected article{display:grid;grid-template-columns:8px 1fr 40px 22px;gap:8px;align-items:center;border:1px solid #e0e8e9;border-radius:9px;padding:8px}.v59-selected article>i{height:40px;border-radius:5px;background:#ef454e}.v59-selected article>i.treatment{background:#3188df}.v59-selected b,.v59-selected small{display:block}.v59-selected b{font-size:9px;color:#31565e}.v59-selected small{font-size:7px;color:#87999d}.v59-selected input{width:100%;height:3px}.v59-selected strong{font-size:9px;color:#31565e}.v59-selected article>button{border:0!important;background:none!important;color:#c65055!important;padding:0!important}.v59-empty{padding:20px 8px;color:#82969a;font-size:9px;text-align:center}.v59-overall,.v59-desc{margin-top:10px;border-top:1px solid #e4ebec;padding-top:10px}.v59-overall>div{display:flex;align-items:center;gap:10px;margin-top:5px}.v59-overall b{font-size:21px;color:#173f49}.v59-overall span{height:6px;flex:1;background:#e8eeee;border-radius:9px;overflow:hidden}.v59-overall i{display:block;height:100%;background:#ef4c52}.v59-desc>div{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:7px}.v59-desc button{height:30px!important;border:1px solid #dce6e7!important;background:#f8fbfb!important;border-radius:7px!important;font-size:7.5px!important}.v59-notes{display:block;margin-top:10px;font-size:8px;font-weight:850;color:#31565e}.v59-notes textarea{display:block;width:100%;min-height:70px;margin-top:5px;border:1px solid #d7e3e4;border-radius:8px;padding:8px;font:inherit}
+#v59-pain3d footer{display:flex;align-items:center;background:#fff;border-top:1px solid #dbe6e8;padding:8px 18px}#v59-pain3d footer>button{height:36px!important;border:1px solid #d7e3e4!important;background:#fff!important;border-radius:8px!important;padding:0 14px!important;font-size:9px!important}#v59-pain3d footer>div{margin:auto;display:flex;align-items:center;gap:7px;font-size:7.5px;color:#70878c}#v59-pain3d footer span{width:23px;height:23px;border-radius:50%;background:#e7eeee;display:grid;place-items:center;font-weight:900}#v59-pain3d footer span.done{background:#17606a;color:#fff}#v59-pain3d footer i{width:30px;height:1px;background:#d7e3e4}#v59-pain3d footer .next{background:#17606a!important;color:#fff!important;border-color:#17606a!important}
+body.myaims-ar #v59-pain3d{direction:rtl;text-align:right}
+@media(max-width:1050px){#v59-pain3d main{grid-template-columns:190px 1fr 260px}.v59-human{transform:translate(-50%,-50%) scale(.86) rotateY(-8deg)}.v59-human.back{transform:translate(-50%,-50%) scale(.86) rotateY(188deg)}}@media(max-width:760px){#v59-pain3d main{overflow:auto;grid-template-columns:1fr}.v59-tools,.v59-summary{overflow:visible}.v59-viewer{min-height:600px}#v59-pain3d footer>div{display:none}}
+`;document.head.appendChild(css);
+})();
