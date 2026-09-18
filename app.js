@@ -11275,3 +11275,272 @@ render();
    workspace replacement in this baseline.
    ========================================================= */
 window.MYAIMS_BUILD = "V54 CLEAN CORE";
+
+/* =========================================================
+   myAIMS V55 — CLEAN CLINICAL LAUNCHER
+   Built directly on V54 Clean Core.
+   No MutationObserver. No hidden-button click routing.
+   Does not replace or move legacy clinical DOM.
+   ========================================================= */
+(function () {
+  const isAR = () => document.documentElement.dir === "rtl" ||
+    document.documentElement.lang === "ar" ||
+    document.body.classList.contains("myaims-ar");
+  const tr = (en, ar) => isAR() ? ar : en;
+  const state = () => window.state || window.appState || {};
+
+  function patientByAppointment(appt) {
+    const db = state();
+    return (db.patients || []).find(p =>
+      String(p.id || "") === String(appt?.patientId || "") ||
+      String(p.name || "") === String(appt?.patient || "")
+    ) || {};
+  }
+
+  function latestAppointmentFor(patient) {
+    const db = state();
+    return (db.appointments || [])
+      .filter(a => String(a.patientId || "") === String(patient.id || "") ||
+                   String(a.patient || "") === String(patient.name || ""))
+      .sort((a,b) => String((b.date||"")+(b.time||"")).localeCompare(String((a.date||"")+(a.time||""))))[0] || {};
+  }
+
+  function ensureShell() {
+    let shell = document.getElementById("v55-clinical-launcher");
+    if (shell) return shell;
+    shell = document.createElement("div");
+    shell.id = "v55-clinical-launcher";
+    shell.innerHTML = `
+      <div class="v55-shell">
+        <header class="v55-top">
+          <div>
+            <small>${tr("MYAIMS · CLINICAL SESSION","أهدافي · الجلسة السريرية")}</small>
+            <h1>${tr("Clinical Session Workspace","مساحة عمل الجلسة السريرية")}</h1>
+            <p>${tr("Choose one clinical task. Each task opens as a focused large workspace.",
+                    "اختر مهمة سريرية واحدة. كل مهمة تفتح في مساحة عمل كبيرة وواضحة.")}</p>
+          </div>
+          <button type="button" class="v55-close" aria-label="Close">×</button>
+        </header>
+
+        <section class="v55-patient"></section>
+
+        <main class="v55-main">
+          <div class="v55-title">
+            <div>
+              <small>${tr("SESSION WORKFLOW","مسار الجلسة")}</small>
+              <h2>${tr("What do you want to work on?","ما القسم الذي تريد العمل عليه؟")}</h2>
+            </div>
+            <span>${tr("No long scrolling","بدون تمرير طويل")}</span>
+          </div>
+
+          <div class="v55-grid">
+            <button type="button" data-v55="assessment" class="v55-card featured">
+              <i>◉</i><div><b>${tr("Assessment & Pain Map","التقييم وخريطة الألم")}</b>
+              <p>${tr("Pain areas, intensity and clinical assessment","مناطق الألم، شدته والتقييم السريري")}</p></div><em>›</em>
+            </button>
+            <button type="button" data-v55="plan" class="v55-card">
+              <i>✚</i><div><b>${tr("Treatment Plan","الخطة العلاجية")}</b>
+              <p>${tr("Goals, planned sessions and treatment strategy","الأهداف والجلسات المخططة واستراتيجية العلاج")}</p></div><em>›</em>
+            </button>
+            <button type="button" data-v55="note" class="v55-card">
+              <i>▤</i><div><b>${tr("Session Documentation","توثيق الجلسة")}</b>
+              <p>${tr("Clinical comments and interventions performed","الملاحظات السريرية والتدخلات المنفذة")}</p></div><em>›</em>
+            </button>
+            <button type="button" data-v55="progress" class="v55-card">
+              <i>◎</i><div><b>${tr("Progress Review","مراجعة التقدم")}</b>
+              <p>${tr("Pain, goals, outcomes and progress comparison","الألم والأهداف والنتائج ومقارنة التقدم")}</p></div><em>›</em>
+            </button>
+            <button type="button" data-v55="hep" class="v55-card">
+              <i>⌁</i><div><b>${tr("Home Exercise Program","برنامج التمارين المنزلية")}</b>
+              <p>${tr("Exercises, dosage and patient instructions","التمارين والجرعات وتعليمات المريض")}</p></div><em>›</em>
+            </button>
+            <button type="button" data-v55="history" class="v55-card">
+              <i>↺</i><div><b>${tr("Patient History","سجل المريض")}</b>
+              <p>${tr("Previous sessions, notes and clinical history","الجلسات السابقة والملاحظات والسجل السريري")}</p></div><em>›</em>
+            </button>
+          </div>
+        </main>
+      </div>`;
+    document.body.appendChild(shell);
+
+    shell.querySelector(".v55-close").addEventListener("click", closeLauncher);
+    shell.addEventListener("click", e => {
+      if (e.target === shell) closeLauncher();
+      const btn = e.target.closest("[data-v55]");
+      if (btn) openWorkspace(btn.dataset.v55);
+    });
+    return shell;
+  }
+
+  function renderPatient(patient, appt) {
+    const shell = ensureShell();
+    const box = shell.querySelector(".v55-patient");
+    const initials = String(patient.name || "P").split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join("").toUpperCase();
+    box.innerHTML = `
+      <div class="v55-avatar">${initials}</div>
+      <div class="v55-pinfo">
+        <small>${tr("CURRENT PATIENT","المريض الحالي")}</small>
+        <h3>${patient.name || appt.patient || tr("Patient","المريض")}</h3>
+        <p>${patient.id || ""}${patient.phone ? " · "+patient.phone : ""}</p>
+      </div>
+      <div class="v55-session">
+        <small>${tr("CURRENT SESSION","الجلسة الحالية")}</small>
+        <b>${appt.date || ""}${appt.time ? " · "+appt.time : ""}</b>
+        <span>${appt.therapist || ""}${appt.room ? " · "+appt.room : ""}</span>
+      </div>`;
+  }
+
+  function openLauncher(patientOrId, appointmentOrId) {
+    const db = state();
+    let patient = typeof patientOrId === "object" ? patientOrId :
+      (db.patients || []).find(p => String(p.id) === String(patientOrId)) || {};
+    let appt = typeof appointmentOrId === "object" ? appointmentOrId :
+      (db.appointments || []).find(a => String(a.id) === String(appointmentOrId)) || {};
+    if (!Object.keys(patient).length && Object.keys(appt).length) patient = patientByAppointment(appt);
+    if (!Object.keys(appt).length && Object.keys(patient).length) appt = latestAppointmentFor(patient);
+
+    const shell = ensureShell();
+    renderPatient(patient, appt);
+    shell.dataset.patientId = patient.id || "";
+    shell.dataset.appointmentId = appt.id || "";
+    shell.classList.add("open");
+    document.body.classList.add("v55-lock");
+  }
+
+  function closeLauncher() {
+    document.getElementById("v55-clinical-launcher")?.classList.remove("open");
+    document.body.classList.remove("v55-lock");
+  }
+
+  function workspaceShell(title, subtitle) {
+    let w = document.getElementById("v55-workspace");
+    if (!w) {
+      w = document.createElement("div");
+      w.id = "v55-workspace";
+      w.innerHTML = `<section><header><div><small>${tr("MYAIMS · CLINICAL WORKSPACE","أهدافي · مساحة العمل السريرية")}</small><h2></h2><p></p></div><button type="button" data-v55-back>×</button></header><main></main><footer><span>● ${tr("Current patient session","جلسة المريض الحالية")}</span><button type="button" data-v55-done>${tr("Done · Back to Clinical Menu","تم · العودة للقائمة السريرية")}</button></footer></section>`;
+      document.body.appendChild(w);
+      w.querySelector("[data-v55-back]").onclick = closeWorkspace;
+      w.querySelector("[data-v55-done]").onclick = closeWorkspace;
+    }
+    w.querySelector("h2").textContent = title;
+    w.querySelector("header p").textContent = subtitle;
+    w.querySelector("main").innerHTML = "";
+    return w;
+  }
+
+  function currentContext() {
+    const shell = ensureShell(), db = state();
+    const pid = shell.dataset.patientId, aid = shell.dataset.appointmentId;
+    return {
+      patient:(db.patients||[]).find(p=>String(p.id)===String(pid))||{},
+      appt:(db.appointments||[]).find(a=>String(a.id)===String(aid))||{}
+    };
+  }
+
+  function openWorkspace(type) {
+    const {patient, appt} = currentContext();
+    const names = {
+      assessment:[tr("Assessment & Pain Map","التقييم وخريطة الألم"),tr("Pain mapping and focused clinical assessment","خريطة الألم والتقييم السريري المركز")],
+      plan:[tr("Treatment Plan","الخطة العلاجية"),tr("Goals, planned sessions and treatment strategy","الأهداف والجلسات المخططة واستراتيجية العلاج")],
+      note:[tr("Session Documentation","توثيق الجلسة"),tr("A smart session view — not one long form","عرض ذكي للجلسة وليس نموذجًا طويلًا")],
+      progress:[tr("Progress Review","مراجعة التقدم"),tr("Review outcomes and clinical progress","مراجعة النتائج والتقدم السريري")],
+      hep:[tr("Home Exercise Program","برنامج التمارين المنزلية"),tr("Exercises and patient instructions","التمارين وتعليمات المريض")],
+      history:[tr("Patient History","سجل المريض"),tr("Previous sessions and clinical history","الجلسات السابقة والسجل السريري")]
+    };
+    const w = workspaceShell(...names[type]);
+    const main = w.querySelector("main");
+
+    if (type === "note") {
+      main.innerHTML = `
+        <div class="v55-sublauncher">
+          <button type="button" data-sub="pain"><i>◉</i><b>${tr("Pain & Treatment Areas","مناطق الألم والعلاج")}</b><p>${tr("Open the body map and pain intensity in a dedicated screen","افتح خريطة الجسم وشدة الألم في شاشة مستقلة")}</p><em>›</em></button>
+          <button type="button" data-sub="comments"><i>✎</i><b>${tr("Clinical Comments","الملاحظات السريرية")}</b><p>${tr("Subjective, objective, response and next-session comments","الملاحظات الذاتية والموضوعية والاستجابة والجلسة القادمة")}</p><em>›</em></button>
+          <button type="button" data-sub="interventions"><i>✚</i><b>${tr("Interventions Performed","التدخلات المنفذة")}</b><p>${tr("Select and document interventions without searching through the page","اختر وسجل التدخلات دون البحث داخل الصفحة")}</p><em>›</em></button>
+        </div>`;
+      main.querySelectorAll("[data-sub]").forEach(b=>b.onclick=()=>openSessionSub(b.dataset.sub,patient,appt));
+    } else {
+      main.innerHTML = modulePlaceholder(type, patient, appt);
+    }
+    w.classList.add("open");
+  }
+
+  function modulePlaceholder(type,p,a) {
+    const content = {
+      assessment:[["Pain Map","خريطة الألم"],["Pain Intensity","شدة الألم"],["Clinical Assessment","التقييم السريري"]],
+      plan:[["Treatment Goals","الأهداف العلاجية"],["Planned Sessions","الجلسات المخططة"],["Treatment Strategy","استراتيجية العلاج"]],
+      progress:[["Pain Progress","تطور الألم"],["Goal Progress","تقدم الأهداف"],["Outcome Summary","ملخص النتائج"]],
+      hep:[["Exercise Library","مكتبة التمارين"],["Current Program","البرنامج الحالي"],["Patient Instructions","تعليمات المريض"]],
+      history:[["Previous Sessions","الجلسات السابقة"],["Clinical Notes","الملاحظات السريرية"],["Reports","التقارير"]]
+    }[type] || [];
+    return `<div class="v55-module-context"><b>${p.name||""}</b><span>${a.date||""} ${a.time||""}</span></div>
+      <div class="v55-module-grid">${content.map(x=>`<section><span>▣</span><h3>${tr(x[0],x[1])}</h3><p>${tr("Dedicated workspace ready for the next functional build.","مساحة مستقلة جاهزة للربط الوظيفي في المرحلة التالية.")}</p></section>`).join("")}</div>`;
+  }
+
+  function openSessionSub(type,p,a) {
+    const labels = {
+      pain:[tr("Pain & Treatment Areas","مناطق الألم والعلاج"),tr("Focused body-map workspace","مساحة مركزة لخريطة الجسم")],
+      comments:[tr("Clinical Comments","الملاحظات السريرية"),tr("Fast structured clinical documentation","توثيق سريري منظم وسريع")],
+      interventions:[tr("Interventions Performed","التدخلات المنفذة"),tr("Quick intervention selection and documentation","اختيار وتوثيق التدخلات بسرعة")]
+    };
+    const w = workspaceShell(...labels[type]), main=w.querySelector("main");
+    if(type==="comments") main.innerHTML=`<div class="v55-fields"><label>${tr("Subjective","ذاتي")}<textarea></textarea></label><label>${tr("Objective","موضوعي")}<textarea></textarea></label><label>${tr("Session Response","استجابة الجلسة")}<textarea></textarea></label><label>${tr("Next Session","الجلسة القادمة")}<textarea></textarea></label></div>`;
+    else if(type==="interventions") main.innerHTML=`<div class="v55-chips">${["Manual Therapy","Therapeutic Exercise","Stretching","Strengthening","Balance Training","Gait Training","ROM","Soft Tissue","Education","Home Advice"].map(x=>`<button type="button">${x}</button>`).join("")}</div>`;
+    else main.innerHTML=`<div class="v55-pain-stage"><div class="v55-body">◉<span>${tr("Interactive Body Map","خريطة الجسم التفاعلية")}</span></div><div><h3>${tr("Selected Areas","المناطق المحددة")}</h3><p>${tr("The existing clinical body-map engine will be connected here next, without restoring the old scrolling layout.","سيتم ربط محرك خريطة الجسم السريري الحالي هنا في المرحلة التالية دون إعادة النمط القديم الطويل.")}</p><div class="v55-scale">${[0,2,4,6,8,10].map(n=>`<button type="button">${n}</button>`).join("")}</div></div></div>`;
+    w.classList.add("open");
+  }
+
+  function closeWorkspace() {
+    document.getElementById("v55-workspace")?.classList.remove("open");
+  }
+
+  /* Public entry point. Existing clinical engine is untouched. */
+  window.openV55ClinicalLauncher = openLauncher;
+
+  /* Add a safe launcher button to Patient Workspace Sessions.
+     It is additive only and does not capture/replace existing buttons. */
+  window.addEventListener("click", function(e){
+    const tab = e.target.closest("button");
+    if (!tab || !/^(Sessions|الجلسات)$/i.test((tab.textContent||"").trim())) return;
+    setTimeout(addSafeButtons, 80);
+  });
+
+  function addSafeButtons() {
+    const page=document.querySelector("#page-patients"); if(!page) return;
+    const rows=[...page.querySelectorAll("tr")];
+    rows.forEach(row=>{
+      if(row.querySelector(".v55-open-session")) return;
+      const txt=row.textContent||"";
+      if(!/20\d{2}-\d{2}-\d{2}/.test(txt)) return;
+      const cell=row.lastElementChild;if(!cell)return;
+      const b=document.createElement("button");b.type="button";b.className="v55-open-session";
+      b.textContent=tr("Clinical Workspace","مساحة الجلسة");
+      b.onclick=()=>{
+        const db=state(), date=txt.match(/20\d{2}-\d{2}-\d{2}/)?.[0];
+        const name=(page.querySelector(".v31-patient-name,h1,h2")?.textContent||"").trim();
+        const p=(db.patients||[]).find(x=>name.includes(x.name))||(db.patients||[])[0]||{};
+        const a=(db.appointments||[]).find(x=>(x.patientId===p.id||x.patient===p.name)&&x.date===date)||latestAppointmentFor(p);
+        openLauncher(p,a);
+      };
+      cell.appendChild(b);
+    });
+  }
+  setTimeout(addSafeButtons,500);
+
+  const css=document.createElement("style");css.id="v55-css";css.textContent=`
+  #v55-clinical-launcher,#v55-workspace{display:none;position:fixed;inset:0;z-index:500000;background:rgba(8,29,34,.82);backdrop-filter:blur(8px);padding:10px}
+  #v55-clinical-launcher.open,#v55-workspace.open{display:block}.v55-lock{overflow:hidden!important}
+  .v55-shell,#v55-workspace>section{width:100%;height:100%;background:#f4f7f7;border-radius:18px;overflow:auto;box-shadow:0 40px 120px rgba(0,0,0,.4)}
+  .v55-top,#v55-workspace header{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(120deg,#123f49,#246874);color:#fff;padding:18px 22px;border-radius:18px 18px 0 0}
+  .v55-top small,#v55-workspace header small{color:#efc36c;font-weight:900;font-size:10px}.v55-top h1,#v55-workspace h2{color:#fff!important;font-size:28px!important;margin:3px 0!important}.v55-top p,#v55-workspace header p{margin:0;color:#dce9eb;font-size:12px!important}
+  .v55-close,#v55-workspace header button{width:44px;height:44px!important;border-radius:11px!important;border:1px solid rgba(255,255,255,.2)!important;background:rgba(255,255,255,.1)!important;color:#fff!important;font-size:25px!important}
+  .v55-patient{display:flex;align-items:center;gap:12px;background:#fff;margin:12px 16px 0;padding:13px 16px;border:1px solid #dbe6e8;border-radius:14px}.v55-avatar{width:56px;height:56px;border-radius:14px;background:#1b5965;color:#fff;display:grid;place-items:center;font-weight:900;font-size:19px}.v55-pinfo small,.v55-session small{display:block;color:#ad7b29;font-size:9px;font-weight:900}.v55-pinfo h3{font-size:20px!important;margin:2px 0!important;color:#173f49!important}.v55-pinfo p{margin:0;color:#789095;font-size:11px}.v55-session{margin-inline-start:auto;border-inline-start:1px solid #e2eaeb;padding-inline-start:20px}.v55-session b,.v55-session span{display:block;color:#31565e;font-size:11px}.v55-session span{color:#789095;margin-top:3px}
+  .v55-main{background:#fff;margin:10px 16px 16px;padding:18px;border:1px solid #dbe6e8;border-radius:14px}.v55-title{display:flex;justify-content:space-between;align-items:center}.v55-title small{color:#ad7b29;font-size:9px;font-weight:900}.v55-title h2{font-size:24px!important;color:#173f49!important;margin:2px 0!important}.v55-title>span{background:#eaf4f1;color:#347064;padding:7px 11px;border-radius:99px;font-size:10px;font-weight:850}
+  .v55-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:16px}.v55-card{min-height:175px!important;display:grid!important;grid-template-columns:55px 1fr 25px!important;align-items:center!important;gap:12px!important;text-align:start!important;background:#f6f9f9!important;border:1px solid #dce7e8!important;border-radius:15px!important;padding:16px!important;transition:.16s!important}.v55-card:hover{transform:translateY(-2px)!important;box-shadow:0 12px 25px rgba(25,69,77,.09)!important}.v55-card.featured{background:linear-gradient(135deg,#174f5b,#246b76)!important;color:#fff!important}.v55-card i{width:52px;height:52px;border-radius:13px;background:#e3efef;color:#23636d;display:grid;place-items:center;font-size:23px;font-style:normal}.v55-card.featured i{background:rgba(255,255,255,.13);color:#efc36c}.v55-card b{font-size:16px!important}.v55-card p{font-size:11px!important;line-height:1.5;color:#758e93;margin:6px 0}.v55-card.featured p{color:#dce9eb}.v55-card em{font-style:normal;font-size:25px;color:#b07d29}
+  #v55-workspace>section{display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}#v55-workspace main{overflow:auto;padding:18px}#v55-workspace footer{display:flex;justify-content:space-between;align-items:center;background:#fff;border-top:1px solid #dbe6e8;padding:10px 18px;font-size:10px;color:#789095}#v55-workspace footer button{height:40px!important;background:#174f5b!important;color:#fff!important;border:0!important;border-radius:9px!important;padding:0 16px!important;font-weight:900!important}
+  .v55-sublauncher{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;min-height:70vh;align-items:stretch}.v55-sublauncher>button{position:relative!important;text-align:start!important;border:1px solid #dbe6e8!important;border-radius:18px!important;background:#fff!important;padding:25px!important;box-shadow:0 10px 25px rgba(25,69,77,.06)!important}.v55-sublauncher i{display:block;font-style:normal;font-size:45px;color:#226b77;margin-bottom:30px}.v55-sublauncher b{display:block;font-size:21px!important;color:#173f49}.v55-sublauncher p{font-size:12px!important;color:#708a90;line-height:1.6;max-width:80%}.v55-sublauncher em{position:absolute;inset-inline-end:22px;bottom:22px;width:42px;height:42px;border-radius:50%;background:#174f5b;color:#fff;display:grid;place-items:center;font-style:normal;font-size:25px}
+  .v55-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.v55-fields label{font-size:13px;font-weight:850;color:#31565e}.v55-fields textarea{display:block;width:100%;min-height:260px;margin-top:7px;border:1px solid #cfdfe1;border-radius:12px;padding:14px;font:inherit}.v55-chips{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.v55-chips button{min-height:90px!important;border:1px solid #dbe6e8!important;border-radius:13px!important;background:#fff!important;font-weight:850!important;color:#31565e!important}.v55-chips button:focus{background:#174f5b!important;color:#fff!important}.v55-pain-stage{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;min-height:70vh}.v55-body{border:1px solid #dbe6e8;border-radius:16px;background:#eef6f6;display:grid;place-items:center;font-size:130px;color:#2a6d77}.v55-body span{display:block;font-size:15px}.v55-scale{display:flex;gap:8px;margin-top:20px}.v55-scale button{width:48px;height:48px!important;border-radius:50%!important}.v55-module-context{display:flex;justify-content:space-between;background:#fff;border:1px solid #dbe6e8;border-radius:12px;padding:12px 15px}.v55-module-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}.v55-module-grid section{min-height:260px;background:#fff;border:1px solid #dbe6e8;border-radius:15px;padding:20px}.v55-module-grid section>span{font-size:40px;color:#2a6d77}.v55-module-grid h3{font-size:18px!important;color:#173f49!important}.v55-open-session{margin-inline-start:6px!important}
+  body.myaims-ar #v55-clinical-launcher,body.myaims-ar #v55-workspace{direction:rtl;text-align:right}
+  @media(max-width:900px){.v55-grid,.v55-sublauncher,.v55-module-grid{grid-template-columns:repeat(2,1fr)}.v55-chips{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){#v55-clinical-launcher,#v55-workspace{padding:0}.v55-shell,#v55-workspace>section{border-radius:0}.v55-grid,.v55-sublauncher,.v55-module-grid,.v55-fields,.v55-pain-stage{grid-template-columns:1fr}.v55-patient{flex-wrap:wrap}.v55-session{margin:0;border:0;padding:0}}
+  `;
+  document.head.appendChild(css);
+})();
