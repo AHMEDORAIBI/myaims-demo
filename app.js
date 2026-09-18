@@ -11860,7 +11860,7 @@ body.myaims-ar #v57-comments{direction:rtl;text-align:right}@media(max-width:100
    ========================================================= */
 (function(){
 const THREE_VER="0.180.0";
-const MODEL_URL="https://cdn.jsdelivr.net/gh/JohanBellander/BodyExplorer@main/public/anatomy.glb";
+const MODEL_URL="./assets/anatomy.glb";
 const THREE_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/build/three.module.js`;
 const LOADER_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/examples/jsm/loaders/GLTFLoader.js`;
 const ORBIT_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/examples/jsm/controls/OrbitControls.js`;
@@ -11910,7 +11910,7 @@ function shell(){
   <section class="v61-stagewrap">
    <div class="v61-stagehead"><div><small class="eyebrow">${T("REAL-TIME 3D ANATOMY","تشريح ثلاثي الأبعاد مباشر")}</small><h3>${T("Select the exact muscle or treatment region","حدد العضلة أو منطقة العلاج بدقة")}</h3></div><div class="v61-modelstatus"><i></i><span>${T("Anatomical model","النموذج التشريحي")}</span><b data-status>${T("Loading…","جاري التحميل…")}</b></div></div>
    <div id="v61-canvas"></div>
-   <div class="v61-loading" data-loading><div class="v61-spinner"></div><b>${T("Loading real anatomical model","جاري تحميل النموذج التشريحي الحقيقي")}</b><span data-progress>0%</span><small>${T("First load may take a few seconds","قد يستغرق التحميل الأول بضع ثوانٍ")}</small></div>
+   <div class="v61-loading" data-loading><div class="v61-spinner"></div><b>${T("Loading real anatomical model","جاري تحميل النموذج التشريحي الحقيقي")}</b><span data-progress>0%</span><small>${T("The 3D model is loading from this project","يتم تحميل نموذج 3D مباشرة من ملفات المشروع")}</small></div>
    <div class="v61-tools"><button data-view="front">F</button><button data-view="back">B</button><button data-zoom="in">＋</button><button data-zoom="out">−</button><button data-reset>↻</button></div>
    <div class="v61-badge"><b>3D</b><span>${T("467 anatomical meshes","467 بنية تشريحية")}</span></div>
    <div class="v61-legend"><span><i class="red"></i>${T("Pain","ألم")}</span><span><i class="blue"></i>${T("Treatment","علاج")}</span><span><i class="purple"></i>${T("Both","كلاهما")}</span><span>↻ 360°</span></div>
@@ -11936,7 +11936,7 @@ async function open(){
  const h=shell();h.classList.add("open");document.body.classList.add("v61-lock");
  try{await init3D(h)}catch(err){
   console.error("V61 3D:",err);
-  h.querySelector("[data-loading]").innerHTML=`<b>${T("3D model could not load","تعذر تحميل النموذج ثلاثي الأبعاد")}</b><small>${T("Check the internet connection and reload the page.","تحقق من اتصال الإنترنت ثم أعد تحميل الصفحة.")}</small>`;
+  h.querySelector("[data-loading]").innerHTML=`<b>${T("3D model could not load","تعذر تحميل النموذج ثلاثي الأبعاد")}</b><small>${T("Verify that assets/anatomy.glb exists in the repository, then reload the page.","تأكد من وجود الملف assets/anatomy.glb داخل المشروع ثم أعد تحميل الصفحة.")}</small>`;
  }
 }
 async function init3D(h){
