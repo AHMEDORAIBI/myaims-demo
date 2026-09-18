@@ -11266,3 +11266,157 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V42 - PAIN & TREATMENT AREA COMMAND CENTER
+   Modern no-scroll workflow:
+   - Sticky compact Pain Dock
+   - Body map + selected areas side-by-side
+   - Quick region filters
+   - One-click pain intensity
+   - Selected area summary always visible
+   - Focus mode for body map
+   ========================================================= */
+(function(){
+  const T=(en,ar)=>(document.documentElement.dir==='rtl'||document.body.classList.contains('myaims-ar'))?ar:en;
+
+  function findClinical(){
+    return document.querySelector('#v24-clinical-modal .v34-clinical-workspace') ||
+           document.querySelector('#v24-clinical-modal') || null;
+  }
+  function painSection(root){
+    if(!root)return null;
+    const all=[...root.querySelectorAll('h1,h2,h3,h4,b,strong,div,span')];
+    const title=all.find(x=>/Pain\s*&\s*Treatment Areas|مناطق.*الألم|الألم.*العلاج/i.test((x.textContent||'').trim()));
+    if(!title)return null;
+    let p=title;
+    for(let i=0;i<7&&p;i++,p=p.parentElement){
+      if(p.querySelector?.('svg') && p.querySelectorAll?.('button').length>=3)return p;
+    }
+    return title.parentElement;
+  }
+
+  function enhance(){
+    const root=findClinical(), sec=painSection(root);
+    if(!root||!sec||sec.dataset.v42==='1')return;
+    sec.dataset.v42='1';sec.classList.add('v42-pain-command');
+
+    // Find original body map and selected-area controls.
+    const svg=sec.querySelector('svg');
+    const mapHost=svg?.parentElement;
+    const buttons=[...sec.querySelectorAll('button')];
+    const clear=buttons.find(b=>/Clear All|مسح الكل/i.test(b.textContent||''));
+    const front=buttons.find(b=>/Front|أمام|الأمامي/i.test(b.textContent||''));
+    const back=buttons.find(b=>/Back|خلف|الخلفي/i.test(b.textContent||''));
+
+    const dock=document.createElement('div');dock.className='v42-dock';
+    dock.innerHTML=`
+      <div class="v42-dock-head">
+        <div><small>${T('PAIN COMMAND CENTER','مركز تحديد الألم')}</small><h3>${T('Pain & Treatment Areas','مناطق الألم والعلاج')}</h3></div>
+        <div class="v42-dock-actions">
+          <button data-v42-focus>${T('Focus Map','تكبير الخريطة')}</button>
+          <button data-v42-clear>${T('Clear','مسح')}</button>
+        </div>
+      </div>
+      <div class="v42-regions">
+        <button data-r="head">${T('Head / Neck','الرأس / الرقبة')}</button>
+        <button data-r="upper">${T('Shoulder / Arm','الكتف / الذراع')}</button>
+        <button data-r="trunk">${T('Back / Trunk','الظهر / الجذع')}</button>
+        <button data-r="lower">${T('Hip / Leg','الورك / الساق')}</button>
+        <button data-r="all" class="active">${T('All Areas','كل المناطق')}</button>
+      </div>
+      <div class="v42-live">
+        <span><small>${T('SELECTED','المحدد')}</small><b data-v42-count>0</b></span>
+        <div data-v42-chips><em>${T('Tap the body map or choose an area','اضغط على خريطة الجسم أو اختر منطقة')}</em></div>
+        <div class="v42-intensity">
+          <small>${T('PAIN','الألم')}</small>
+          ${[0,2,4,6,8,10].map(n=>`<button data-v42-pain="${n}">${n}</button>`).join('')}
+        </div>
+      </div>`;
+    sec.prepend(dock);
+
+    // Turn the original long section into a two-panel workspace.
+    const workspace=document.createElement('div');workspace.className='v42-workspace';
+    const mapPanel=document.createElement('section');mapPanel.className='v42-map-panel';
+    const listPanel=document.createElement('section');listPanel.className='v42-list-panel';
+    mapPanel.innerHTML=`<header><div><small>${T('VISUAL BODY MAP','خريطة الجسم')}</small><b>${T('Tap the exact treatment area','حدد منطقة العلاج مباشرة')}</b></div><div class="v42-view"></div></header>`;
+    listPanel.innerHTML=`<header><div><small>${T('SELECTED AREAS','المناطق المحددة')}</small><b>${T('Treatment Area List','قائمة مناطق العلاج')}</b></div></header><div class="v42-list-scroll"></div>`;
+
+    if(mapHost){
+      mapHost.parentNode.insertBefore(workspace,mapHost);
+      workspace.append(mapPanel,listPanel);
+      mapPanel.appendChild(mapHost);
+      const vh=mapPanel.querySelector('.v42-view');
+      if(front)vh.appendChild(front);
+      if(back)vh.appendChild(back);
+    } else sec.appendChild(workspace);
+
+    // Move likely selected-area cards into the fixed-height right panel.
+    const candidates=[...sec.children].filter(x=>x!==dock&&x!==workspace);
+    const selectedContainer=candidates.find(x=>{
+      const tx=(x.textContent||'');
+      return /SELECTED AREAS|المناطق المحددة|Intensity|الشدة/i.test(tx) && x.querySelectorAll('button').length>0;
+    });
+    if(selectedContainer)listPanel.querySelector('.v42-list-scroll').appendChild(selectedContainer);
+    if(clear) clear.style.display='none';
+
+    function selectedLabels(){
+      const scope=listPanel.querySelector('.v42-list-scroll');
+      const texts=[...scope.querySelectorAll('b,strong')].map(x=>x.textContent.trim())
+        .filter(x=>x && !/SELECTED AREAS|المناطق المحددة|Intensity|الشدة/i.test(x));
+      return [...new Set(texts)].slice(0,8);
+    }
+    function refresh(){
+      const labels=selectedLabels();
+      const countEl=dock.querySelector('[data-v42-count]');
+      const chips=dock.querySelector('[data-v42-chips]');
+      countEl.textContent=labels.length;
+      chips.innerHTML=labels.length?labels.map(x=>`<span>${x}</span>`).join(''):`<em>${T('Tap the body map or choose an area','اضغط على خريطة الجسم أو اختر منطقة')}</em>`;
+    }
+
+    dock.querySelector('[data-v42-clear]').onclick=()=>{if(clear)clear.click();setTimeout(refresh,60)};
+    dock.querySelector('[data-v42-focus]').onclick=()=>{sec.classList.toggle('v42-focus');dock.querySelector('[data-v42-focus]').textContent=sec.classList.contains('v42-focus')?T('Exit Focus','إغلاق التكبير'):T('Focus Map','تكبير الخريطة')};
+
+    dock.querySelectorAll('[data-v42-pain]').forEach(b=>b.onclick=()=>{
+      dock.querySelectorAll('[data-v42-pain]').forEach(x=>x.classList.toggle('active',x===b));
+      // Sync with existing pain-score control if available.
+      const n=b.dataset.v42Pain;
+      const input=root.querySelector('input[type="range"][max="10"],input[name*="pain" i],select[name*="pain" i],#v24-pain');
+      if(input){input.value=n;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}))}
+    });
+
+    dock.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{
+      dock.querySelectorAll('[data-r]').forEach(x=>x.classList.toggle('active',x===b));
+      listPanel.dataset.region=b.dataset.r;
+    });
+
+    const mo=new MutationObserver(()=>{clearTimeout(sec.__v42t);sec.__v42t=setTimeout(refresh,50)});
+    mo.observe(listPanel,{childList:true,subtree:true,characterData:true});
+    refresh();
+  }
+
+  function css(){
+    if(document.getElementById('v42-css'))return;
+    const s=document.createElement('style');s.id='v42-css';s.textContent=`
+      .v42-pain-command{position:relative!important;background:#f7fafb!important;padding:10px!important;overflow:visible!important}
+      .v42-dock{position:sticky;top:0;z-index:8;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border:1px solid #d9e6e7;border-radius:12px;padding:9px 11px;margin-bottom:8px;box-shadow:0 6px 18px rgba(26,69,77,.06)}
+      .v42-dock-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.v42-dock-head small{font-size:10px!important;color:#a27a34;font-weight:900}.v42-dock-head h3{font-size:18px!important;margin:1px 0;color:#31565e}.v42-dock-actions{display:flex;gap:5px}.v42-dock-actions button,.v42-regions button,.v42-intensity button{border:1px solid #d7e3e5;background:#fff;color:#557178;border-radius:8px;padding:6px 9px;font-size:11px!important;font-weight:800;min-height:32px!important}.v42-dock-actions button:first-child{background:#174f5b;color:#fff;border-color:#174f5b}
+      .v42-regions{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.v42-regions button.active{background:#e5f0f0;color:#174f5b;border-color:#a9c7ca}
+      .v42-live{display:grid;grid-template-columns:70px 1fr auto;gap:8px;align-items:center;margin-top:7px;padding-top:7px;border-top:1px solid #e3ebec}.v42-live>span small,.v42-live>span b{display:block}.v42-live>span small,.v42-intensity small{font-size:9px!important;color:#a17b39;font-weight:900}.v42-live>span b{font-size:20px;color:#31565e}.v42-live>[data-v42-chips]{display:flex;gap:4px;flex-wrap:wrap}.v42-live>[data-v42-chips] span{background:#eef5f5;color:#486970;border-radius:99px;padding:4px 7px;font-size:11px}.v42-live>[data-v42-chips] em{font-size:11px;color:#8a9a9e;font-style:normal}.v42-intensity{display:flex;align-items:center;gap:3px}.v42-intensity button{width:31px;padding:4px}.v42-intensity button.active{background:#c9983e;color:#fff;border-color:#c9983e}
+      .v42-workspace{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(290px,.65fr);gap:8px;height:390px;min-height:0}.v42-map-panel,.v42-list-panel{background:#fff;border:1px solid #dbe7e8;border-radius:12px;overflow:hidden;min-height:0}.v42-map-panel>header,.v42-list-panel>header{height:48px;display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid #e2eaeb;background:#fbfdfd}.v42-map-panel header small,.v42-list-panel header small{display:block;font-size:9px!important;color:#a47b35;font-weight:900}.v42-map-panel header b,.v42-list-panel header b{font-size:13px!important;color:#31565e}.v42-view{display:flex;gap:4px}.v42-view button{min-height:30px!important;padding:5px 9px!important;font-size:11px!important}
+      .v42-map-panel>div:not(.v42-view),.v42-map-panel>section{height:calc(100% - 48px)!important;max-height:none!important;overflow:hidden!important}.v42-map-panel svg{max-height:320px!important;width:100%!important}
+      .v42-list-scroll{height:calc(100% - 48px);overflow:auto;padding:7px;scrollbar-width:thin}.v42-list-scroll>*{margin:0!important;max-height:none!important}.v42-list-scroll button{font-size:11px!important}
+      .v42-focus{position:fixed!important;inset:3vh 3vw!important;z-index:102000!important;background:#edf4f4!important;border-radius:18px!important;padding:12px!important;box-shadow:0 30px 100px rgba(0,0,0,.35);overflow:auto!important}.v42-focus .v42-workspace{height:calc(97vh - 155px)}.v42-focus .v42-map-panel svg{max-height:calc(97vh - 220px)!important}
+      body.myaims-ar .v42-dock,body.myaims-ar .v42-workspace{direction:rtl;text-align:right}.v42-pain-command>h1,.v42-pain-command>h2,.v42-pain-command>h3{display:none!important}
+      @media(max-width:850px){.v42-workspace{grid-template-columns:1fr;height:auto}.v42-map-panel{height:360px}.v42-list-panel{height:260px}.v42-live{grid-template-columns:55px 1fr}.v42-intensity{grid-column:1/-1}.v42-focus{inset:0!important;border-radius:0!important}.v42-focus .v42-workspace{height:auto}}
+    `;document.head.appendChild(s);
+  }
+
+  function init(){
+    css();setTimeout(enhance,200);
+    const mo=new MutationObserver(()=>{clearTimeout(window.__v42);window.__v42=setTimeout(enhance,100)});
+    mo.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
