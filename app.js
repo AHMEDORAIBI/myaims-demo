@@ -11970,69 +11970,82 @@ function v64Stage(h,label,pct){
 }
 async function init3D(h){
  if(app&&app.renderer){try{app.renderer.dispose()}catch(e){} app=null}
- v64Stage(h,T("Loading 3D engine…","تحميل محرك 3D…"),5);
+ v64Stage(h,T("Loading HD 3D engine…","تحميل محرك 3D عالي الدقة…"),5);
  const {THREE,GLTFLoader,OrbitControls}=await modules(), mount=h.querySelector("#v61-canvas");
- v64Stage(h,T("3D engine ready · Loading anatomy…","محرك 3D جاهز · تحميل التشريح…"),10);
 
  const scene=new THREE.Scene();scene.background=new THREE.Color(0xf3f7f8);
- const camera=new THREE.PerspectiveCamera(30,mount.clientWidth/mount.clientHeight,.01,200);
- camera.position.set(0,0,45);
- const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-performance"});
- renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));renderer.setSize(mount.clientWidth,mount.clientHeight);
- renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+ const camera=new THREE.PerspectiveCamera(30,mount.clientWidth/mount.clientHeight,.01,300);
+ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-performance",alpha:false});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(mount.clientWidth,mount.clientHeight);
+ renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;
  mount.appendChild(renderer.domElement);
- scene.add(new THREE.HemisphereLight(0xffffff,0x71868b,2.6));
- const key=new THREE.DirectionalLight(0xffffff,3.3);key.position.set(20,30,30);scene.add(key);
- const fill=new THREE.DirectionalLight(0xd9f4f2,1.7);fill.position.set(-25,10,20);scene.add(fill);
- const rim=new THREE.DirectionalLight(0xffd5c4,1.2);rim.position.set(0,15,-25);scene.add(rim);
 
- const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;controls.minDistance=20;controls.maxDistance=80;controls.target.set(0,0,0);
+ scene.add(new THREE.HemisphereLight(0xfff8f2,0x71868b,2.25));
+ const key=new THREE.DirectionalLight(0xffeee5,3.0);key.position.set(18,25,28);scene.add(key);
+ const fill=new THREE.DirectionalLight(0xd9efff,1.55);fill.position.set(-22,12,18);scene.add(fill);
+ const rim=new THREE.DirectionalLight(0xffc9b5,1.15);rim.position.set(15,16,-24);scene.add(rim);
+
+ const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;
  const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2(),meshes=[],original=new Map();
- app={THREE,scene,camera,renderer,controls,raycaster,mouse,meshes,original,model:null,mount,raf:0};
+ app={THREE,scene,camera,renderer,controls,raycaster,mouse,meshes,original,model:null,mount,raf:0,hd:true};
 
- const loader=new GLTFLoader();
- const gltf=await new Promise((resolve,reject)=>loader.load("./assets/anatomy.glb",resolve,e=>{
-   let n=10;
-   if(e.total>0)n=Math.min(68,10+Math.round((e.loaded/e.total)*58));
-   else if(e.loaded)n=Math.min(68,10+Math.round(e.loaded/450000));
-   v64Stage(h,T("Loading anatomy file…","تحميل ملف التشريح…"),n);
+ v64Stage(h,T("Loading myAIMS HD anatomy…","تحميل تشريح myAIMS عالي الدقة…"),12);
+
+ // Native HD loader with DRACO support. No BodyExplorer geometry conversion.
+ const D=await import(`https://esm.sh/three@0.180.0/examples/jsm/loaders/DRACOLoader.js`);
+ const loader=new GLTFLoader(),draco=new D.DRACOLoader();
+ draco.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+ loader.setDRACOLoader(draco);
+
+ const gltf=await new Promise((resolve,reject)=>loader.load("./assets/myaims-anatomy-hd.glb",resolve,e=>{
+   let n=12;if(e.total>0)n=Math.min(76,12+Math.round((e.loaded/e.total)*64));
+   v64Stage(h,T("Loading HD anatomy file…","تحميل ملف التشريح عالي الدقة…"),n);
  },reject));
 
- v64Stage(h,T("Parsing 467 anatomical structures…","معالجة 467 بنية تشريحية…"),72);
- await new Promise(r=>setTimeout(r,30));
- const root=gltf.scene;
- const box=new THREE.Box3().setFromObject(root),center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
- if(!isFinite(size.z)||size.z<=0)throw new Error("Invalid anatomy.glb bounding box");
- const scaleFactor=30/size.z;
- const body=new THREE.Group();scene.add(body);app.model=body;
- let count=0;
- root.traverse(child=>{
-  if(!child.isMesh||!child.geometry)return;
-  const name=child.name||("structure_"+count),lower=name.toLowerCase();
-  const tendon=/tendon|ligament|retinaculum|membrane/.test(lower);
-  const geometry=v64TransformGeometry(THREE,child.geometry,center,scaleFactor);
-  const material=new THREE.MeshStandardMaterial({
-    color:tendon?0xe8ddc6:0xa94435,roughness:tendon?.46:.58,metalness:0,side:THREE.DoubleSide
-  });
-  const mesh=new THREE.Mesh(geometry,material);
-  mesh.name=name;mesh.userData.displayName=name.replace(/_/g," ");
-  mesh.userData.originalMaterial=material;
-  body.add(mesh);meshes.push(mesh);original.set(mesh.uuid,{material});count++;
- });
- if(!count)throw new Error("anatomy.glb loaded but no mesh structures were found");
- v64Stage(h,T(`Building muscles… ${count} structures`,`بناء العضلات… ${count} بنية`),90);
- await new Promise(r=>setTimeout(r,30));
+ v64Stage(h,T("Preparing native HD anatomy…","تجهيز النموذج التشريحي عالي الدقة…"),80);
+ const body=gltf.scene;body.name="MYAIMS_HD_ANATOMY";scene.add(body);app.model=body;
+ body.updateMatrixWorld(true);
 
- const bodyBox=new THREE.Box3().setFromObject(body),bodyCenter=bodyBox.getCenter(new THREE.Vector3());
- body.position.sub(bodyCenter);
- v64Stage(h,T("Preparing clinical 3D viewer…","تجهيز العارض السريري ثلاثي الأبعاد…"),97);
- camera.position.set(0,0,43);controls.target.set(0,0,0);controls.update();
+ // Detect orientation. Most GLB files are Y-up; rotate only if Z is clearly the body height.
+ let box=new THREE.Box3().setFromObject(body),size=box.getSize(new THREE.Vector3());
+ if(size.z>size.y*1.35 && size.z>size.x*1.35){
+   body.rotation.x=-Math.PI/2;body.updateMatrixWorld(true);
+   box=new THREE.Box3().setFromObject(body);size=box.getSize(new THREE.Vector3());
+ }
+ if(!isFinite(size.y)||size.y<=0)throw new Error("Invalid HD anatomy bounding box");
+
+ // Normalize to the same clinical scale used by the current viewer.
+ const scale=30/size.y;body.scale.multiplyScalar(scale);body.updateMatrixWorld(true);
+ box=new THREE.Box3().setFromObject(body);
+ const center=box.getCenter(new THREE.Vector3());body.position.sub(center);body.updateMatrixWorld(true);
+
+ let count=0;
+ body.traverse(child=>{
+   if(!child.isMesh||!child.geometry)return;
+   child.name=child.name||child.parent?.name||("structure_"+count);
+   child.userData.displayName=String(child.name).replace(/[_-]+/g," ");
+   if(!child.geometry.attributes.normal)try{child.geometry.computeVertexNormals()}catch(e){}
+   const mats=Array.isArray(child.material)?child.material:[child.material];
+   mats.filter(Boolean).forEach(mat=>{
+     if("metalness" in mat)mat.metalness=0;
+     if("roughness" in mat)mat.roughness=Math.min(.64,Math.max(.34,mat.roughness??.48));
+     mat.side=THREE.DoubleSide;mat.needsUpdate=true;
+   });
+   meshes.push(child);
+   original.set(child.uuid,{material:child.material});
+   count++;
+ });
+ if(!count)throw new Error("HD GLB loaded but no anatomical meshes were found");
+
+ v64Stage(h,T(`HD anatomy active · ${count} structures`,`تم تشغيل التشريح عالي الدقة · ${count} بنية`),96);
+ camera.position.set(0,0,43);controls.target.set(0,0,0);controls.minDistance=18;controls.maxDistance=80;controls.update();
 
  h.querySelector("[data-loading]").style.display="none";
- h.querySelector("[data-status]").textContent=T(`Ready · ${count} structures`,`جاهز · ${count} بنية`);
+ h.querySelector("[data-status]").textContent=T(`HD Ready · ${count} structures`,`HD جاهز · ${count} بنية`);
  h.querySelector(".v61-modelstatus i").classList.add("ready");
- renderer.domElement.addEventListener("pointerup",pick);renderer.domElement.addEventListener("pointermove",hover);
+ h.dataset.anatomyAsset="myaims-anatomy-hd.glb";
 
+ renderer.domElement.addEventListener("pointerup",pick);renderer.domElement.addEventListener("pointermove",hover);
  const resize=()=>{if(!app)return;camera.aspect=mount.clientWidth/mount.clientHeight;camera.updateProjectionMatrix();renderer.setSize(mount.clientWidth,mount.clientHeight)};
  window.addEventListener("resize",resize,{passive:true});app.resize=resize;
  const loop=()=>{if(!app)return;app.raf=requestAnimationFrame(loop);controls.update();renderer.render(scene,camera)};loop();
@@ -12998,266 +13011,11 @@ const st=document.createElement("style");st.textContent=`
 window.MYAIMS_BUILD="V71 ANATOMICAL SURFACE DETAIL";
 })();
 
-/* =========================================================
-   myAIMS V72 — HD ANATOMY ENGINE
-   Loads assets/myaims-anatomy-hd.glb first with DRACO support.
-   Falls back safely to assets/anatomy.glb.
-   Keeps the existing clinical UI and interaction layer.
-   ========================================================= */
+/* V74 status styling */
 (function(){
-const HD="./assets/myaims-anatomy-hd.glb";
-const FALLBACK="./assets/anatomy.glb";
-const THREE_VER="0.166.1";
-const DRACO_PATH="https://www.gstatic.com/draco/versioned/decoders/1.5.7/";
-
-function root(){return document.getElementById("v61-real3d")}
-function status(msg,sub=""){
- const r=root(); if(!r)return;
- let e=r.querySelector("#v72-hd-status");
- if(!e){
-   e=document.createElement("div");e.id="v72-hd-status";
-   (r.querySelector(".v61-stagewrap")||r).appendChild(e);
- }
- e.innerHTML=`<i></i><div><b>${msg}</b>${sub?`<span>${sub}</span>`:""}</div>`;
-}
-function normalizeMeshes(T,scene){
- const meshes=[];
- scene.updateMatrixWorld(true);
- scene.traverse(o=>{
-   if(!o.isMesh||!o.geometry)return;
-   // Preserve original anatomical names/userData for search and reports.
-   o.userData.v72OriginalName=o.name||o.userData?.name||"Anatomical Structure";
-   o.name=o.name||o.userData?.name||o.parent?.name||"Anatomical Structure";
-   if(!o.geometry.attributes.normal)try{o.geometry.computeVertexNormals()}catch(e){}
-   o.frustumCulled=true;
-   meshes.push(o);
- });
- return meshes;
-}
-function frame(T,a,meshes){
- const box=new T.Box3();
- meshes.forEach(m=>box.expandByObject(m));
- const size=box.getSize(new T.Vector3()),center=box.getCenter(new T.Vector3());
- if(!isFinite(size.y)||size.y<=0)return;
- // Center the imported HD model without modifying its internal mesh hierarchy.
- const group=meshes[0]?.parent;
- const targetRoot=(group&&group!==a.scene)?group:null;
- if(targetRoot){
-   targetRoot.position.x-=center.x;targetRoot.position.y-=center.y;targetRoot.position.z-=center.z;
-   targetRoot.updateMatrixWorld(true);
- }
- const max=Math.max(size.x,size.y,size.z);
- const dist=max/(2*Math.tan((a.camera.fov*Math.PI/180)/2))*1.12;
- a.camera.position.set(0,size.y*.01,dist);
- a.camera.near=Math.max(.01,dist/1000);a.camera.far=dist*12;a.camera.updateProjectionMatrix();
- if(a.controls){a.controls.target.set(0,0,0);a.controls.minDistance=max*.35;a.controls.maxDistance=max*4;a.controls.update()}
-}
-async function loadHD(){
- const a=(typeof app!=="undefined"?app:null),r=root();
- if(!a?.THREE||!a?.scene||!a?.renderer||!r||a.__v72Loading||a.__v72HD)return;
- a.__v72Loading=true; const T=a.THREE;
- status("Loading HD Anatomy…","Preparing high-detail anatomical asset");
-
- let GLTFLoader,DRACOLoader;
- try{
-   [{GLTFLoader},{DRACOLoader}]=await Promise.all([
-     import(`https://esm.sh/three@${THREE_VER}/examples/jsm/loaders/GLTFLoader.js`),
-     import(`https://esm.sh/three@${THREE_VER}/examples/jsm/loaders/DRACOLoader.js`)
-   ]);
- }catch(err){
-   status("HD loader unavailable","Using current anatomy model");
-   a.__v72Loading=false;return;
- }
- const loader=new GLTFLoader();
- const draco=new DRACOLoader();
- draco.setDecoderPath(DRACO_PATH);draco.setDecoderConfig({type:"js"});loader.setDRACOLoader(draco);
-
- const attempt=url=>new Promise((resolve,reject)=>{
-   loader.load(url,g=>resolve(g),xhr=>{
-     if(xhr.total)status("Loading HD Anatomy…",`${Math.round(xhr.loaded/xhr.total*100)}% downloaded`);
-   },reject);
- });
-
- let gltf,used=HD;
- try{gltf=await attempt(HD)}
- catch(e){
-   used=FALLBACK;
-   try{gltf=await attempt(FALLBACK)}
-   catch(err){status("3D anatomy could not load","Check the assets folder");a.__v72Loading=false;return}
- }
- status("Building anatomical structures…","Optimizing model for clinical interaction");
-
- // Remove the old anatomical meshes only after the replacement loaded successfully.
- try{
-   const old=new Set(a.meshes||[]);
-   old.forEach(m=>{if(m.parent)m.parent.remove(m)});
- }catch(e){}
-
- const model=gltf.scene;
- model.name="MYAIMS_HD_ANATOMY";
- a.scene.add(model);
- const meshes=normalizeMeshes(T,model);
- a.meshes=meshes;
- a.model=model;
- a.__v72HD=used===HD;
- a.__v72Asset=used;
- a.__v72Loading=false;
-
- // Raycaster and camera remain compatible with V61/V69.
- if(!a.raycaster)a.raycaster=new T.Raycaster();
- frame(T,a,meshes);
-
- // Clinical material pass, preserving texture maps included in the new GLB.
- meshes.forEach(m=>{
-   const tendon=/tendon|ligament|fascia|aponeuros|retinaculum|cartilage/i.test(m.name||"");
-   const old=m.material;
-   if(old){
-     old.side=T.DoubleSide;
-     if("roughness" in old)old.roughness=tendon?.58:.46;
-     if("metalness" in old)old.metalness=0;
-     old.needsUpdate=true;
-     m.userData.v72Base=old.clone?old.clone():old;
-   }
- });
- r.classList.add("v72-hd-active");
- r.dataset.anatomyAsset=used;
- status(a.__v72HD?"HD Anatomy Active":"Standard Anatomy Active",
-        `${meshes.length} anatomical structures · ${a.__v72HD?"DRACO HD asset":"fallback asset"}`);
- setTimeout(()=>r.querySelector("#v72-hd-status")?.classList.add("compact"),1800);
-
- // Refresh later UI layers that depend on app.meshes.
- try{document.dispatchEvent(new CustomEvent("myaims:anatomy-ready",{detail:{asset:used,count:meshes.length,hd:a.__v72HD}}))}catch(e){}
-}
-function boot(){
- const r=root();if(!r?.classList.contains("open"))return;
- const t=setInterval(()=>{
-   const a=typeof app!=="undefined"?app:null;
-   if(a?.THREE&&a?.scene&&a?.renderer){clearInterval(t);loadHD()}
- },100);
- setTimeout(()=>clearInterval(t),16000);
-}
-document.addEventListener("click",e=>{
- if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,260);
-},false);
-
-const st=document.createElement("style");st.textContent=`
-#v72-hd-status{position:absolute;z-index:40;left:50%;top:91px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;min-width:190px;padding:7px 11px;border:1px solid #d6e4e7;border-radius:10px;background:rgba(255,255,255,.95);box-shadow:0 8px 24px rgba(21,67,76,.09);backdrop-filter:blur(10px);transition:.25s}
-#v72-hd-status i{width:7px;height:7px;border-radius:50%;background:#1a9b79;box-shadow:0 0 0 4px rgba(26,155,121,.11)}
-#v72-hd-status b,#v72-hd-status span{display:block}#v72-hd-status b{font-size:6px;color:#24535e}#v72-hd-status span{font-size:4.8px;color:#82979b;margin-top:1px}
-#v72-hd-status.compact{min-width:0;opacity:.88;top:94px}
-#v61-real3d.v72-hd-active .v70-render-badge{display:none!important}
-#v61-real3d.v72-hd-active .v71-quality{bottom:84px}
-`;document.head.appendChild(st);
-window.MYAIMS_BUILD="V72 HD ANATOMY ENGINE";
-})();
-
-/* =========================================================
-   myAIMS V73 — HD LOADER DIAGNOSTIC / HARD HD MODE
-   Does NOT silently accept the old 467-structure model.
-   Tests the HD file, reports exact load status, and forces
-   a second HD load using the same Three.js module family.
-   ========================================================= */
-(function(){
-const HD="./assets/myaims-anatomy-hd.glb";
-const VER="0.166.1";
-const R=()=>document.getElementById("v61-real3d");
-const A=()=>typeof app!=="undefined"?app:null;
-
-function box(title,detail,type="load"){
- const r=R();if(!r)return;
- let e=r.querySelector("#v73-diag");
- if(!e){e=document.createElement("div");e.id="v73-diag";(r.querySelector(".v61-stagewrap")||r).appendChild(e)}
- e.className="v73-"+type;
- e.innerHTML=`<i></i><div><b>${title}</b><span>${detail||""}</span></div>`;
-}
-async function hardLoad(){
- const a=A(),r=R();if(!a?.scene||!a?.camera||!r||a.__v73)return;
- a.__v73=true;
- box("Checking HD anatomy asset…",HD);
- try{
-   const res=await fetch(HD,{cache:"no-store"});
-   if(!res.ok)throw new Error(`HTTP ${res.status} ${res.statusText}`);
-   const blob=await res.blob();
-   if(blob.size<100000)throw new Error(`File is unexpectedly small (${Math.round(blob.size/1024)} KB)`);
-   box("HD file found",`${(blob.size/1024/1024).toFixed(1)} MB · loading decoder…`);
- }catch(e){
-   box("HD FILE ERROR",String(e.message||e),"err");return;
- }
-
- try{
-   const [tm,lm,dm]=await Promise.all([
-     import(`https://esm.sh/three@${VER}`),
-     import(`https://esm.sh/three@${VER}/examples/jsm/loaders/GLTFLoader.js`),
-     import(`https://esm.sh/three@${VER}/examples/jsm/loaders/DRACOLoader.js`)
-   ]);
-   const T=tm, loader=new lm.GLTFLoader(), draco=new dm.DRACOLoader();
-   draco.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
-   loader.setDRACOLoader(draco);
-
-   box("Loading HD anatomy…","Please wait · لا تغلق الشاشة");
-   const gltf=await new Promise((resolve,reject)=>loader.load(
-     HD,resolve,
-     x=>{if(x.total)box("Loading HD anatomy…",`${Math.round(x.loaded/x.total*100)}%`)},
-     reject
-   ));
-   const model=gltf.scene;
-   let meshes=[];model.traverse(o=>{if(o.isMesh){o.name=o.name||o.parent?.name||"Anatomical Structure";meshes.push(o)}});
-   if(!meshes.length)throw new Error("GLB loaded but contains no mesh structures");
-
-   // Remove old anatomy only after HD is proven valid.
-   try{(a.meshes||[]).forEach(m=>{if(m.parent)m.parent.remove(m)})}catch(e){}
-   a.scene.add(model);model.updateMatrixWorld(true);
-
-   // Fit model using its native coordinates; no BodyExplorer axis conversion.
-   const bounds=new T.Box3().setFromObject(model);
-   const size=bounds.getSize(new T.Vector3()),center=bounds.getCenter(new T.Vector3());
-   model.position.sub(center);model.updateMatrixWorld(true);
-   const max=Math.max(size.x,size.y,size.z);
-   const fov=a.camera.fov||31;
-   const dist=(max/2)/Math.tan(T.MathUtils.degToRad(fov/2))*1.18;
-   a.camera.position.set(0,0,dist);
-   a.camera.near=Math.max(.001,dist/1000);a.camera.far=dist*20;a.camera.updateProjectionMatrix();
-   if(a.controls){a.controls.target.set(0,0,0);a.controls.minDistance=max*.3;a.controls.maxDistance=max*5;a.controls.update()}
-
-   // Keep clinical engine references.
-   a.meshes=meshes;a.model=model;a.__v72HD=true;a.__v72Asset=HD;a.__v73HD=true;
-   if(a.raycaster===undefined)a.raycaster=new T.Raycaster();
-
-   // Respect embedded materials/textures; only tune PBR values.
-   meshes.forEach(m=>{
-     const mats=Array.isArray(m.material)?m.material:[m.material];
-     mats.filter(Boolean).forEach(mat=>{
-       if("metalness" in mat)mat.metalness=0;
-       if("roughness" in mat)mat.roughness=Math.min(.62,Math.max(.34,mat.roughness??.48));
-       mat.side=T.DoubleSide;mat.needsUpdate=true;
-     });
-   });
-
-   r.classList.add("v73-hd-confirmed");
-   r.dataset.anatomyAsset="HD";
-   box("HD ANATOMY ACTIVE",`${meshes.length} HD structures · ${HD}`,"ok");
-   try{document.dispatchEvent(new CustomEvent("myaims:anatomy-ready",{detail:{asset:HD,count:meshes.length,hd:true}}))}catch(e){}
- }catch(e){
-   console.error("V73 HD load error",e);
-   box("HD LOAD FAILED",`${e?.message||e} · Open browser console for details`,"err");
- }
-}
-function boot(){
- const r=R();if(!r?.classList.contains("open"))return;
- const t=setInterval(()=>{if(A()?.scene&&A()?.camera){clearInterval(t);hardLoad()}},120);
- setTimeout(()=>clearInterval(t),16000);
-}
-document.addEventListener("click",e=>{
- if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,450);
-},false);
-
-const st=document.createElement("style");st.textContent=`
-#v73-diag{position:absolute;z-index:999;left:50%;top:82px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;min-width:260px;max-width:520px;padding:9px 12px;border:1px solid #cbdde1;border-radius:10px;background:rgba(255,255,255,.98);box-shadow:0 10px 28px rgba(18,58,67,.14)}
-#v73-diag i{width:9px;height:9px;border-radius:50%;background:#d39a38;box-shadow:0 0 0 4px rgba(211,154,56,.12)}
-#v73-diag b,#v73-diag span{display:block}#v73-diag b{font-size:7px;color:#214f59}#v73-diag span{font-size:5.5px;color:#718b91;margin-top:2px;word-break:break-word}
-#v73-diag.v73-ok{border-color:#9bd8c5;background:#f5fffb}#v73-diag.v73-ok i{background:#1aa57d;box-shadow:0 0 0 4px rgba(26,165,125,.13)}
-#v73-diag.v73-err{border-color:#efb0b5;background:#fff7f7}#v73-diag.v73-err i{background:#df4652;box-shadow:0 0 0 4px rgba(223,70,82,.12)}
-#v61-real3d.v73-hd-confirmed #v72-hd-status{display:none!important}
-`;document.head.appendChild(st);
-window.MYAIMS_BUILD="V73 HD LOADER DIAGNOSTIC";
+ const st=document.createElement("style");
+ st.textContent=`#v61-real3d[data-anatomy-asset="myaims-anatomy-hd.glb"] .v61-modelstatus{background:#f1fbf7!important;border-color:#a9dfcb!important}
+ #v61-real3d[data-anatomy-asset="myaims-anatomy-hd.glb"] .v61-modelstatus:before{content:"HD";display:inline-grid;place-items:center;width:17px;height:17px;border-radius:5px;background:#17677a;color:#fff;font-size:5px;font-weight:900;margin-right:5px}`;
+ document.head.appendChild(st);
+ window.MYAIMS_BUILD="V74 NATIVE HD ENGINE";
 })();
