@@ -10087,3 +10087,203 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',css);else css();
 })();
+
+
+/* =========================================================
+   myAIMS V36 - HOME EXERCISE PROGRAM (HEP)
+   Connected to Patient -> Treatment Plan -> Session
+   - Add exercises during clinical session
+   - Exercise library + custom exercise
+   - Sets / reps / hold / frequency / instructions
+   - Patient HEP history
+   - Save with patient and appointment
+   - Print professional Patient Exercise Sheet
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{try{if(typeof window.saveState==='function')window.saveState()}catch(e){}};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function ensure(){if(!Array.isArray(S().homeExercisePrograms))S().homeExercisePrograms=[];save()}
+  function appt(id){return (S().appointments||[]).find(a=>String(a.id)===String(id))}
+  function patient(id){return (S().patients||[]).find(p=>String(p.id)===String(id))}
+  function pname(id){const p=patient(id);return p?.name||p?.fullName||p?.patientName||'Patient'}
+  function currentAppointmentId(){return document.getElementById('v24-clinical-modal')?.dataset.appointmentId||''}
+
+  const library=[
+    ['Pelvic Tilt','Lumbar / Core'],['Bridge','Lumbar / Hip'],['Cat-Camel','Spine Mobility'],
+    ['Knee to Chest','Lower Back'],['Hamstring Stretch','Lower Limb'],['Calf Stretch','Lower Limb'],
+    ['Quadriceps Stretch','Lower Limb'],['Straight Leg Raise','Knee / Hip'],['Heel Slides','Knee'],
+    ['Mini Squat','Lower Limb'],['Sit to Stand','Functional'],['Step Up','Functional'],
+    ['Ankle Pumps','Ankle'],['Heel Raises','Ankle / Calf'],['Clamshell','Hip'],
+    ['Hip Abduction','Hip'],['Chin Tuck','Neck'],['Upper Trapezius Stretch','Neck'],
+    ['Scapular Retraction','Shoulder'],['Pendulum Exercise','Shoulder'],['Wall Slides','Shoulder'],
+    ['Shoulder Flexion ROM','Shoulder'],['Shoulder External Rotation','Shoulder'],
+    ['Wrist ROM','Wrist / Hand'],['Grip Exercise','Hand'],['Balance – Single Leg Stand','Balance'],
+    ['Tandem Stand','Balance'],['Walking Program','Gait'],['Breathing Exercise','General']
+  ];
+
+  window.__v36Exercises=[];
+
+  function exerciseRow(ex={},i=0){
+    return `<article class="v36-exercise-row" data-i="${i}">
+      <div class="v36-ex-title"><span>${i+1}</span><div><b>${esc(ex.name||'Exercise')}</b><small>${esc(ex.category||'Custom')}</small></div><button type="button" onclick="removeV36Exercise(${i})">×</button></div>
+      <div class="v36-dose">
+        <label><span>Sets</span><input data-k="sets" type="number" min="1" value="${esc(ex.sets||3)}"></label>
+        <label><span>Reps</span><input data-k="reps" type="number" min="1" value="${esc(ex.reps||10)}"></label>
+        <label><span>Hold</span><input data-k="hold" value="${esc(ex.hold||'')}" placeholder="e.g. 10 sec"></label>
+        <label><span>Frequency</span><input data-k="frequency" value="${esc(ex.frequency||'1–2x/day')}" placeholder="e.g. 2x/day"></label>
+      </div>
+      <label class="v36-instruction"><span>Instructions</span><textarea data-k="instructions" rows="2" placeholder="Technique, precautions or therapist instructions...">${esc(ex.instructions||'')}</textarea></label>
+    </article>`;
+  }
+
+  function syncRows(){
+    document.querySelectorAll('#v36-selected .v36-exercise-row').forEach((r,i)=>{
+      const ex=window.__v36Exercises[i];if(!ex)return;
+      r.querySelectorAll('[data-k]').forEach(el=>ex[el.dataset.k]=el.value);
+    });
+  }
+  function renderSelected(){
+    const h=document.getElementById('v36-selected');if(!h)return;
+    h.innerHTML=window.__v36Exercises.length?window.__v36Exercises.map(exerciseRow).join(''):`<div class="v36-empty">No exercises added yet. Choose from the library or add a custom exercise.</div>`;
+  }
+  window.addV36Exercise=function(name,category){
+    syncRows();
+    window.__v36Exercises.push({name,category,sets:3,reps:10,hold:'',frequency:'1–2x/day',instructions:''});
+    renderSelected();
+  };
+  window.removeV36Exercise=function(i){syncRows();window.__v36Exercises.splice(i,1);renderSelected()};
+
+  function latestProgram(pid){
+    return (S().homeExercisePrograms||[]).filter(x=>String(x.patientId)===String(pid))
+      .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0]||null;
+  }
+
+  window.openV36HEP=function(appointmentId){
+    ensure();
+    const a=appt(appointmentId||currentAppointmentId());if(!a)return;
+    const previous=latestProgram(a.patientId);
+    window.__v36Exercises=[];
+    let root=document.getElementById('v36-hep-modal');
+    if(!root){root=document.createElement('div');root.id='v36-hep-modal';document.body.appendChild(root)}
+    root.className='open';root.dataset.appointmentId=a.id;
+    root.innerHTML=`
+      <div class="v36-backdrop" onclick="closeV36HEP()"></div>
+      <section class="v36-dialog">
+        <header><div><small>HOME EXERCISE PROGRAM</small><h2>${esc(pname(a.patientId))}</h2><p>${esc(a.date||'')} · ${esc(a.therapist||'Therapist')}</p></div><button onclick="closeV36HEP()">×</button></header>
+        <div class="v36-layout">
+          <aside>
+            <div class="v36-library-head"><small>EXERCISE LIBRARY</small><h3>Quick Add</h3></div>
+            <input id="v36-search" placeholder="Search exercises..." oninput="filterV36Library(this.value)">
+            <div id="v36-library">${library.map(([n,c])=>`<button type="button" data-search="${esc((n+' '+c).toLowerCase())}" onclick="addV36Exercise('${esc(n)}','${esc(c)}')"><b>${esc(n)}</b><small>${esc(c)}</small><span>+</span></button>`).join('')}</div>
+            <button class="v36-custom" onclick="addV36Custom()">+ Custom Exercise</button>
+          </aside>
+          <main>
+            <div class="v36-main-head"><div><small>PATIENT PROGRAM</small><h3>Prescribed Exercises</h3></div>${previous?`<button onclick="carryV36Previous('${a.patientId}')">Use Previous Program</button>`:''}</div>
+            <div id="v36-selected"></div>
+            <div class="v36-general">
+              <label><span>General Home Advice</span><textarea id="v36-advice" rows="3" placeholder="General precautions, activity advice, pain guidance...">${esc(previous?.advice||'')}</textarea></label>
+              <label><span>Review / Follow-up</span><input id="v36-review" value="${esc(previous?.review||'Review next session')}" placeholder="e.g. Review next session"></label>
+            </div>
+          </main>
+        </div>
+        <footer><button onclick="closeV36HEP()">Cancel</button><button class="print" onclick="saveV36HEP(false)">Save Program</button><button class="primary" onclick="saveV36HEP(true)">Save & Print Patient Sheet</button></footer>
+      </section>`;
+    renderSelected();
+  };
+  window.closeV36HEP=function(){const x=document.getElementById('v36-hep-modal');if(x)x.className=''};
+  window.filterV36Library=function(q){
+    q=String(q||'').toLowerCase();
+    document.querySelectorAll('#v36-library button').forEach(b=>b.style.display=b.dataset.search.includes(q)?'flex':'none');
+  };
+  window.addV36Custom=function(){
+    const name=prompt('Exercise name:');if(!name)return;
+    addV36Exercise(name,'Custom');
+  };
+  window.carryV36Previous=function(pid){
+    const p=latestProgram(pid);if(!p)return;
+    window.__v36Exercises=(p.exercises||[]).map(x=>({...x}));
+    renderSelected();
+    const advice=document.getElementById('v36-advice');if(advice)advice.value=p.advice||'';
+    const review=document.getElementById('v36-review');if(review)review.value=p.review||'';
+  };
+
+  window.saveV36HEP=function(printAfter){
+    ensure();syncRows();
+    const root=document.getElementById('v36-hep-modal'),a=appt(root?.dataset.appointmentId);if(!a)return;
+    if(!window.__v36Exercises.length){alert('Please add at least one exercise.');return}
+    const rec={
+      id:'HEP-'+Date.now(),patientId:a.patientId,appointmentId:a.id,date:a.date,
+      therapist:a.therapist||'',exercises:window.__v36Exercises.map(x=>({...x})),
+      advice:document.getElementById('v36-advice')?.value.trim()||'',
+      review:document.getElementById('v36-review')?.value.trim()||'',
+      createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),status:'Active'
+    };
+    S().homeExercisePrograms.push(rec);save();
+    try{if(typeof window.logAudit==='function')window.logAudit('Home Exercise Program Saved','Clinical',`${pname(a.patientId)} — ${a.date}`)}catch(e){}
+    closeV36HEP();
+    if(printAfter)printV36HEP(rec.id);
+  };
+
+  window.printV36HEP=function(id){
+    const p=(S().homeExercisePrograms||[]).find(x=>String(x.id)===String(id));if(!p)return;
+    const pt=patient(p.patientId)||{};
+    const w=window.open('','_blank','width=900,height=1000');
+    w.document.write(`<!doctype html><html><head><title>Home Exercise Program</title><style>
+      body{font-family:Arial,sans-serif;color:#294f58;margin:0;background:#fff}.sheet{max-width:800px;margin:auto;padding:36px}
+      header{display:flex;justify-content:space-between;border-bottom:3px solid #174f5b;padding-bottom:16px}small{font-size:10px;color:#9a7431;font-weight:bold}h1{font-size:24px;margin:4px 0}.meta{text-align:right;font-size:12px;color:#657b80}
+      .patient{margin:18px 0;padding:14px;background:#f2f7f7;border-radius:10px;display:flex;justify-content:space-between}.patient b{font-size:17px}.patient span{font-size:11px;color:#71858a}
+      article{border:1px solid #dce6e8;border-radius:10px;padding:13px;margin:9px 0;break-inside:avoid}.num{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#174f5b;color:#fff;font-weight:bold;margin-right:8px}.title{font-size:15px;font-weight:bold}.cat{font-size:10px;color:#9b7a3e;margin-left:7px}.dose{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:11px 0}.dose div{background:#f4f8f8;padding:8px;border-radius:7px}.dose small,.dose b{display:block}.dose b{font-size:12px;margin-top:3px}.instructions{font-size:11px;line-height:1.5;color:#5f757b}.advice{margin-top:16px;border-top:1px solid #dce6e8;padding-top:14px;font-size:12px;line-height:1.6}
+      footer{margin-top:30px;border-top:1px solid #dce6e8;padding-top:12px;font-size:10px;color:#849397;display:flex;justify-content:space-between}@media print{.sheet{padding:20px}}
+    </style></head><body><div class="sheet">
+      <header><div><small>MY AIMS REHABILITATION CENTER W.L.L</small><h1>Home Exercise Program</h1><span>Patient Exercise Sheet</span></div><div class="meta">${esc(p.date||'')}<br>${esc(p.therapist||'Therapist')}</div></header>
+      <div class="patient"><div><small>PATIENT</small><br><b>${esc(pt.name||pt.fullName||'Patient')}</b></div><div><span>${esc(pt.id||'')}</span><br><span>${esc(pt.phone||pt.mobile||'')}</span></div></div>
+      ${(p.exercises||[]).map((x,i)=>`<article><div><span class="num">${i+1}</span><span class="title">${esc(x.name)}</span><span class="cat">${esc(x.category||'')}</span></div><div class="dose"><div><small>SETS</small><b>${esc(x.sets||'—')}</b></div><div><small>REPS</small><b>${esc(x.reps||'—')}</b></div><div><small>HOLD</small><b>${esc(x.hold||'—')}</b></div><div><small>FREQUENCY</small><b>${esc(x.frequency||'—')}</b></div></div>${x.instructions?`<div class="instructions"><b>Instructions:</b> ${esc(x.instructions)}</div>`:''}</article>`).join('')}
+      <div class="advice"><b>Home Advice</b><br>${esc(p.advice||'Follow the prescribed program as instructed by your therapist.')}<br><br><b>Review:</b> ${esc(p.review||'Review next session')}</div>
+      <footer><span>myAIMS Rehabilitation Center</span><span>Clinical Home Exercise Program</span></footer>
+    </div><script>window.onload=()=>window.print();<\/script></body></html>`);
+    w.document.close();
+  };
+
+  function enhanceClinical(){
+    const root=document.getElementById('v24-clinical-modal');
+    if(!root?.classList.contains('open'))return;
+    const id=root.dataset.appointmentId;if(!id)return;
+    const dialog=root.querySelector('.v34-clinical-workspace');if(!dialog||dialog.dataset.v36==='1')return;
+    dialog.dataset.v36='1';
+
+    const tabs=dialog.querySelector('.v24-tabs');
+    if(tabs){
+      const btn=document.createElement('button');btn.type='button';btn.textContent='Home Exercise';btn.onclick=()=>openV36HEP(id);tabs.appendChild(btn);
+    }
+    const footer=dialog.querySelector('.v24-footer');
+    if(footer){
+      const btn=document.createElement('button');btn.type='button';btn.className='secondary v36-hep-btn';btn.textContent='Home Exercise Program';btn.onclick=()=>openV36HEP(id);
+      const primary=footer.querySelector('.primary');if(primary)footer.insertBefore(btn,primary);else footer.appendChild(btn);
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v36-css'))return;
+    const s=document.createElement('style');s.id='v36-css';s.textContent=`
+      #v36-hep-modal{display:none}#v36-hep-modal.open{display:block;position:fixed;inset:0;z-index:100700}.v36-backdrop{position:absolute;inset:0;background:rgba(13,42,49,.72);backdrop-filter:blur(5px)}
+      .v36-dialog{position:relative;width:min(1180px,95vw);height:90vh;margin:5vh auto;background:#f4f8f8;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 25px 80px rgba(0,0,0,.28);color:#36575f}
+      .v36-dialog>header{display:flex;justify-content:space-between;background:#174f5b;color:#fff;padding:16px 20px}.v36-dialog header small{font-size:9px;color:#e2c17c;font-weight:900}.v36-dialog header h2{font-size:21px;margin:3px 0}.v36-dialog header p{font-size:11px;margin:0;color:#d5e5e7}.v36-dialog header>button{border:0;background:rgba(255,255,255,.12);color:#fff;width:35px;height:35px;border-radius:9px;font-size:20px}
+      .v36-layout{display:grid;grid-template-columns:300px 1fr;gap:10px;padding:10px;overflow:hidden;flex:1}.v36-layout>aside,.v36-layout>main{background:#fff;border:1px solid #dce7e8;border-radius:12px;padding:12px;overflow:auto}.v36-library-head small,.v36-main-head small{font-size:9px;color:#a67c32;font-weight:900}.v36-library-head h3,.v36-main-head h3{font-size:16px;margin:3px 0 9px;color:#31565e}#v36-search{width:100%;box-sizing:border-box;border:1px solid #d7e3e5;border-radius:8px;padding:9px;font-size:11px;margin-bottom:8px}
+      #v36-library{display:grid;gap:5px}#v36-library>button{display:flex;align-items:center;text-align:left;border:1px solid #e0e8e9;background:#f8fbfb;border-radius:8px;padding:8px;color:#46656c}#v36-library b,#v36-library small{display:block}#v36-library b{font-size:10px;flex:1}#v36-library small{font-size:8px;color:#87979b;margin-left:5px}#v36-library span{margin-left:auto;font-size:15px;color:#a47b34}.v36-custom{width:100%;margin-top:8px;border:1px dashed #c9d8da;background:#fff;color:#496b72;border-radius:8px;padding:9px;font-size:10px;font-weight:800}
+      .v36-main-head{display:flex;justify-content:space-between;align-items:center}.v36-main-head button{border:1px solid #d6e2e4;background:#fff;color:#4c6b72;border-radius:8px;padding:7px 9px;font-size:10px;font-weight:800}
+      #v36-selected{display:grid;gap:7px}.v36-exercise-row{border:1px solid #dce7e8;background:#fbfdfd;border-radius:10px;padding:10px}.v36-ex-title{display:flex;align-items:center;gap:8px}.v36-ex-title>span{width:25px;height:25px;border-radius:50%;background:#174f5b;color:#fff;display:grid;place-items:center;font-size:9px;font-weight:900}.v36-ex-title>div{flex:1}.v36-ex-title b,.v36-ex-title small{display:block}.v36-ex-title b{font-size:12px}.v36-ex-title small{font-size:9px;color:#8b999d}.v36-ex-title>button{border:0;background:#fff0f0;color:#a65d63;width:26px;height:26px;border-radius:7px}
+      .v36-dose{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:9px 0}.v36-dose label,.v36-instruction{display:flex;flex-direction:column;gap:4px}.v36-dose span,.v36-instruction span,.v36-general span{font-size:9px;font-weight:800;color:#5b7379}.v36-dose input,.v36-instruction textarea,.v36-general input,.v36-general textarea{border:1px solid #d9e4e5;border-radius:7px;padding:7px;font:inherit;font-size:10px}.v36-instruction textarea{resize:vertical}.v36-general{display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #e4ebec}.v36-general label{display:flex;flex-direction:column;gap:4px}.v36-empty{text-align:center;padding:35px;color:#87979b;font-size:11px;background:#f8fbfb;border-radius:9px}
+      .v36-dialog>footer{display:flex;justify-content:flex-end;gap:6px;padding:10px 14px;background:#fff;border-top:1px solid #dce6e7}.v36-dialog>footer button{border:1px solid #d6e2e4;background:#fff;color:#557078;border-radius:8px;padding:9px 12px;font-size:10px;font-weight:800}.v36-dialog>footer .print{background:#fff8e9;border-color:#e7d1a6;color:#8d692a}.v36-dialog>footer .primary{background:#174f5b;color:#fff;border-color:#174f5b}
+      .v36-hep-btn{border-color:#dfc68f!important;color:#8d692a!important;background:#fff9ed!important}
+      @media(max-width:760px){.v36-dialog{width:100vw;height:100vh;margin:0;border-radius:0}.v36-layout{grid-template-columns:1fr;overflow:auto}.v36-layout>aside,.v36-layout>main{overflow:visible}.v36-dose,.v36-general{grid-template-columns:1fr 1fr}}
+    `;document.head.appendChild(s);
+  }
+
+  function init(){
+    ensure();css();
+    const o=new MutationObserver(()=>{clearTimeout(window.__v36);window.__v36=setTimeout(enhanceClinical,80)});
+    o.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
