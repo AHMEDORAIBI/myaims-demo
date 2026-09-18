@@ -12514,3 +12514,109 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V67 SMART MUSCLE INSPECTOR";
 })();
+
+/* =========================================================
+   myAIMS V68 — ANATOMICAL SEARCH & SMART REGION NAVIGATION
+   Search EN/AR, live mesh results, focus + select, smart regions.
+   Built on V67; preserves the working V64 3D engine.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+const clean=n=>String(n||"").replace(/[_-]+/g," ").replace(/\.\d+$/,"").replace(/\s+/g," ").trim();
+const dict=[
+ ["shoulder","الكتف",["deltoid","supraspinatus","infraspinatus","teres"]],
+ ["neck","الرقبة",["sternocleidomastoid","scalene","trapezius"]],
+ ["chest","الصدر",["pectoralis","serratus"]],
+ ["upper back","أعلى الظهر",["trapezius","rhomboid","latissimus"]],
+ ["lower back","أسفل الظهر",["erector","multifidus","lumbar"]],
+ ["arm","الذراع",["biceps","triceps","brachialis"]],
+ ["forearm","الساعد",["flexor","extensor","pronator"]],
+ ["hip","الورك",["gluteus","piriformis"]],
+ ["thigh","الفخذ",["rectus femoris","vastus","adductor","hamstring","biceps femoris"]],
+ ["knee","الركبة",["patella","vastus medialis","vastus lateralis"]],
+ ["calf","الساق",["gastrocnemius","soleus","tibialis"]],
+ ["abdomen","البطن",["rectus abdominis","oblique","transversus"]],
+ ["deltoid","العضلة الدالية",["deltoid"]],
+ ["trapezius","العضلة شبه المنحرفة",["trapezius"]],
+ ["biceps","العضلة ذات الرأسين",["biceps"]],
+ ["triceps","العضلة ثلاثية الرؤوس",["triceps"]],
+ ["gastrocnemius","العضلة التوأمية",["gastrocnemius"]],
+ ["soleus","العضلة النعلية",["soleus"]]
+];
+function aliases(q){
+ q=String(q||"").trim().toLowerCase(); if(!q)return [];
+ let out=[q];
+ dict.forEach(([en,ar,terms])=>{if(en.includes(q)||ar.includes(q)||q.includes(en)||q.includes(ar))out.push(...terms,en)});
+ return [...new Set(out)];
+}
+function results(q){
+ const a=A();if(!a?.meshes)return [];
+ const terms=aliases(q);
+ return a.meshes.map(m=>({m,n:clean(m.name||m.userData?.displayName)}))
+ .filter(x=>terms.some(t=>x.n.toLowerCase().includes(t.toLowerCase())))
+ .slice(0,18);
+}
+function arLabel(n){
+ const q=n.toLowerCase();
+ for(const [en,ar,terms] of dict)if(q.includes(en)||terms.some(t=>q.includes(t)))return ar;
+ return "بنية تشريحية";
+}
+function install(){
+ const r=R(),stage=r?.querySelector(".v61-stagewrap"); if(!stage||r.querySelector("#v68-search"))return;
+ const box=document.createElement("div");box.id="v68-search";
+ box.innerHTML=`<div class="v68-input"><span>⌕</span><input placeholder="Search muscle or region · ابحث عن عضلة أو منطقة" autocomplete="off"><kbd>⌘ K</kbd><button data-clear>×</button></div><div class="v68-results" hidden></div>`;
+ stage.appendChild(box);
+ const input=box.querySelector("input"),list=box.querySelector(".v68-results");
+ input.oninput=()=>draw(input.value,list);
+ input.onfocus=()=>{if(input.value.trim())draw(input.value,list)};
+ box.querySelector("[data-clear]").onclick=()=>{input.value="";list.hidden=true;input.focus()};
+ document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"&&r.classList.contains("open")){e.preventDefault();input.focus();input.select()}});
+ addSmartRegions(r);
+}
+function draw(q,list){
+ const rr=results(q);list.hidden=!q.trim();
+ if(!q.trim())return;
+ list.innerHTML=rr.length?`<div class="v68-resulthead"><b>${rr.length} matches</b><span>اضغط للتركيز على العضلة</span></div>`+rr.map((x,i)=>`<button data-i="${i}"><i></i><div><b>${x.n}</b><span>${arLabel(x.n)}</span></div><em>Focus ›</em></button>`).join(""):`<div class="v68-none">No matching anatomical structure · لا توجد نتيجة مطابقة</div>`;
+ list.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>selectMesh(rr[+b.dataset.i].m,list));
+}
+function selectMesh(m,list){
+ if(!m)return;
+ try{
+  if(!selected.has(m.uuid)){selected.set(m.uuid,{object:m,name:clean(m.name),pain:0,mode:"pain"});highlight(m,"pain")}
+  renderSelected();
+  const v=selected.get(m.uuid);
+  const a=A(),THREE=a.THREE,bb=new THREE.Box3().setFromObject(m),c=bb.getCenter(new THREE.Vector3()),sz=bb.getSize(new THREE.Vector3());
+  const d=Math.max(sz.x,sz.y,sz.z)*8+7;
+  a.controls.target.copy(c);a.camera.position.set(c.x,c.y,c.z+d);a.controls.update();
+  setTimeout(()=>{try{document.dispatchEvent(new PointerEvent("pointerup",{bubbles:true}))}catch(e){}},20);
+ }catch(e){console.error("V68 select",e)}
+ list.hidden=true;
+}
+function addSmartRegions(r){
+ const left=r.querySelector(".v61-left");if(!left||left.querySelector(".v68-smart"))return;
+ const d=document.createElement("div");d.className="v68-smart";
+ d.innerHTML=`<small>SMART REGION NAVIGATION · تنقل ذكي</small><div>${[
+ ["Shoulder","الكتف"],["Neck","الرقبة"],["Lower Back","أسفل الظهر"],["Hip","الورك"],["Knee","الركبة"],["Calf","الساق"]
+ ].map(([e,a])=>`<button data-q="${e}"><span>⌖</span><b>${e}</b><em>${a}</em></button>`).join("")}</div>`;
+ left.appendChild(d);
+ d.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{
+   const rs=results(b.dataset.q);if(rs[0])selectMesh(rs[0].m,R().querySelector(".v68-results"));
+ });
+}
+function boot(){
+ const r=R();if(!r?.classList.contains("open"))return;
+ const t=setInterval(()=>{if(A()?.meshes?.length){clearInterval(t);install()}},100);
+ setTimeout(()=>clearInterval(t),15000);
+}
+document.addEventListener("click",e=>{
+ if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,180);
+},false);
+
+const st=document.createElement("style");st.textContent=`
+#v68-search{position:absolute;z-index:30;left:50%;top:68px;transform:translateX(-50%);width:min(440px,56%)}.v68-input{height:36px;display:grid;grid-template-columns:25px 1fr auto 22px;align-items:center;background:rgba(255,255,255,.97);border:1px solid #d5e3e5;border-radius:9px;padding:0 6px;box-shadow:0 7px 25px rgba(18,61,70,.09);backdrop-filter:blur(10px)}.v68-input>span{font-size:16px;color:#1d6170}.v68-input input{border:0!important;outline:0!important;background:transparent!important;height:32px!important;font-size:7px!important;color:#173f49!important}.v68-input kbd{font-size:5px;color:#81969a;border:1px solid #dbe5e7;border-radius:4px;padding:3px 5px;background:#f5f8f9}.v68-input button{border:0!important;background:none!important;font-size:12px!important;color:#8ba0a4!important;padding:0!important}.v68-results{position:absolute;top:41px;left:0;right:0;max-height:310px;overflow:auto;background:#fff;border:1px solid #d5e3e5;border-radius:9px;box-shadow:0 15px 35px rgba(18,61,70,.14);padding:5px}.v68-resulthead{display:flex;justify-content:space-between;padding:6px 7px;border-bottom:1px solid #e8edef}.v68-resulthead b,.v68-resulthead span{font-size:5.5px}.v68-resulthead span{direction:rtl;color:#819599}.v68-results button{width:100%;height:42px!important;display:grid!important;grid-template-columns:8px 1fr auto!important;gap:7px!important;align-items:center!important;text-align:left!important;border:0!important;border-bottom:1px solid #edf1f2!important;background:#fff!important;padding:4px 7px!important}.v68-results button:hover{background:#f1f7f8!important}.v68-results button>i{width:7px;height:7px;border-radius:50%;background:#a74639}.v68-results b,.v68-results span{display:block}.v68-results b{font-size:6.5px;color:#244e57}.v68-results span{font-size:5.5px;color:#81969a;direction:rtl;margin-top:2px}.v68-results em{font-size:5.5px;color:#17687a;font-style:normal}.v68-none{padding:20px;text-align:center;font-size:6px;color:#82979b}
+.v68-smart{border-top:1px solid #e3ebed;margin-top:10px;padding-top:9px}.v68-smart>small{font-size:5.5px;color:#b17c2e;font-weight:900}.v68-smart>div{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px}.v68-smart button{height:43px!important;border:1px solid #dce7e9!important;background:#f8fbfb!important;border-radius:7px!important;padding:4px!important;text-align:center!important}.v68-smart button span,.v68-smart button b,.v68-smart button em{display:block}.v68-smart button span{font-size:10px;color:#1c6978}.v68-smart button b{font-size:5.5px;color:#315e67}.v68-smart button em{font-size:5px;color:#879a9e;font-style:normal;direction:rtl}
+@media(max-width:800px){#v68-search{width:70%;top:64px}.v68-input kbd{display:none}.v68-input{grid-template-columns:24px 1fr 20px}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V68 ANATOMICAL SEARCH NAVIGATION";
+})();
