@@ -12026,3 +12026,189 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V47 - PAIN MAP TAB / POPUP DEFINITIVE FIX
+   Screenshot-targeted:
+   - Adds Pain Map as the 4th visible tab beside Session Note.
+   - Hides the buried Pain & Treatment Areas block in Session Note.
+   - Clicking Pain Map opens a large near-full-screen popup immediately.
+   - Uses the actual visible Session Note tab bar as insertion anchor.
+   ========================================================= */
+(function(){
+  const isAR=()=>document.documentElement.dir==='rtl'||document.body.classList.contains('myaims-ar');
+  const T=(e,a)=>isAR()?a:e;
+
+  function modal(){
+    return document.querySelector('#v24-clinical-modal') ||
+           [...document.querySelectorAll('[class*="modal"]')].find(x=>/CLINICAL SESSION WORKSPACE|مساحة عمل الجلسة السريرية/i.test(x.textContent||''));
+  }
+  function workspace(){return modal()?.querySelector('.v34-clinical-workspace')||modal()}
+
+  function findTabBar(r){
+    if(!r)return null;
+    const buttons=[...r.querySelectorAll('button')];
+    const sn=buttons.find(b=>/^(Session Note|ملاحظة الجلسة)$/i.test((b.textContent||'').trim()));
+    const tp=buttons.find(b=>/^(Treatment Plan|الخطة العلاجية)$/i.test((b.textContent||'').trim()));
+    const ph=buttons.find(b=>/^(Patient History|سجل المريض)$/i.test((b.textContent||'').trim()));
+    if(sn&&tp&&ph){
+      let p=sn.parentElement;
+      for(let i=0;i<4&&p;i++,p=p.parentElement){
+        if(p.contains(tp)&&p.contains(ph))return p;
+      }
+    }
+    return r.querySelector('.v24-tabs');
+  }
+
+  function findOldPain(r){
+    if(!r)return null;
+    const v26=r.querySelector('#v26-body-map');
+    if(v26){
+      let p=v26;
+      for(let i=0;i<5&&p;i++,p=p.parentElement){
+        if(/Pain\s*&\s*Treatment Areas|مناطق الألم والعلاج/i.test(p.textContent||''))return p;
+      }
+      return v26;
+    }
+    return [...r.querySelectorAll('section,div')].find(x=>{
+      const tx=(x.textContent||'').trim();
+      return /Pain\s*&\s*Treatment Areas|مناطق الألم والعلاج/i.test(tx)&&x.querySelector('svg');
+    });
+  }
+
+  function setup(){
+    const r=workspace();if(!r)return;
+    const bar=findTabBar(r);
+    if(bar&&!bar.querySelector('[data-v47-pain]')){
+      const b=document.createElement('button');
+      b.type='button';b.dataset.v47Pain='1';b.className='v47-pain-button';
+      b.innerHTML=`<span class="v47-icon">◎</span>${T('Pain Map','خريطة الألم')}`;
+      b.addEventListener('click',function(e){
+        e.preventDefault();e.stopPropagation();
+        openV47PainMap();
+      });
+      // Put it directly beside Session Note, not elsewhere in workflow.
+      const session=[...bar.querySelectorAll('button')].find(x=>/^(Session Note|ملاحظة الجلسة)$/i.test((x.textContent||'').trim()));
+      if(session)session.insertAdjacentElement('afterend',b);else bar.prepend(b);
+    }
+
+    // Hide only the old buried pain area presentation.
+    const old=findOldPain(r);
+    if(old){
+      old.dataset.v47OldPain='1';
+      old.classList.add('v47-old-pain-hidden');
+    }
+
+    // Also hide the old heading if it sits immediately before the map.
+    [...r.querySelectorAll('h1,h2,h3,h4,.v24-section-title')].forEach(x=>{
+      if(/Pain\s*&\s*Treatment Areas|مناطق الألم والعلاج/i.test(x.textContent||'')){
+        x.classList.add('v47-old-pain-hidden');
+      }
+    });
+  }
+
+  window.openV47PainMap=function(){
+    const r=workspace();if(!r)return;
+
+    // Prefer the new V44 anatomical experience. If it has not been generated,
+    // expose the proven V26 map inside the large popup rather than forcing scroll.
+    let content=r.querySelector('.v44-experience');
+    const oldMap=r.querySelector('#v26-body-map');
+
+    let ov=document.getElementById('v47-pain-overlay');
+    if(!ov){
+      ov=document.createElement('div');ov.id='v47-pain-overlay';
+      ov.innerHTML=`
+        <section class="v47-shell">
+          <header class="v47-head">
+            <div>
+              <small>${T('CLINICAL SESSION · PAIN MAPPING','الجلسة السريرية · خريطة الألم')}</small>
+              <h2>${T('Pain & Treatment Areas','مناطق الألم والعلاج')}</h2>
+              <p>${T('Select pain areas and intensity in one dedicated workspace.','حدد مناطق الألم وشدتها في مساحة عمل واحدة.')}</p>
+            </div>
+            <div>
+              <button type="button" class="v47-close" data-v47-close>×</button>
+            </div>
+          </header>
+          <main class="v47-stage"></main>
+          <footer class="v47-footer">
+            <span>${T('Changes remain linked to this clinical session.','التغييرات مرتبطة بهذه الجلسة السريرية.')}</span>
+            <button type="button" data-v47-done>${T('Done · Return to Session','تم · العودة للجلسة')}</button>
+          </footer>
+        </section>`;
+      document.body.appendChild(ov);
+      ov.querySelector('[data-v47-close]').onclick=closeV47PainMap;
+      ov.querySelector('[data-v47-done]').onclick=closeV47PainMap;
+    }
+
+    const stage=ov.querySelector('.v47-stage');
+    if(content){
+      content.__v47Home=content.parentElement;
+      content.__v47Next=content.nextSibling;
+      content.classList.remove('v45-detached');
+      content.style.setProperty('display','grid','important');
+      stage.replaceChildren(content);
+    }else if(oldMap){
+      oldMap.__v47Home=oldMap.parentElement;
+      oldMap.__v47Next=oldMap.nextSibling;
+      oldMap.classList.remove('v45-legacy-hidden','v47-old-pain-hidden');
+      oldMap.style.setProperty('display','block','important');
+      stage.replaceChildren(oldMap);
+    }else{
+      stage.innerHTML=`<div class="v47-loading">${T('Preparing body map…','جاري تجهيز خريطة الجسم…')}</div>`;
+    }
+    ov.classList.add('open');document.body.classList.add('v47-open');
+  };
+
+  window.closeV47PainMap=function(){
+    const ov=document.getElementById('v47-pain-overlay');if(!ov)return;
+    const moved=ov.querySelector('.v44-experience,#v26-body-map');
+    if(moved&&moved.__v47Home){
+      if(moved.__v47Next&&moved.__v47Next.parentNode===moved.__v47Home)moved.__v47Home.insertBefore(moved,moved.__v47Next);
+      else moved.__v47Home.appendChild(moved);
+      if(moved.id==='v26-body-map')moved.classList.add('v47-old-pain-hidden');
+      else{moved.classList.add('v45-detached');moved.style.display='none'}
+    }
+    ov.classList.remove('open');document.body.classList.remove('v47-open');
+  };
+
+  function css(){
+    if(document.getElementById('v47-css'))return;
+    const s=document.createElement('style');s.id='v47-css';s.textContent=`
+      .v47-old-pain-hidden{display:none!important}
+      .v47-pain-button{
+        display:inline-flex!important;align-items:center!important;gap:6px!important;
+        background:#c9963d!important;color:#fff!important;border:1px solid #b7832f!important;
+        font-weight:900!important;box-shadow:0 5px 13px rgba(183,128,45,.16)!important
+      }
+      .v47-pain-button .v47-icon{font-size:16px}
+      #v47-pain-overlay{display:none;position:fixed;inset:0;z-index:400000;background:rgba(10,32,37,.78);backdrop-filter:blur(8px);padding:8px}
+      #v47-pain-overlay.open{display:block}body.v47-open{overflow:hidden!important}
+      .v47-shell{width:calc(100vw - 16px);height:calc(100vh - 16px);background:#edf4f4;border-radius:18px;overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 35px 110px rgba(0,0,0,.36)}
+      .v47-head{display:flex;justify-content:space-between;align-items:center;background:#174f5b;color:#fff;padding:13px 18px}
+      .v47-head small{font-size:10px!important;color:#e4bd70!important;font-weight:900}.v47-head h2{font-size:26px!important;color:#fff!important;margin:2px 0!important}.v47-head p{font-size:12px!important;color:#d6e5e7;margin:0}
+      .v47-close{width:40px!important;height:40px!important;min-height:40px!important;border:1px solid rgba(255,255,255,.2)!important;background:rgba(255,255,255,.1)!important;color:#fff!important;border-radius:10px!important;font-size:22px!important}
+      .v47-stage{min-height:0;overflow:hidden;padding:9px 12px;display:grid}
+      .v47-stage>.v44-experience{display:grid!important;height:100%!important;margin:0!important;grid-template-rows:auto 1fr auto;min-height:0}
+      .v47-stage>.v44-experience .v44-main{height:100%!important;min-height:0!important;grid-template-columns:210px minmax(560px,1fr) 270px!important}
+      .v47-stage>.v44-experience .v44-body-unit{height:min(62vh,590px)!important}.v47-stage>.v44-experience .v44-body-unit>svg{height:min(59vh,550px)!important}
+      .v47-stage>#v26-body-map{display:block!important;height:100%!important;overflow:hidden!important;margin:0!important;background:#fff!important;border:1px solid #d9e6e7!important;border-radius:15px!important;padding:12px!important;box-sizing:border-box!important}
+      .v47-stage>#v26-body-map .v26-map-layout{height:calc(100% - 50px)!important;min-height:0!important}
+      .v47-stage>#v26-body-map .v26-figure,.v47-stage>#v26-body-map .v26-selection-panel{height:100%!important;min-height:0!important}
+      .v47-stage>#v26-body-map svg{max-height:61vh!important}
+      .v47-footer{display:flex;justify-content:space-between;align-items:center;background:#fff;border-top:1px solid #d9e5e6;padding:9px 14px}.v47-footer span{font-size:11px;color:#7b9095}.v47-footer button{height:40px!important;background:#174f5b!important;color:#fff!important;border:0!important;border-radius:9px!important;padding:0 16px!important;font-size:12px!important;font-weight:900!important}
+      .v47-loading{display:grid;place-items:center;height:100%;font-size:15px;color:#6d858a}
+      body.myaims-ar .v47-shell{direction:rtl;text-align:right}
+      @media(max-width:900px){#v47-pain-overlay{padding:0}.v47-shell{width:100vw;height:100vh;border-radius:0}.v47-stage{overflow:auto}.v47-footer{gap:8px}.v47-footer span{display:none}.v47-footer button{width:100%}}
+    `;document.head.appendChild(s);
+  }
+
+  function init(){
+    css();setup();
+    let n=0;const timer=setInterval(()=>{setup();if(++n>40)clearInterval(timer)},150);
+    const mo=new MutationObserver(()=>{clearTimeout(window.__v47);window.__v47=setTimeout(setup,60)});
+    mo.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
