@@ -9525,3 +9525,345 @@ render();
     css();
   }
 })();
+
+/* =========================================================
+   myAIMS V34 - CLINICAL SESSION WORKSPACE
+   Professional full clinical-session workspace.
+   Keeps V24/V26 clinical data + body map intact, while adding:
+   - Full-screen clinical workspace layout
+   - Patient/session context banner
+   - Previous-session snapshot
+   - Active treatment-plan snapshot
+   - Clinical completion status
+   - Quick documentation phrases
+   - Draft autosave for unsaved typing
+   - Better readable clinical typography
+   - Sticky action footer
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function appointment(id){
+    return (S().appointments||[]).find(a=>String(a.id)===String(id));
+  }
+  function patient(id){
+    return (S().patients||[]).find(p=>String(p.id)===String(id));
+  }
+  function patientName(id){
+    const p=patient(id);
+    return p?.name||p?.fullName||p?.patientName||'Patient';
+  }
+  function activePlan(pid){
+    return (S().treatmentPlans||[])
+      .filter(x=>String(x.patientId)===String(pid) && String(x.status||'Active').toLowerCase()!=='inactive')
+      .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0]||null;
+  }
+  function notes(pid, excludeAppointmentId){
+    return (S().sessionNotes||[])
+      .filter(n=>String(n.patientId)===String(pid) && String(n.appointmentId)!==String(excludeAppointmentId))
+      .sort((a,b)=>String(b.date||b.updatedAt||'').localeCompare(String(a.date||a.updatedAt||'')));
+  }
+  function goals(pid){
+    return (S().treatmentGoals||[]).filter(g=>String(g.patientId)===String(pid) && !['Cancelled','Achieved'].includes(g.status));
+  }
+  function initials(name){
+    return String(name||'P').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+  }
+  function draftKey(id){ return 'myaims-clinical-draft-'+id; }
+
+  function summaryHtml(a){
+    const p=patient(a.patientId)||{};
+    const plan=activePlan(a.patientId);
+    const prev=notes(a.patientId,a.id)[0];
+    const gs=goals(a.patientId);
+    const completed=(S().sessionNotes||[]).filter(n=>String(n.patientId)===String(a.patientId)).length;
+    const planned=Number(plan?.plannedSessions||0);
+    const remaining=planned?Math.max(0,planned-completed):'—';
+
+    return `
+      <section class="v34-context">
+        <div class="v34-patient">
+          <span class="v34-avatar">${esc(initials(patientName(a.patientId)))}</span>
+          <div>
+            <small>PATIENT</small>
+            <h3>${esc(patientName(a.patientId))}</h3>
+            <p>${esc(p.phone||p.mobile||'No mobile')} · ${esc(p.id||a.patientId||'')}</p>
+          </div>
+        </div>
+
+        <div class="v34-session-facts">
+          <div><small>DATE</small><b>${esc(a.date||'—')}</b><span>${esc(a.time||'')}</span></div>
+          <div><small>THERAPIST</small><b>${esc(a.therapist||'—')}</b><span>${esc(a.room||'')}</span></div>
+          <div><small>VISIT</small><b>${esc(a.visitType||a.service||'Session')}</b><span>${Number(a.duration||60)} min</span></div>
+          <div><small>PLAN</small><b>${esc(plan?.title||'No active plan')}</b><span>${planned?`${completed} / ${planned} sessions`:'Not scheduled'}</span></div>
+        </div>
+
+        <div class="v34-clinical-glance">
+          <div class="v34-glance-head"><small>CLINICAL GLANCE</small><span>${prev?'Previous session':'First documented session'}</span></div>
+          <div class="v34-glance-grid">
+            <div><small>Previous Pain</small><b>${prev?Number(prev.painScore||0)+'/10':'—'}</b></div>
+            <div><small>Previous Progress</small><b>${prev?Number(prev.progressScore||0)+'%':'—'}</b></div>
+            <div><small>Remaining</small><b>${remaining}</b></div>
+            <div><small>Active Goals</small><b>${gs.length}</b></div>
+          </div>
+          ${prev?.nextSession?`<p><b>Last recommendation:</b> ${esc(prev.nextSession)}</p>`:''}
+        </div>
+      </section>`;
+  }
+
+  function quickPhrasesHtml(){
+    return `
+      <section class="v34-quick-doc">
+        <div class="v34-quick-title">
+          <div><small>QUICK DOCUMENTATION</small><h3>Clinical Phrase Assistant</h3></div>
+          <span>Click a phrase to add it to the active field</span>
+        </div>
+        <div class="v34-phrase-groups">
+          <div><b>Subjective</b>
+            <button type="button" data-v34-phrase="Reports improvement since previous session.">Improved</button>
+            <button type="button" data-v34-phrase="Symptoms remain unchanged since previous session.">Unchanged</button>
+            <button type="button" data-v34-phrase="Reports increased symptoms with functional activity.">Increased symptoms</button>
+          </div>
+          <div><b>Objective</b>
+            <button type="button" data-v34-phrase="Improved range of motion noted during assessment.">ROM improved</button>
+            <button type="button" data-v34-phrase="Movement remains limited by pain and stiffness.">Limited by pain</button>
+            <button type="button" data-v34-phrase="Functional mobility performed with improved tolerance.">Mobility improved</button>
+          </div>
+          <div><b>Response</b>
+            <button type="button" data-v34-phrase="Tolerated treatment well with no adverse response.">Tolerated well</button>
+            <button type="button" data-v34-phrase="Symptoms reduced following treatment interventions.">Symptoms reduced</button>
+            <button type="button" data-v34-phrase="Required modification of treatment due to symptom irritability.">Treatment modified</button>
+          </div>
+          <div><b>Next Session</b>
+            <button type="button" data-v34-phrase="Continue current treatment plan and progress as tolerated.">Continue plan</button>
+            <button type="button" data-v34-phrase="Progress strengthening and functional activity next session.">Progress exercises</button>
+            <button type="button" data-v34-phrase="Reassess pain, mobility and functional tolerance next session.">Reassess</button>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  function enhance(appointmentId){
+    const root=document.getElementById('v24-clinical-modal');
+    const dialog=root?.querySelector('.v24-dialog');
+    const a=appointment(appointmentId);
+    if(!root||!dialog||!a) return;
+    if(dialog.dataset.v34==='1') return;
+    dialog.dataset.v34='1';
+    root.dataset.appointmentId=appointmentId;
+
+    dialog.classList.add('v34-clinical-workspace');
+
+    const head=dialog.querySelector('.v24-head');
+    if(head){
+      head.querySelector('small')?.replaceChildren(document.createTextNode('CLINICAL SESSION WORKSPACE'));
+      head.insertAdjacentHTML('afterend',summaryHtml(a));
+    }
+
+    const tabs=dialog.querySelector('.v24-tabs');
+    if(tabs){
+      tabs.insertAdjacentHTML('afterend',quickPhrasesHtml());
+    }
+
+    const footer=dialog.querySelector('.v24-footer');
+    if(footer){
+      const status=document.createElement('label');
+      status.className='v34-session-status';
+      status.innerHTML=`
+        <span>Session Status</span>
+        <select id="v34-session-status">
+          ${['Scheduled','Confirmed','Checked In','In Session','Completed'].map(x=>`<option ${String(a.status)===x?'selected':''}>${x}</option>`).join('')}
+        </select>`;
+      footer.prepend(status);
+
+      const saveBtn=[...footer.querySelectorAll('button')].find(b=>/Save Clinical Session/i.test(b.textContent));
+      if(saveBtn){
+        saveBtn.innerHTML='<span class="v34-save-icon">✓</span> Save Clinical Session';
+      }
+    }
+
+    // Restore any unsaved draft.
+    try{
+      const draft=JSON.parse(localStorage.getItem(draftKey(appointmentId))||'null');
+      if(draft){
+        ['subjective','objective','response','next'].forEach(k=>{
+          const el=document.getElementById('v24-'+k);
+          if(el && !el.value && draft[k]) el.value=draft[k];
+        });
+      }
+    }catch(e){}
+
+    // Autosave typing as a local draft.
+    ['subjective','objective','response','next'].forEach(k=>{
+      const el=document.getElementById('v24-'+k);
+      if(!el) return;
+      el.addEventListener('focus',()=>root.dataset.v34Target=el.id);
+      el.addEventListener('input',()=>{
+        const d={};
+        ['subjective','objective','response','next'].forEach(x=>{
+          d[x]=document.getElementById('v24-'+x)?.value||'';
+        });
+        try{localStorage.setItem(draftKey(appointmentId),JSON.stringify(d));}catch(e){}
+        const flag=root.querySelector('.v34-draft-state');
+        if(flag) flag.textContent='Draft saved';
+      });
+    });
+
+    if(head){
+      const draft=document.createElement('span');
+      draft.className='v34-draft-state';
+      draft.textContent='Autosave on';
+      head.appendChild(draft);
+    }
+
+    root.querySelectorAll('[data-v34-phrase]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        let target=document.getElementById(root.dataset.v34Target||'v24-subjective');
+        if(!target || target.tagName!=='TEXTAREA') target=document.getElementById('v24-subjective');
+        const phrase=btn.dataset.v34Phrase||'';
+        const current=target.value.trim();
+        target.value=current?(current+(current.endsWith('.')?' ':'\n')+phrase):phrase;
+        target.dispatchEvent(new Event('input',{bubbles:true}));
+        target.focus();
+      });
+    });
+
+    // Better labels in the existing session tab.
+    const session=document.getElementById('v24-tab-session');
+    if(session){
+      session.classList.add('v34-session-document');
+      const areasTitle=session.querySelector('.v24-section-title h3');
+      if(areasTitle) areasTitle.textContent='Pain & Treatment Areas';
+    }
+  }
+
+  // Wrap the current V24/V26 opener so all existing body-map behavior remains.
+  const previousOpen=window.openV24ClinicalNote;
+  if(typeof previousOpen==='function'){
+    window.openV24ClinicalNote=function(appointmentId){
+      previousOpen.apply(this,arguments);
+      setTimeout(()=>enhance(appointmentId),90);
+    };
+  }
+
+  // Preserve the original save and add appointment status + draft cleanup.
+  const previousSave=window.saveV24ClinicalSession;
+  if(typeof previousSave==='function'){
+    window.saveV24ClinicalSession=function(appointmentId){
+      const a=appointment(appointmentId);
+      const status=document.getElementById('v34-session-status')?.value;
+      if(a && status) a.status=status;
+      previousSave.apply(this,arguments);
+      try{localStorage.removeItem(draftKey(appointmentId));}catch(e){}
+      if(typeof window.saveState==='function') try{window.saveState();}catch(e){}
+      if(typeof window.openV31PatientWorkspace==='function' && a){
+        setTimeout(()=>{
+          const w=document.getElementById('v31-workspace');
+          if(w?.classList.contains('open')) window.openV31PatientWorkspace(a.patientId,'sessions');
+        },120);
+      }
+    };
+  }
+
+  function css(){
+    if(document.getElementById('v34-clinical-workspace-css')) return;
+    const st=document.createElement('style');
+    st.id='v34-clinical-workspace-css';
+    st.textContent=`
+      #v24-clinical-modal.open{z-index:99999!important}
+      #v24-clinical-modal .v24-backdrop{background:rgba(15,43,50,.72)!important;backdrop-filter:blur(5px)}
+      #v24-clinical-modal .v24-dialog.v34-clinical-workspace{
+        width:min(1500px,96vw)!important;max-width:none!important;height:94vh!important;max-height:94vh!important;
+        margin:3vh auto!important;border-radius:20px!important;overflow:auto!important;
+        background:#f3f7f7!important;box-shadow:0 30px 90px rgba(7,35,42,.32)!important;
+        font-size:14px!important
+      }
+      #v24-clinical-modal .v34-clinical-workspace .v24-head{
+        position:sticky;top:0;z-index:20;background:linear-gradient(135deg,#123f49,#1c5965)!important;
+        color:#fff!important;padding:18px 24px!important;border-radius:20px 20px 0 0!important;
+        box-shadow:0 8px 24px rgba(13,53,62,.12)
+      }
+      #v24-clinical-modal .v34-clinical-workspace .v24-head small{font-size:10px!important;letter-spacing:1.4px!important;color:#e4c37c!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-head h2{font-size:25px!important;color:#fff!important;margin:4px 0!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-head p{font-size:12px!important;color:#d7e6e8!important;margin:0!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-head>button{font-size:25px!important;color:#fff!important;background:rgba(255,255,255,.12)!important;width:38px!important;height:38px!important;border-radius:11px!important}
+      .v34-draft-state{margin-left:auto;margin-right:48px;background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.16);padding:6px 9px;border-radius:99px;font-size:10px;color:#dbecee}
+
+      .v34-context{display:grid;grid-template-columns:minmax(240px,.8fr) 1.6fr minmax(260px,1fr);gap:12px;padding:14px 18px 4px}
+      .v34-context>div{background:#fff;border:1px solid #dbe7e8;border-radius:14px;box-shadow:0 4px 14px rgba(30,72,80,.035)}
+      .v34-patient{display:flex;align-items:center;gap:11px;padding:13px}
+      .v34-avatar{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,#1a5662,#2c7480);color:#fff;font-weight:900;font-size:14px}
+      .v34-patient small,.v34-session-facts small,.v34-clinical-glance small{font-size:9px;font-weight:900;color:#a77c32;letter-spacing:.5px}
+      .v34-patient h3{font-size:17px;margin:2px 0;color:#284f58}.v34-patient p{font-size:11px;margin:0;color:#7b8d91}
+      .v34-session-facts{display:grid;grid-template-columns:repeat(4,1fr);padding:10px}
+      .v34-session-facts>div{padding:5px 10px;border-right:1px solid #edf2f3}.v34-session-facts>div:last-child{border:0}
+      .v34-session-facts b,.v34-session-facts span{display:block}.v34-session-facts b{font-size:12px;color:#31565e;margin:4px 0}.v34-session-facts span{font-size:10px;color:#88979a}
+      .v34-clinical-glance{padding:10px 12px}.v34-glance-head{display:flex;justify-content:space-between;gap:8px}.v34-glance-head>span{font-size:9px;color:#7f9296}
+      .v34-glance-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px}.v34-glance-grid>div{background:#f3f8f8;border-radius:8px;padding:7px}
+      .v34-glance-grid b{display:block;font-size:13px;color:#244f58;margin-top:2px}.v34-clinical-glance p{font-size:10px;color:#667d82;margin:8px 0 0;line-height:1.4}
+
+      #v24-clinical-modal .v34-clinical-workspace .v24-tabs{
+        position:sticky;top:79px;z-index:15;margin:10px 18px 0!important;padding:7px!important;
+        background:#fff!important;border:1px solid #dce7e8!important;border-radius:12px!important;box-shadow:0 5px 15px rgba(29,69,77,.05)
+      }
+      #v24-clinical-modal .v34-clinical-workspace .v24-tabs button{font-size:12px!important;padding:10px 16px!important;border-radius:8px!important;font-weight:800!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-tabs button.active{background:#174f5b!important;color:#fff!important}
+
+      .v34-quick-doc{margin:10px 18px;background:#fff;border:1px solid #dce7e8;border-radius:14px;padding:12px 14px}
+      .v34-quick-title{display:flex;justify-content:space-between;align-items:end;gap:10px;margin-bottom:9px}
+      .v34-quick-title small{font-size:9px;color:#a77c32;font-weight:900}.v34-quick-title h3{font-size:15px;color:#31565e;margin:2px 0}.v34-quick-title>span{font-size:10px;color:#849599}
+      .v34-phrase-groups{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.v34-phrase-groups>div{background:#f6f9f9;border-radius:9px;padding:8px}
+      .v34-phrase-groups b{display:block;font-size:10px;color:#365d65;margin-bottom:6px}.v34-phrase-groups button{border:1px solid #d8e4e5;background:#fff;color:#587178;border-radius:99px;padding:5px 8px;font-size:9px;margin:2px;cursor:pointer}
+      .v34-phrase-groups button:hover{background:#e8f3f3;border-color:#b9d2d5;color:#174f5b}
+
+      #v24-clinical-modal .v34-clinical-workspace .v24-tab{margin:0 18px 14px!important;background:#fff!important;border:1px solid #dce7e8!important;border-radius:14px!important;padding:18px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-section-title{margin:8px 0 12px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-section-title small{font-size:10px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-section-title h3{font-size:18px!important;color:#2f555e!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-section-title>span{font-size:11px!important}
+      #v24-clinical-modal .v34-clinical-workspace label>span{font-size:11px!important;font-weight:800!important;color:#4b6970!important}
+      #v24-clinical-modal .v34-clinical-workspace textarea,
+      #v24-clinical-modal .v34-clinical-workspace input,
+      #v24-clinical-modal .v34-clinical-workspace select{font-size:13px!important;line-height:1.5!important}
+      #v24-clinical-modal .v34-clinical-workspace textarea{min-height:88px!important;padding:11px 12px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-note-grid{gap:12px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-metrics{gap:12px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-metrics>label{padding:13px!important;border-radius:11px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-range-row b{font-size:19px!important}
+
+      /* Body map receives more room in the clinical workspace */
+      #v24-clinical-modal .v34-clinical-workspace #v26-body-map{margin:8px 0 16px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v26-body-map{font-size:12px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v26-selected-list{max-height:330px!important}
+
+      #v24-clinical-modal .v34-clinical-workspace .v24-footer{
+        position:sticky;bottom:0;z-index:20;background:rgba(255,255,255,.96)!important;backdrop-filter:blur(8px);
+        border-top:1px solid #d9e5e6!important;padding:12px 18px!important;box-shadow:0 -8px 24px rgba(23,70,79,.07)
+      }
+      #v24-clinical-modal .v34-clinical-workspace .v24-footer button{font-size:12px!important;padding:10px 15px!important;min-height:40px!important;border-radius:9px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-footer .primary{background:#174f5b!important;color:#fff!important;min-width:190px!important}
+      .v34-save-icon{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.16);margin-right:5px}
+      .v34-session-status{display:flex!important;align-items:center!important;gap:8px!important;margin-right:auto!important}
+      .v34-session-status span{font-size:10px!important;color:#6a7f84!important}.v34-session-status select{height:38px!important;padding:0 28px 0 10px!important;background:#f5f9f9!important;border:1px solid #d5e2e4!important;border-radius:8px!important}
+
+      @media(max-width:1100px){
+        .v34-context{grid-template-columns:1fr 1fr}.v34-clinical-glance{grid-column:1/-1}
+        .v34-phrase-groups{grid-template-columns:1fr 1fr}
+      }
+      @media(max-width:760px){
+        #v24-clinical-modal .v24-dialog.v34-clinical-workspace{width:100vw!important;height:100vh!important;max-height:100vh!important;margin:0!important;border-radius:0!important}
+        .v34-context{grid-template-columns:1fr;padding:10px}.v34-clinical-glance{grid-column:auto}
+        .v34-session-facts{grid-template-columns:1fr 1fr}.v34-session-facts>div{border-right:0;border-bottom:1px solid #edf2f3}
+        .v34-phrase-groups{grid-template-columns:1fr}.v34-quick-doc{margin:8px 10px}
+        #v24-clinical-modal .v34-clinical-workspace .v24-tabs{margin:8px 10px 0!important;overflow:auto!important;top:75px}
+        #v24-clinical-modal .v34-clinical-workspace .v24-tab{margin:0 10px 10px!important;padding:12px!important}
+        .v34-draft-state{display:none}.v34-session-status{width:100%!important}.v34-session-status select{flex:1}
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',css);
+  else css();
+})();
