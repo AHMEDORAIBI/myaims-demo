@@ -12620,3 +12620,129 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V68 ANATOMICAL SEARCH NAVIGATION";
 })();
+
+/* =========================================================
+   myAIMS V69 — 3D PAIN & TREATMENT MARKER SYSTEM
+   Multiple clinical markers, pain spread, marker list,
+   session persistence and report-ready data.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+let markers=[], markerMode="pain", armed=false, markerSeq=1;
+
+function ensureData(){
+ try{
+  db.clinical3DMarkers=db.clinical3DMarkers||[];
+  const a=(typeof currentAppointment!=="undefined"&&currentAppointment)||null;
+  const aid=a?.id||R()?.dataset?.appointmentId||"demo";
+  markers=db.clinical3DMarkers.filter(x=>x.appointmentId===aid);
+  markerSeq=Math.max(0,...markers.map(x=>+String(x.id||"").replace(/\D/g,"")||0))+1;
+ }catch(e){markers=[]}
+}
+function install(){
+ const r=R(),stage=r?.querySelector(".v61-stagewrap");if(!stage||r.querySelector("#v69-markerbar"))return;
+ ensureData();
+ const bar=document.createElement("div");bar.id="v69-markerbar";
+ bar.innerHTML=`
+  <div class="v69-title"><b>Clinical Markers</b><span>علامات الألم والعلاج</span></div>
+  <div class="v69-modes">
+   <button data-mm="pain" class="on"><i></i> Pain</button>
+   <button data-mm="treatment"><i></i> Treatment</button>
+   <button data-mm="both"><i></i> Both</button>
+  </div>
+  <button class="v69-place" data-place>＋ Place Marker</button>`;
+ stage.appendChild(bar);
+
+ const panel=document.createElement("section");panel.id="v69-panel";
+ panel.innerHTML=`<header><div><small>3D CLINICAL MAPPING</small><b>Marked Areas</b><span>المناطق المحددة</span></div><strong data-count>0</strong></header><div class="v69-list"></div><footer><button data-clearall>Clear All</button><button data-savemap>✓ Save Map</button></footer>`;
+ r.querySelector(".v61-right")?.appendChild(panel);
+
+ bar.querySelectorAll("[data-mm]").forEach(b=>b.onclick=()=>{
+  markerMode=b.dataset.mm;bar.querySelectorAll("[data-mm]").forEach(x=>x.classList.toggle("on",x===b));
+ });
+ bar.querySelector("[data-place]").onclick=()=>{armed=!armed;bar.classList.toggle("armed",armed);bar.querySelector("[data-place]").textContent=armed?"⌖ Click on the body":"＋ Place Marker"};
+ panel.querySelector("[data-clearall]").onclick=()=>{markers=[];removeSprites();renderList();persist()};
+ panel.querySelector("[data-savemap]").onclick=()=>{persist();flash(panel,"✓ 3D clinical map saved · تم حفظ خريطة الألم")};
+ stage.addEventListener("pointerup",placeFromCanvas,false);
+ renderSprites();renderList();
+}
+function placeFromCanvas(e){
+ if(!armed||!e.target.closest("#v61-canvas"))return;
+ const a=A();if(!a?.raycaster||!a?.camera||!a?.meshes)return;
+ try{
+  const canvas=a.renderer.domElement,rect=canvas.getBoundingClientRect();
+  const mouse=new a.THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
+  a.raycaster.setFromCamera(mouse,a.camera);
+  const hit=a.raycaster.intersectObjects(a.meshes,false)[0];if(!hit)return;
+  e.stopPropagation();
+  const mesh=hit.object,p=hit.point.clone(),name=String(mesh.name||"Anatomical Structure").replace(/[_-]+/g," ");
+  const m={id:"M"+markerSeq++,appointmentId:getAid(),type:markerMode,structure:name,x:p.x,y:p.y,z:p.z,pain:markerMode==="treatment"?0:5,spread:1,note:"",createdAt:new Date().toISOString()};
+  markers.push(m);addSprite(m);renderList();persist();
+  armed=false;R().querySelector("#v69-markerbar")?.classList.remove("armed");
+  const btn=R().querySelector("[data-place]");if(btn)btn.textContent="＋ Place Marker";
+ }catch(err){console.error("V69 marker",err)}
+}
+function getAid(){
+ try{return ((typeof currentAppointment!=="undefined"&&currentAppointment)?.id)||R()?.dataset?.appointmentId||"demo"}catch(e){return"demo"}
+}
+function spriteMaterial(type){
+ const a=A(),c=type==="treatment"?0x198bea:type==="both"?0x8b50d1:0xef3e4a;
+ const cv=document.createElement("canvas");cv.width=cv.height=128;const x=cv.getContext("2d");
+ x.clearRect(0,0,128,128);x.beginPath();x.arc(64,64,38,0,Math.PI*2);x.fillStyle=type==="treatment"?"rgba(25,139,234,.23)":type==="both"?"rgba(139,80,209,.23)":"rgba(239,62,74,.23)";x.fill();
+ x.beginPath();x.arc(64,64,18,0,Math.PI*2);x.fillStyle=type==="treatment"?"#198bea":type==="both"?"#8b50d1":"#ef3e4a";x.fill();
+ x.lineWidth=5;x.strokeStyle="#fff";x.stroke();
+ const tex=new a.THREE.CanvasTexture(cv);return new a.THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false});
+}
+function addSprite(m){
+ const a=A();if(!a?.THREE)return;
+ const sp=new a.THREE.Sprite(spriteMaterial(m.type));sp.position.set(m.x,m.y,m.z);sp.scale.set(2.1*m.spread,2.1*m.spread,1);sp.renderOrder=999;sp.userData.v69=m.id;a.scene.add(sp);m._sprite=sp;
+}
+function removeSprites(){const a=A();if(!a)return;a.scene.children.filter(x=>x.userData?.v69).forEach(x=>a.scene.remove(x))}
+function renderSprites(){removeSprites();markers.forEach(addSprite)}
+function renderList(){
+ const r=R(),list=r?.querySelector(".v69-list"),count=r?.querySelector("[data-count]");if(!list)return;
+ if(count)count.textContent=markers.length;
+ list.innerHTML=markers.length?markers.map((m,i)=>`
+ <article data-mid="${m.id}">
+  <div class="v69-num ${m.type}">${i+1}</div>
+  <div class="v69-info"><b>${m.structure}</b><span>${m.type==="pain"?"Pain · ألم":m.type==="treatment"?"Treatment · علاج":"Pain + Treatment · ألم وعلاج"}</span></div>
+  <button data-del>×</button>
+  <div class="v69-controls">
+   <label><span>Pain <strong>${m.pain}/10</strong></span><input data-pain type="range" min="0" max="10" value="${m.pain}"></label>
+   <label><span>Spread <strong>${m.spread}</strong></span><input data-spread type="range" min=".5" max="3" step=".5" value="${m.spread}"></label>
+   <textarea data-note placeholder="Marker note · ملاحظة">${m.note||""}</textarea>
+  </div>
+ </article>`).join(""):`<div class="v69-empty">No markers yet<br><span>اختر Place Marker ثم اضغط على الجسم</span></div>`;
+ list.querySelectorAll("article").forEach(el=>{
+  const m=markers.find(x=>x.id===el.dataset.mid);
+  el.querySelector("[data-del]").onclick=()=>{markers=markers.filter(x=>x!==m);if(m._sprite)A()?.scene.remove(m._sprite);renderList();persist()};
+  el.querySelector("[data-pain]").oninput=e=>{m.pain=+e.target.value;e.target.previousElementSibling.querySelector("strong").textContent=m.pain+"/10";persist()};
+  el.querySelector("[data-spread]").oninput=e=>{m.spread=+e.target.value;e.target.previousElementSibling.querySelector("strong").textContent=m.spread;if(m._sprite)m._sprite.scale.set(2.1*m.spread,2.1*m.spread,1);persist()};
+  el.querySelector("[data-note]").oninput=e=>{m.note=e.target.value;persist()};
+ });
+}
+function persist(){
+ try{
+  db.clinical3DMarkers=db.clinical3DMarkers||[];const aid=getAid();
+  db.clinical3DMarkers=db.clinical3DMarkers.filter(x=>x.appointmentId!==aid);
+  db.clinical3DMarkers.push(...markers.map(({_sprite,...x})=>x));save();
+ }catch(e){}
+}
+function flash(panel,msg){
+ let t=panel.querySelector(".v69-toast");if(!t){t=document.createElement("div");t.className="v69-toast";panel.appendChild(t)}
+ t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1700);
+}
+function boot(){
+ const r=R();if(!r?.classList.contains("open"))return;
+ const t=setInterval(()=>{if(A()?.meshes?.length){clearInterval(t);install()}},100);setTimeout(()=>clearInterval(t),15000);
+}
+document.addEventListener("click",e=>{if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,220)},false);
+
+const st=document.createElement("style");st.textContent=`
+#v69-markerbar{position:absolute;z-index:25;left:50%;bottom:67px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px;background:rgba(255,255,255,.96);border:1px solid #d5e3e5;border-radius:10px;box-shadow:0 8px 26px rgba(17,59,68,.1);backdrop-filter:blur(10px)}.v69-title{padding:0 7px;border-right:1px solid #e1e9eb}.v69-title b,.v69-title span{display:block;white-space:nowrap}.v69-title b{font-size:6px;color:#214f59}.v69-title span{font-size:5px;color:#819599;direction:rtl}.v69-modes{display:flex;gap:3px}.v69-modes button,.v69-place{height:28px!important;border:1px solid #dbe5e7!important;background:#fff!important;border-radius:6px!important;padding:0 7px!important;font-size:5.5px!important}.v69-modes button i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#ef3e4a;margin-right:3px}.v69-modes button[data-mm="treatment"] i{background:#198bea}.v69-modes button[data-mm="both"] i{background:#8b50d1}.v69-modes button.on{border-color:#17677a!important;background:#eef7f8!important;color:#17677a!important;font-weight:900!important}.v69-place{background:#155d6e!important;color:#fff!important;border-color:#155d6e!important}.armed .v69-place{background:#d63d49!important;border-color:#d63d49!important;animation:v69pulse 1s infinite}@keyframes v69pulse{50%{box-shadow:0 0 0 5px rgba(214,61,73,.13)}}
+#v69-panel{position:relative;border:1px solid #d9e5e7;border-radius:10px;background:#fff;margin:8px 0;overflow:hidden}#v69-panel header{display:flex;justify-content:space-between;padding:9px;border-bottom:1px solid #e6edef}#v69-panel header small,#v69-panel header b,#v69-panel header span{display:block}#v69-panel header small{font-size:4.8px;color:#b17b2d;font-weight:900}#v69-panel header b{font-size:8px;color:#204d57}#v69-panel header span{font-size:5.5px;color:#7d9397;direction:rtl}#v69-panel header>strong{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#edf5f6;color:#17677a;font-size:8px}.v69-list{max-height:255px;overflow:auto;padding:5px}.v69-list article{display:grid;grid-template-columns:24px 1fr 18px;gap:5px;padding:6px;border-bottom:1px solid #e9eef0}.v69-num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:#ef4650;color:#fff;font-size:6px;font-weight:900}.v69-num.treatment{background:#198bea}.v69-num.both{background:#8b50d1}.v69-info b,.v69-info span{display:block}.v69-info b{font-size:6px;color:#315b64}.v69-info span{font-size:5px;color:#8a9ca0}.v69-list [data-del]{border:0!important;background:none!important;color:#9baaad!important;font-size:10px!important;padding:0!important}.v69-controls{grid-column:2/4}.v69-controls label{display:grid;grid-template-columns:58px 1fr;align-items:center;margin-top:4px}.v69-controls label span{font-size:5px;color:#607b81}.v69-controls input{width:100%;accent-color:#e34650}.v69-controls textarea{width:100%;height:31px;margin-top:4px;border:1px solid #dce6e8;border-radius:5px;padding:4px;font-size:5px;resize:none}.v69-empty{text-align:center;padding:17px;font-size:6px;color:#82969a}.v69-empty span{direction:rtl;font-size:5.5px}#v69-panel footer{display:grid!important;grid-template-columns:1fr 1fr!important;gap:4px!important;padding:6px!important;border-top:1px solid #e4ebed!important}#v69-panel footer button{height:27px!important;border:1px solid #d9e4e6!important;background:#fff!important;border-radius:6px!important;font-size:5.5px!important}#v69-panel footer [data-savemap]{background:#155d6e!important;color:#fff!important;border-color:#155d6e!important}.v69-toast{position:absolute;left:7px;right:7px;bottom:7px;background:#174f5b;color:#fff;border-radius:6px;padding:7px;text-align:center;font-size:5.5px;opacity:0;pointer-events:none;transition:.2s}.v69-toast.show{opacity:1}
+@media(max-width:900px){#v69-markerbar{bottom:45px}.v69-title{display:none}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V69 3D PAIN MARKER SYSTEM";
+})();
