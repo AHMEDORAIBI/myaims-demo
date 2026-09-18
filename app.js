@@ -11939,35 +11939,102 @@ async function open(){
   h.querySelector("[data-loading]").innerHTML=`<b>${T("3D model could not load","تعذر تحميل النموذج ثلاثي الأبعاد")}</b><small>${T("Verify that assets/anatomy.glb exists in the repository, then reload the page.","تأكد من وجود الملف assets/anatomy.glb داخل المشروع ثم أعد تحميل الصفحة.")}</small>`;
  }
 }
+
+function v64TransformGeometry(THREE, geometry, center, scaleFactor){
+ const g=geometry.clone(),p=g.getAttribute("position");
+ if(p){
+  const a=p.array;
+  for(let i=0;i<a.length;i+=3){
+   const x=a[i],y=a[i+1],z=a[i+2];
+   a[i]=(x-center.x)*scaleFactor;
+   a[i+1]=(z-center.z)*scaleFactor;
+   a[i+2]=-(y-center.y)*scaleFactor;
+  }
+  p.needsUpdate=true;
+ }
+ const n=g.getAttribute("normal");
+ if(n){
+  const a=n.array;
+  for(let i=0;i<a.length;i+=3){
+   const x=a[i],y=a[i+1],z=a[i+2];
+   a[i]=x;a[i+1]=z;a[i+2]=-y;
+  }
+  n.needsUpdate=true;
+ }
+ g.computeBoundingBox();g.computeBoundingSphere();
+ return g;
+}
+function v64Stage(h,label,pct){
+ const b=h.querySelector("[data-loading] b"),p=h.querySelector("[data-progress]");
+ if(b)b.textContent=label;if(p)p.textContent=pct+"%";
+}
 async function init3D(h){
  if(app&&app.renderer){try{app.renderer.dispose()}catch(e){} app=null}
+ v64Stage(h,T("Loading 3D engine…","تحميل محرك 3D…"),5);
  const {THREE,GLTFLoader,OrbitControls}=await modules(), mount=h.querySelector("#v61-canvas");
+ v64Stage(h,T("3D engine ready · Loading anatomy…","محرك 3D جاهز · تحميل التشريح…"),10);
+
  const scene=new THREE.Scene();scene.background=new THREE.Color(0xf3f7f8);
- const camera=new THREE.PerspectiveCamera(31,mount.clientWidth/mount.clientHeight,.01,100);
- camera.position.set(0,0.1,4.6);
- const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:"high-performance"});
- renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(mount.clientWidth,mount.clientHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;mount.appendChild(renderer.domElement);
- scene.add(new THREE.HemisphereLight(0xffffff,0x8ba0a4,2.5));
- const key=new THREE.DirectionalLight(0xffffff,3.2);key.position.set(3,5,4);scene.add(key);
- const fill=new THREE.DirectionalLight(0xd9f4f2,1.8);fill.position.set(-4,2,3);scene.add(fill);
- const rim=new THREE.DirectionalLight(0xffd6c6,1.4);rim.position.set(0,3,-4);scene.add(rim);
- const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;controls.minDistance=2.1;controls.maxDistance=7;controls.target.set(0,0,0);
+ const camera=new THREE.PerspectiveCamera(30,mount.clientWidth/mount.clientHeight,.01,200);
+ camera.position.set(0,0,45);
+ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-performance"});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));renderer.setSize(mount.clientWidth,mount.clientHeight);
+ renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+ mount.appendChild(renderer.domElement);
+ scene.add(new THREE.HemisphereLight(0xffffff,0x71868b,2.6));
+ const key=new THREE.DirectionalLight(0xffffff,3.3);key.position.set(20,30,30);scene.add(key);
+ const fill=new THREE.DirectionalLight(0xd9f4f2,1.7);fill.position.set(-25,10,20);scene.add(fill);
+ const rim=new THREE.DirectionalLight(0xffd5c4,1.2);rim.position.set(0,15,-25);scene.add(rim);
+
+ const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;controls.minDistance=20;controls.maxDistance=80;controls.target.set(0,0,0);
  const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2(),meshes=[],original=new Map();
  app={THREE,scene,camera,renderer,controls,raycaster,mouse,meshes,original,model:null,mount,raf:0};
+
  const loader=new GLTFLoader();
- const gltf=await new Promise((resolve,reject)=>loader.load(MODEL_URL,resolve,e=>{
-   if(e.total){const n=Math.round(e.loaded/e.total*100);h.querySelector("[data-progress]").textContent=n+"%"}
+ const gltf=await new Promise((resolve,reject)=>loader.load("./assets/anatomy.glb",resolve,e=>{
+   let n=10;
+   if(e.total>0)n=Math.min(68,10+Math.round((e.loaded/e.total)*58));
+   else if(e.loaded)n=Math.min(68,10+Math.round(e.loaded/450000));
+   v64Stage(h,T("Loading anatomy file…","تحميل ملف التشريح…"),n);
  },reject));
- const model=gltf.scene;app.model=model;scene.add(model);
- const box=new THREE.Box3().setFromObject(model),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
- model.position.sub(center);const scale=3.35/Math.max(size.x,size.y,size.z);model.scale.setScalar(scale);
- const box2=new THREE.Box3().setFromObject(model),c2=box2.getCenter(new THREE.Vector3());model.position.y-=c2.y;
- model.traverse(o=>{if(o.isMesh){meshes.push(o);original.set(o.uuid,{material:o.material,emissive:o.material?.emissive?.clone?.()});o.castShadow=false;o.receiveShadow=false}});
- h.querySelector("[data-loading]").style.display="none";h.querySelector("[data-status]").textContent=T("Ready","جاهز");h.querySelector(".v61-modelstatus i").classList.add("ready");
- fit("front");
- renderer.domElement.addEventListener("pointerup",pick);
- renderer.domElement.addEventListener("pointermove",hover);
- const resize=()=>{if(!app)return;camera.aspect=mount.clientWidth/mount.clientHeight;camera.updateProjectionMatrix();renderer.setSize(mount.clientWidth,mount.clientHeight)};window.addEventListener("resize",resize,{passive:true});app.resize=resize;
+
+ v64Stage(h,T("Parsing 467 anatomical structures…","معالجة 467 بنية تشريحية…"),72);
+ await new Promise(r=>setTimeout(r,30));
+ const root=gltf.scene;
+ const box=new THREE.Box3().setFromObject(root),center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
+ if(!isFinite(size.z)||size.z<=0)throw new Error("Invalid anatomy.glb bounding box");
+ const scaleFactor=30/size.z;
+ const body=new THREE.Group();scene.add(body);app.model=body;
+ let count=0;
+ root.traverse(child=>{
+  if(!child.isMesh||!child.geometry)return;
+  const name=child.name||("structure_"+count),lower=name.toLowerCase();
+  const tendon=/tendon|ligament|retinaculum|membrane/.test(lower);
+  const geometry=v64TransformGeometry(THREE,child.geometry,center,scaleFactor);
+  const material=new THREE.MeshStandardMaterial({
+    color:tendon?0xe8ddc6:0xa94435,roughness:tendon?.46:.58,metalness:0,side:THREE.DoubleSide
+  });
+  const mesh=new THREE.Mesh(geometry,material);
+  mesh.name=name;mesh.userData.displayName=name.replace(/_/g," ");
+  mesh.userData.originalMaterial=material;
+  body.add(mesh);meshes.push(mesh);original.set(mesh.uuid,{material});count++;
+ });
+ if(!count)throw new Error("anatomy.glb loaded but no mesh structures were found");
+ v64Stage(h,T(`Building muscles… ${count} structures`,`بناء العضلات… ${count} بنية`),90);
+ await new Promise(r=>setTimeout(r,30));
+
+ const bodyBox=new THREE.Box3().setFromObject(body),bodyCenter=bodyBox.getCenter(new THREE.Vector3());
+ body.position.sub(bodyCenter);
+ v64Stage(h,T("Preparing clinical 3D viewer…","تجهيز العارض السريري ثلاثي الأبعاد…"),97);
+ camera.position.set(0,0,43);controls.target.set(0,0,0);controls.update();
+
+ h.querySelector("[data-loading]").style.display="none";
+ h.querySelector("[data-status]").textContent=T(`Ready · ${count} structures`,`جاهز · ${count} بنية`);
+ h.querySelector(".v61-modelstatus i").classList.add("ready");
+ renderer.domElement.addEventListener("pointerup",pick);renderer.domElement.addEventListener("pointermove",hover);
+
+ const resize=()=>{if(!app)return;camera.aspect=mount.clientWidth/mount.clientHeight;camera.updateProjectionMatrix();renderer.setSize(mount.clientWidth,mount.clientHeight)};
+ window.addEventListener("resize",resize,{passive:true});app.resize=resize;
  const loop=()=>{if(!app)return;app.raf=requestAnimationFrame(loop);controls.update();renderer.render(scene,camera)};loop();
 }
 function hit(e){
@@ -11997,7 +12064,7 @@ function renderSelected(){
  box.querySelectorAll("[data-range]").forEach(r=>r.oninput=()=>{selected.get(r.dataset.range).pain=+r.value;renderSelected()});
 }
 function fit(v){
- if(!app)return;const p={front:[0,0.05,4.4],back:[0,0.05,-4.4],left:[-4.4,.05,0],right:[4.4,.05,0]}[v]||[0,.05,4.4];
+ if(!app)return;const p={front:[0,0,43],back:[0,0,-43],left:[-43,0,0],right:[43,0,0]}[v]||[0,0,43];
  app.camera.position.set(...p);app.controls.target.set(0,0,0);app.controls.update();
  document.querySelectorAll("#v61-real3d [data-view]").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
 }
@@ -12047,4 +12114,4 @@ body.myaims-ar #v61-real3d{direction:rtl;text-align:right}@media(max-width:1000p
 })();
 
 /* myAIMS build marker */
-window.MYAIMS_BUILD="V63 3D LOADER FIX";
+window.MYAIMS_BUILD="V64 BODYEXPLORER ENGINE FIX";
