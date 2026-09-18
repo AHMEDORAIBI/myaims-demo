@@ -12212,3 +12212,150 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V48 - PROFESSIONAL CLINICAL UI POLISH
+   Premium refinement of Patient Workspace + Clinical Session
+   + Pain Map without changing the underlying workflow.
+   ========================================================= */
+(function(){
+  function addCSS(){
+    if(document.getElementById('v48-pro-css')) return;
+    const s=document.createElement('style');
+    s.id='v48-pro-css';
+    s.textContent=`
+      :root{
+        --v48-ink:#173f49;--v48-teal:#1c5964;--v48-soft:#f4f8f8;
+        --v48-line:#dbe6e8;--v48-gold:#c9973d;--v48-muted:#728a90;
+      }
+
+      /* Global clinical finish */
+      #v31-workspace,#v24-clinical-modal{--shadow:0 8px 24px rgba(25,69,77,.055)}
+      #v31-workspace .v31-card,#v31-workspace [class*="card"],
+      #v24-clinical-modal .v34-patient,#v24-clinical-modal .v34-session-facts,
+      #v24-clinical-modal .v34-clinical-glance,#v24-clinical-modal .v24-section,
+      #v24-clinical-modal .v35-compare{
+        border-color:var(--v48-line)!important;box-shadow:var(--shadow)!important
+      }
+
+      /* Patient workspace */
+      #v31-workspace{background:linear-gradient(180deg,#f8fbfb 0,#f2f7f7 100%)!important}
+      #v31-workspace .v31-header{border-radius:15px!important;border:1px solid var(--v48-line)!important;box-shadow:var(--shadow)!important}
+      #v31-workspace .v31-tabs{background:#fff!important;border:1px solid var(--v48-line)!important;border-radius:13px!important;padding:6px!important;gap:4px!important}
+      #v31-workspace .v31-tabs button{border:0!important;border-radius:9px!important;padding:10px 15px!important;font-weight:800!important;color:#60777d!important}
+      #v31-workspace .v31-tabs button.active{background:var(--v48-teal)!important;color:#fff!important;box-shadow:0 5px 12px rgba(28,89,100,.18)!important}
+
+      /* Clinical workspace shell */
+      #v24-clinical-modal .v34-clinical-workspace{background:#f3f7f7!important}
+      #v24-clinical-modal .v24-head{background:linear-gradient(125deg,#174a55,#235f69)!important;border-bottom:1px solid rgba(255,255,255,.12)!important}
+      #v24-clinical-modal .v24-head h2{letter-spacing:-.3px!important}
+      #v24-clinical-modal .v34-context{gap:9px!important;padding:10px 14px!important}
+      #v24-clinical-modal .v34-patient,
+      #v24-clinical-modal .v34-session-facts,
+      #v24-clinical-modal .v34-clinical-glance{border-radius:13px!important;background:#fff!important}
+
+      /* Workflow */
+      #v24-clinical-modal .v35-flow-steps{gap:6px!important;padding:7px!important;background:#fff!important;border-radius:12px!important}
+      #v24-clinical-modal .v35-flow-steps button{border-radius:9px!important;border:1px solid transparent!important;transition:.18s ease!important}
+      #v24-clinical-modal .v35-flow-steps button:hover{transform:translateY(-1px)!important}
+      #v24-clinical-modal .v35-flow-steps button.active,
+      #v24-clinical-modal .v35-flow-steps button:first-of-type{background:#e4f0f1!important;color:var(--v48-ink)!important}
+
+      /* Main clinical tabs — premium segmented control */
+      #v24-clinical-modal .v24-tabs{
+        display:flex!important;align-items:center!important;gap:5px!important;
+        background:#fff!important;border:1px solid var(--v48-line)!important;
+        border-radius:13px!important;padding:6px!important;box-shadow:0 4px 15px rgba(25,69,77,.035)!important
+      }
+      #v24-clinical-modal .v24-tabs button{
+        border:0!important;border-radius:9px!important;padding:10px 15px!important;
+        min-height:40px!important;font-weight:850!important;color:#5f777d!important;background:transparent!important;
+        transition:transform .15s ease,box-shadow .15s ease,background .15s ease!important
+      }
+      #v24-clinical-modal .v24-tabs button:hover{background:#f0f5f5!important;transform:translateY(-1px)!important}
+      #v24-clinical-modal .v24-tabs button.active{background:var(--v48-teal)!important;color:#fff!important;box-shadow:0 5px 12px rgba(28,89,100,.16)!important}
+      #v24-clinical-modal .v24-tabs .v47-pain-button{
+        margin-inline-start:3px!important;background:linear-gradient(135deg,#d1a34d,#b9822c)!important;
+        color:#fff!important;box-shadow:0 5px 14px rgba(185,130,44,.18)!important
+      }
+
+      /* Phrase assistant */
+      #v24-clinical-modal .v34-phrase-assistant{border-radius:13px!important;background:#fff!important;border:1px solid var(--v48-line)!important}
+      #v24-clinical-modal .v34-phrase-groups>div{background:#f5f9f9!important;border:1px solid #e6eeee!important;border-radius:10px!important;padding:9px!important}
+      #v24-clinical-modal .v34-phrase-groups button{background:#fff!important;border:1px solid #d8e5e6!important;border-radius:99px!important;padding:6px 10px!important;transition:.15s!important}
+      #v24-clinical-modal .v34-phrase-groups button:hover{border-color:#78a9ad!important;background:#eaf3f3!important;color:#245963!important}
+
+      /* Completion bar */
+      #v24-clinical-modal .v35-completion{background:#fff!important;border-radius:11px!important;padding:8px 10px!important}
+      #v24-clinical-modal .v35-completion-bar{height:5px!important;border-radius:99px!important;overflow:hidden!important}
+
+      /* Sticky clinical footer */
+      #v24-clinical-modal .v24-footer{background:rgba(255,255,255,.96)!important;backdrop-filter:blur(12px)!important;border-top:1px solid var(--v48-line)!important;padding:9px 14px!important;box-shadow:0 -8px 24px rgba(25,69,77,.05)!important}
+      #v24-clinical-modal .v24-footer button{border-radius:9px!important;font-weight:850!important}
+      #v24-clinical-modal .v24-footer button.primary,
+      #v24-clinical-modal .v24-footer button:first-child{box-shadow:0 5px 14px rgba(28,89,100,.16)!important}
+
+      /* Pain Map popup — executive medical finish */
+      #v47-pain-overlay{background:rgba(12,34,39,.82)!important}
+      #v47-pain-overlay .v47-shell{border:1px solid rgba(255,255,255,.16)!important;box-shadow:0 40px 120px rgba(0,0,0,.42)!important}
+      #v47-pain-overlay .v47-head{background:linear-gradient(125deg,#123f49,#1e5d67)!important;padding:14px 20px!important}
+      #v47-pain-overlay .v47-head h2{font-size:28px!important;letter-spacing:-.25px!important}
+      #v47-pain-overlay .v47-stage{background:radial-gradient(circle at 50% 45%,#fff 0,#f2f7f7 62%,#eaf2f2 100%)!important}
+      #v47-pain-overlay .v44-experience{border:0!important;box-shadow:none!important;background:transparent!important}
+      #v47-pain-overlay .v44-header{border-radius:13px!important;margin-bottom:7px!important;border:1px solid var(--v48-line)!important;box-shadow:0 5px 16px rgba(25,69,77,.04)!important}
+      #v47-pain-overlay .v44-tools,#v47-pain-overlay .v44-inspector{border-radius:14px!important;box-shadow:0 6px 18px rgba(25,69,77,.045)!important}
+      #v47-pain-overlay .v44-tools button{transition:.16s ease!important}
+      #v47-pain-overlay .v44-tools button:hover{transform:translateX(2px)!important;border-color:#8ab3b7!important;background:#eaf3f3!important}
+      #v47-pain-overlay .v44-body-unit{background:rgba(255,255,255,.5)!important;border-radius:18px!important}
+      #v47-pain-overlay .v44-points g:hover .halo{fill:rgba(201,151,61,.20)!important}
+      #v47-pain-overlay .v44-points g.selected .halo{fill:rgba(226,82,53,.24)!important;filter:drop-shadow(0 0 10px rgba(226,82,53,.55))!important}
+      #v47-pain-overlay .v44-points g.selected .dot{fill:#e45b3e!important}
+      #v47-pain-overlay .v44-scale button{border-radius:8px!important;transition:.15s!important}
+      #v47-pain-overlay .v44-scale button:hover{transform:translateY(-2px)!important}
+      #v47-pain-overlay .v44-scale button.active{box-shadow:0 4px 10px rgba(228,91,62,.25)!important}
+      #v47-pain-overlay .v44-selected article{box-shadow:0 3px 9px rgba(25,69,77,.04)!important}
+      #v47-pain-overlay .v47-footer{padding:10px 16px!important}
+      #v47-pain-overlay .v47-footer button{min-width:180px!important;box-shadow:0 5px 14px rgba(28,89,100,.16)!important}
+
+      /* Better focus states / accessibility */
+      #v24-clinical-modal button:focus-visible,#v31-workspace button:focus-visible,#v47-pain-overlay button:focus-visible{
+        outline:3px solid rgba(201,151,61,.30)!important;outline-offset:2px!important
+      }
+      #v24-clinical-modal button,#v31-workspace button,#v47-pain-overlay button{cursor:pointer}
+      body.myaims-ar #v47-pain-overlay .v44-tools button:hover{transform:translateX(-2px)!important}
+
+      @media(max-width:900px){
+        #v24-clinical-modal .v24-tabs{overflow-x:auto!important;flex-wrap:nowrap!important}
+        #v24-clinical-modal .v24-tabs button{white-space:nowrap!important}
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function addProfessionalMicroUI(){
+    const r=document.querySelector('#v24-clinical-modal .v34-clinical-workspace')||document.querySelector('#v24-clinical-modal');
+    if(!r)return;
+
+    // Give the Pain Map button a concise clinical subtitle via title.
+    r.querySelectorAll('[data-v47-pain]').forEach(b=>{
+      b.title=isArabic()?'فتح خريطة الألم التفاعلية':'Open interactive pain map';
+      b.setAttribute('aria-label',b.title);
+    });
+
+    // Improve close button semantics in Pain popup.
+    const close=document.querySelector('#v47-pain-overlay [data-v47-close]');
+    if(close){
+      close.title=isArabic()?'إغلاق خريطة الألم':'Close pain map';
+      close.setAttribute('aria-label',close.title);
+    }
+  }
+  function isArabic(){return document.documentElement.dir==='rtl'||document.body.classList.contains('myaims-ar')}
+
+  function init(){
+    addCSS();addProfessionalMicroUI();
+    const mo=new MutationObserver(()=>{clearTimeout(window.__v48);window.__v48=setTimeout(addProfessionalMicroUI,70)});
+    mo.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
