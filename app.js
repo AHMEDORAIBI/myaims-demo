@@ -10287,3 +10287,150 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V37 - PATIENT DOCUMENTS & ATTACHMENTS
+   Demo/localStorage document center:
+   - Patient Documents tab in Patient Workspace
+   - Categories: Referral, Medical Report, Prescription,
+     Insurance Approval, Imaging, Lab, Consent, Other
+   - Add document metadata + optional small local file
+   - Preview/download locally stored file when browser permits
+   - Search/filter/status/expiry
+   - Patient document alerts
+   IMPORTANT: static demo only; large/real files require backend storage.
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{try{if(typeof window.saveState==='function')window.saveState()}catch(e){}};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const cats=['Referral','Medical Report','Prescription','Insurance Approval','Imaging','Lab Result','Consent','ID / Insurance Card','Other'];
+
+  function ensure(){if(!Array.isArray(S().patientDocuments))S().patientDocuments=[];save()}
+  function patient(pid){return (S().patients||[]).find(p=>String(p.id)===String(pid))}
+  function pname(pid){const p=patient(pid);return p?.name||p?.fullName||p?.patientName||'Patient'}
+  function docs(pid){return (S().patientDocuments||[]).filter(d=>String(d.patientId)===String(pid)).sort((a,b)=>String(b.documentDate||b.createdAt||'').localeCompare(String(a.documentDate||a.createdAt||'')))}
+  function fmtSize(n){n=Number(n||0);return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
+  function icon(cat){return {'Referral':'↗','Medical Report':'▤','Prescription':'Rx','Insurance Approval':'✓','Imaging':'◫','Lab Result':'⌁','Consent':'✎','ID / Insurance Card':'ID','Other':'•'}[cat]||'•'}
+  function expiring(d){
+    if(!d.expiryDate)return '';
+    const days=Math.ceil((new Date(d.expiryDate+'T00:00:00')-new Date())/86400000);
+    if(days<0)return 'Expired';
+    if(days<=30)return 'Expiring Soon';
+    return '';
+  }
+
+  window.openV37Documents=function(pid){
+    ensure();
+    let root=document.getElementById('v37-docs-modal');
+    if(!root){root=document.createElement('div');root.id='v37-docs-modal';document.body.appendChild(root)}
+    root.className='open';root.dataset.pid=pid;
+    root.innerHTML=`
+      <div class="v37-backdrop" onclick="closeV37Documents()"></div>
+      <section class="v37-dialog">
+        <header><div><small>PATIENT DOCUMENT CENTER</small><h2>${esc(pname(pid))}</h2><p>Clinical, medical and insurance documents</p></div><button onclick="closeV37Documents()">×</button></header>
+        <div class="v37-tools">
+          <input id="v37-search" placeholder="Search documents..." oninput="renderV37Documents()">
+          <select id="v37-filter" onchange="renderV37Documents()"><option>All Categories</option>${cats.map(x=>`<option>${x}</option>`).join('')}</select>
+          <button onclick="openV37AddDocument('${pid}')">+ Add Document</button>
+        </div>
+        <div id="v37-doc-list"></div>
+      </section>`;
+    renderV37Documents();
+  };
+  window.closeV37Documents=function(){const x=document.getElementById('v37-docs-modal');if(x)x.className=''};
+
+  window.renderV37Documents=function(){
+    const root=document.getElementById('v37-docs-modal');if(!root)return;
+    const pid=root.dataset.pid,q=(document.getElementById('v37-search')?.value||'').toLowerCase(),f=document.getElementById('v37-filter')?.value||'All Categories';
+    let list=docs(pid).filter(d=>(f==='All Categories'||d.category===f)&&(`${d.title} ${d.category} ${d.notes||''}`).toLowerCase().includes(q));
+    const host=document.getElementById('v37-doc-list');if(!host)return;
+    const all=docs(pid), approvals=all.filter(x=>x.category==='Insurance Approval').length, alerts=all.filter(x=>expiring(x)).length;
+    host.innerHTML=`
+      <div class="v37-kpis"><div><small>TOTAL DOCUMENTS</small><b>${all.length}</b></div><div><small>INSURANCE APPROVALS</small><b>${approvals}</b></div><div><small>EXPIRY ALERTS</small><b>${alerts}</b></div></div>
+      <div class="v37-list">${list.length?list.map(d=>{
+        const ex=expiring(d);
+        return `<article>
+          <span class="v37-icon">${icon(d.category)}</span>
+          <div class="v37-doc-main"><div><b>${esc(d.title)}</b>${ex?`<em class="${ex==='Expired'?'bad':'warn'}">${ex}</em>`:''}</div><small>${esc(d.category)} · ${esc(d.documentDate||'No date')}${d.fileName?' · '+esc(d.fileName):''}</small><p>${esc(d.notes||'')}</p></div>
+          <div class="v37-doc-meta"><span>${d.fileSize?fmtSize(d.fileSize):'Record'}</span>${d.expiryDate?`<small>Expiry ${esc(d.expiryDate)}</small>`:''}</div>
+          <div class="v37-actions">${d.dataUrl?`<button onclick="viewV37Document('${d.id}')">View</button>`:''}<button onclick="editV37Document('${d.id}')">Edit</button><button class="danger" onclick="deleteV37Document('${d.id}')">Delete</button></div>
+        </article>`}).join(''):`<div class="v37-empty">No documents found.<br><button onclick="openV37AddDocument('${pid}')">+ Add First Document</button></div>`}</div>`;
+  };
+
+  window.openV37AddDocument=function(pid,id){
+    ensure();const old=id?(S().patientDocuments||[]).find(x=>String(x.id)===String(id)):null;
+    let root=document.getElementById('v37-add-modal');if(!root){root=document.createElement('div');root.id='v37-add-modal';document.body.appendChild(root)}
+    root.className='open';root.dataset.pid=pid;root.dataset.id=id||'';
+    root.innerHTML=`
+      <div class="v37-add-backdrop" onclick="closeV37AddDocument()"></div>
+      <section class="v37-add-dialog">
+        <header><div><small>PATIENT DOCUMENT</small><h3>${old?'Edit Document':'Add Document'}</h3></div><button onclick="closeV37AddDocument()">×</button></header>
+        <div class="v37-form">
+          <label class="wide"><span>Document Title</span><input id="v37-title" value="${esc(old?.title||'')}" placeholder="e.g. Orthopedic Referral"></label>
+          <label><span>Category</span><select id="v37-category">${cats.map(x=>`<option ${old?.category===x?'selected':''}>${x}</option>`).join('')}</select></label>
+          <label><span>Document Date</span><input id="v37-date" type="date" value="${esc(old?.documentDate||new Date().toISOString().slice(0,10))}"></label>
+          <label><span>Expiry Date <small>(optional)</small></span><input id="v37-expiry" type="date" value="${esc(old?.expiryDate||'')}"></label>
+          <label><span>Reference / Approval No.</span><input id="v37-ref" value="${esc(old?.reference||'')}" placeholder="Optional"></label>
+          <label class="wide"><span>Notes</span><textarea id="v37-notes" rows="3" placeholder="Document notes...">${esc(old?.notes||'')}</textarea></label>
+          <label class="wide v37-file"><span>Attach File <small>(demo: max 1.5 MB)</small></span><input id="v37-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"><em>${old?.fileName?'Current: '+esc(old.fileName):'PDF, image or document'}</em></label>
+        </div>
+        <footer><button onclick="closeV37AddDocument()">Cancel</button><button class="primary" onclick="saveV37Document()">Save Document</button></footer>
+      </section>`;
+  };
+  window.closeV37AddDocument=function(){const x=document.getElementById('v37-add-modal');if(x)x.className=''};
+  window.editV37Document=function(id){const d=(S().patientDocuments||[]).find(x=>String(x.id)===String(id));if(d)openV37AddDocument(d.patientId,id)};
+
+  window.saveV37Document=function(){
+    ensure();const root=document.getElementById('v37-add-modal'),pid=root?.dataset.pid,id=root?.dataset.id;if(!root)return;
+    const title=document.getElementById('v37-title')?.value.trim();if(!title){alert('Please enter a document title.');return}
+    const file=document.getElementById('v37-file')?.files?.[0];
+    if(file&&file.size>1572864){alert('For this static demo, please use a file smaller than 1.5 MB. Real deployment should use secure cloud storage.');return}
+    const finish=(dataUrl)=>{
+      let d=id?(S().patientDocuments||[]).find(x=>String(x.id)===String(id)):null;
+      if(!d){d={id:'DOC-'+Date.now(),patientId:pid,createdAt:new Date().toISOString()};S().patientDocuments.push(d)}
+      Object.assign(d,{title,category:document.getElementById('v37-category').value,documentDate:document.getElementById('v37-date').value,expiryDate:document.getElementById('v37-expiry').value,reference:document.getElementById('v37-ref').value.trim(),notes:document.getElementById('v37-notes').value.trim(),updatedAt:new Date().toISOString()});
+      if(file){d.fileName=file.name;d.fileType=file.type;d.fileSize=file.size;d.dataUrl=dataUrl}
+      save();closeV37AddDocument();renderV37Documents();
+      try{if(typeof window.logAudit==='function')window.logAudit('Patient Document Saved','Patients',`${pname(pid)} — ${title}`)}catch(e){}
+    };
+    if(file){const r=new FileReader();r.onload=()=>finish(r.result);r.readAsDataURL(file)}else finish(null);
+  };
+
+  window.viewV37Document=function(id){
+    const d=(S().patientDocuments||[]).find(x=>String(x.id)===String(id));if(!d?.dataUrl)return;
+    const w=window.open();if(w)w.location.href=d.dataUrl;
+  };
+  window.deleteV37Document=function(id){
+    const d=(S().patientDocuments||[]).find(x=>String(x.id)===String(id));if(!d||!confirm(`Delete "${d.title}"?`))return;
+    S().patientDocuments=S().patientDocuments.filter(x=>String(x.id)!==String(id));save();renderV37Documents();
+  };
+
+  function enhanceWorkspace(){
+    const w=document.getElementById('v31-workspace');if(!w?.classList.contains('open'))return;
+    const pid=w.dataset.patientId||w.dataset.pid;
+    if(!pid)return;
+    const tabs=w.querySelector('.v31-tabs');
+    if(tabs&&!tabs.querySelector('[data-v37-docs]')){
+      const b=document.createElement('button');b.dataset.v37Docs='1';b.textContent='Documents';b.onclick=()=>openV37Documents(pid);tabs.appendChild(b);
+    }
+    const top=w.querySelector('.v31-top-actions');
+    if(top&&!top.querySelector('[data-v37-top]')){
+      const b=document.createElement('button');b.dataset.v37Top='1';b.textContent='Documents';b.onclick=()=>openV37Documents(pid);top.appendChild(b);
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v37-css'))return;const s=document.createElement('style');s.id='v37-css';s.textContent=`
+      #v37-docs-modal,#v37-add-modal{display:none}#v37-docs-modal.open,#v37-add-modal.open{display:block;position:fixed;inset:0;z-index:100900}.v37-backdrop,.v37-add-backdrop{position:absolute;inset:0;background:rgba(13,42,49,.72);backdrop-filter:blur(5px)}
+      .v37-dialog{position:relative;width:min(1050px,94vw);height:86vh;margin:7vh auto;background:#f4f8f8;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 25px 80px rgba(0,0,0,.28)}.v37-dialog>header,.v37-add-dialog>header{display:flex;justify-content:space-between;background:#174f5b;color:#fff;padding:16px 20px}.v37-dialog header small,.v37-add-dialog header small{font-size:9px;color:#e2c17c;font-weight:900}.v37-dialog header h2{font-size:21px;margin:3px 0}.v37-dialog header p{font-size:11px;margin:0;color:#d5e5e7}.v37-dialog header button,.v37-add-dialog header button{border:0;background:rgba(255,255,255,.12);color:#fff;width:35px;height:35px;border-radius:9px;font-size:20px}
+      .v37-tools{display:grid;grid-template-columns:1fr 190px auto;gap:7px;padding:10px 14px;background:#fff;border-bottom:1px solid #dce6e7}.v37-tools input,.v37-tools select{border:1px solid #d7e3e5;border-radius:8px;padding:9px;font-size:11px}.v37-tools button{border:0;background:#c99a42;color:#fff;border-radius:8px;padding:9px 12px;font-size:10px;font-weight:900}
+      #v37-doc-list{padding:12px 14px;overflow:auto}.v37-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:9px}.v37-kpis>div{background:#fff;border:1px solid #dce7e8;border-radius:10px;padding:10px}.v37-kpis small,.v37-kpis b{display:block}.v37-kpis small{font-size:8px;color:#a27a35;font-weight:900}.v37-kpis b{font-size:17px;color:#31565e;margin-top:3px}.v37-list{display:grid;gap:6px}.v37-list article{display:grid;grid-template-columns:42px 1fr 100px auto;gap:10px;align-items:center;background:#fff;border:1px solid #dce7e8;border-radius:10px;padding:10px}.v37-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;background:#e9f2f2;color:#174f5b;font-weight:900}.v37-doc-main b{font-size:12px;color:#31565e}.v37-doc-main small{display:block;font-size:9px;color:#87979b;margin:3px 0}.v37-doc-main p{font-size:10px;color:#687e83;margin:0}.v37-doc-main em{font-style:normal;font-size:8px;margin-left:7px;padding:3px 6px;border-radius:99px}.v37-doc-main em.warn{background:#fff3dc;color:#9b712c}.v37-doc-main em.bad{background:#ffeaec;color:#a14d57}.v37-doc-meta span,.v37-doc-meta small{display:block;font-size:9px;color:#778b90}.v37-actions{display:flex;gap:4px}.v37-actions button{border:1px solid #d8e3e5;background:#fff;border-radius:7px;padding:6px 8px;font-size:9px;font-weight:800;color:#567178}.v37-actions .danger{color:#a1535c}.v37-empty{text-align:center;padding:45px;color:#849599;font-size:11px}.v37-empty button{margin-top:8px;border:1px solid #d4e1e3;background:#fff;border-radius:8px;padding:8px;color:#496b72}
+      .v37-add-dialog{position:relative;width:min(680px,94vw);margin:8vh auto;background:#f5f8f8;border-radius:17px;overflow:hidden;box-shadow:0 25px 80px rgba(0,0,0,.28)}.v37-add-dialog header h3{font-size:19px;margin:3px 0}.v37-form{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:15px}.v37-form label{display:flex;flex-direction:column;gap:5px}.v37-form .wide{grid-column:1/-1}.v37-form span{font-size:10px;font-weight:800;color:#536f75}.v37-form input,.v37-form select,.v37-form textarea{border:1px solid #d8e3e5;border-radius:8px;padding:9px;font:inherit;font-size:11px;background:#fff}.v37-file{border:1px dashed #cbdadd;border-radius:9px;padding:10px;background:#fbfdfd}.v37-file em{font-size:9px;color:#87979b}.v37-add-dialog footer{display:flex;justify-content:flex-end;gap:6px;padding:11px 15px;background:#fff;border-top:1px solid #dce6e7}.v37-add-dialog footer button{border:1px solid #d6e2e4;background:#fff;color:#557078;border-radius:8px;padding:9px 12px;font-size:10px;font-weight:800}.v37-add-dialog footer .primary{background:#174f5b;color:#fff;border-color:#174f5b}
+      @media(max-width:720px){.v37-dialog{width:100vw;height:100vh;margin:0;border-radius:0}.v37-tools{grid-template-columns:1fr}.v37-list article{grid-template-columns:40px 1fr}.v37-doc-meta,.v37-actions{grid-column:2}.v37-form{grid-template-columns:1fr}.v37-form .wide{grid-column:auto}}
+    `;document.head.appendChild(s)
+  }
+  function init(){ensure();css();const o=new MutationObserver(()=>{clearTimeout(window.__v37);window.__v37=setTimeout(enhanceWorkspace,80)});o.observe(document.body,{childList:true,subtree:true});setTimeout(enhanceWorkspace,300)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
