@@ -11420,3 +11420,147 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V43 - BODY CANVAS EXPERIENCE
+   Replaces the conventional Pain & Treatment Areas presentation
+   with a premium, visual, single-screen clinical interaction.
+   ========================================================= */
+(function(){
+  const ar=()=>document.documentElement.dir==='rtl'||document.body.classList.contains('myaims-ar');
+  const T=(e,a)=>ar()?a:e;
+
+  function clinical(){return document.querySelector('#v24-clinical-modal .v34-clinical-workspace')||document.querySelector('#v24-clinical-modal')}
+  function oldPain(root){
+    return root?.querySelector('.v42-pain-command') || [...(root?.querySelectorAll('section,div')||[])].find(x=>/Pain\s*&\s*Treatment Areas|مناطق الألم والعلاج/i.test(x.textContent||'')&&x.querySelector('svg'));
+  }
+
+  function build(){
+    const root=clinical(), old=oldPain(root); if(!root||!old||root.querySelector('.v43-body-canvas'))return;
+    old.style.display='none';
+
+    const box=document.createElement('section');box.className='v43-body-canvas';
+    box.innerHTML=`
+      <header class="v43-head">
+        <div><small>${T('VISUAL CLINICAL MAPPING','التحديد السريري المرئي')}</small><h2>${T('Where does it hurt?','أين موضع الألم؟')}</h2><p>${T('Touch the body area, set intensity, and continue — all in one view.','حدد المنطقة، درجة الألم، ثم أكمل — من شاشة واحدة.')}</p></div>
+        <div class="v43-score"><small>${T('PAIN SCORE','درجة الألم')}</small><b data-v43-score>0</b><span>/10</span></div>
+      </header>
+
+      <div class="v43-stage">
+        <aside class="v43-side left">
+          <small>${T('QUICK ZONES','المناطق السريعة')}</small>
+          ${[['Head','الرأس'],['Neck','الرقبة'],['Shoulder','الكتف'],['Arm','الذراع'],['Elbow','المرفق'],['Hand','اليد']].map(x=>`<button data-zone="${x[0]}">${T(x[0],x[1])}<i>+</i></button>`).join('')}
+        </aside>
+
+        <main class="v43-figure">
+          <div class="v43-view-switch"><button class="active" data-view="front">${T('Front','أمامي')}</button><button data-view="back">${T('Back','خلفي')}</button></div>
+          <div class="v43-silhouette" data-v43-view="front">
+            <svg viewBox="0 0 300 590" aria-label="Interactive body map">
+              <g class="body-base">
+                <ellipse cx="150" cy="48" rx="34" ry="40"/>
+                <rect x="135" y="84" width="30" height="27" rx="12"/>
+                <path d="M105 112 Q150 95 195 112 L207 238 Q188 267 150 270 Q112 267 93 238Z"/>
+                <path d="M102 119 Q78 126 68 162 L43 286 Q40 302 55 306 Q68 307 74 292 L105 177Z"/>
+                <path d="M198 119 Q222 126 232 162 L257 286 Q260 302 245 306 Q232 307 226 292 L195 177Z"/>
+                <path d="M113 257 L142 259 L137 424 L120 555 Q116 574 99 571 Q86 568 89 548 L94 405Z"/>
+                <path d="M187 257 L158 259 L163 424 L180 555 Q184 574 201 571 Q214 568 211 548 L206 405Z"/>
+              </g>
+              <g class="hotspots">
+                <circle data-zone="Head" cx="150" cy="48" r="30"/>
+                <rect data-zone="Neck" x="136" y="84" width="28" height="28" rx="10"/>
+                <ellipse data-zone="Shoulder" cx="102" cy="126" rx="28" ry="22"/><ellipse data-zone="Shoulder" cx="198" cy="126" rx="28" ry="22"/>
+                <ellipse data-zone="Arm" cx="78" cy="203" rx="18" ry="62"/><ellipse data-zone="Arm" cx="222" cy="203" rx="18" ry="62"/>
+                <circle data-zone="Elbow" cx="63" cy="260" r="18"/><circle data-zone="Elbow" cx="237" cy="260" r="18"/>
+                <ellipse data-zone="Hand" cx="50" cy="306" rx="17" ry="24"/><ellipse data-zone="Hand" cx="250" cy="306" rx="17" ry="24"/>
+                <ellipse data-zone="Chest" cx="150" cy="158" rx="52" ry="42"/>
+                <ellipse data-zone="Abdomen" cx="150" cy="220" rx="48" ry="42"/>
+                <ellipse data-zone="Hip" cx="150" cy="270" rx="54" ry="30"/>
+                <ellipse data-zone="Thigh" cx="118" cy="345" rx="24" ry="72"/><ellipse data-zone="Thigh" cx="182" cy="345" rx="24" ry="72"/>
+                <circle data-zone="Knee" cx="112" cy="423" r="22"/><circle data-zone="Knee" cx="188" cy="423" r="22"/>
+                <ellipse data-zone="Leg" cx="105" cy="485" rx="18" ry="58"/><ellipse data-zone="Leg" cx="195" cy="485" rx="18" ry="58"/>
+                <ellipse data-zone="Foot" cx="96" cy="558" rx="24" ry="15"/><ellipse data-zone="Foot" cx="204" cy="558" rx="24" ry="15"/>
+              </g>
+            </svg>
+            <div class="v43-hint">${T('Tap directly on the body','اضغط مباشرة على الجسم')}</div>
+          </div>
+        </main>
+
+        <aside class="v43-side right">
+          <small>${T('QUICK ZONES','المناطق السريعة')}</small>
+          ${[['Chest','الصدر'],['Back','الظهر'],['Hip','الورك'],['Thigh','الفخذ'],['Knee','الركبة'],['Leg','الساق'],['Foot','القدم']].map(x=>`<button data-zone="${x[0]}">${T(x[0],x[1])}<i>+</i></button>`).join('')}
+        </aside>
+      </div>
+
+      <div class="v43-bottom">
+        <div class="v43-selected"><small>${T('SELECTED AREAS','المناطق المحددة')}</small><div data-v43-selected><em>${T('No areas selected','لم يتم تحديد مناطق')}</em></div></div>
+        <div class="v43-pain">
+          <small>${T('INTENSITY','شدة الألم')}</small>
+          <div class="v43-scale">${Array.from({length:11},(_,i)=>`<button data-score="${i}">${i}</button>`).join('')}</div>
+          <span data-v43-label>${T('No pain','لا يوجد ألم')}</span>
+        </div>
+        <button class="v43-done">${T('Apply & Continue','اعتماد ومتابعة')} <b>→</b></button>
+      </div>`;
+    old.parentNode.insertBefore(box,old);
+
+    const chosen=new Map();
+    const scoreEl=box.querySelector('[data-v43-score]');
+    const label=box.querySelector('[data-v43-label]');
+    const selected=box.querySelector('[data-v43-selected]');
+
+    function sync(){
+      const names=[...chosen.keys()];
+      selected.innerHTML=names.length?names.map(n=>`<button data-remove="${n}"><span>●</span>${T(n,({'Head':'الرأس','Neck':'الرقبة','Shoulder':'الكتف','Arm':'الذراع','Elbow':'المرفق','Hand':'اليد','Chest':'الصدر','Back':'الظهر','Abdomen':'البطن','Hip':'الورك','Thigh':'الفخذ','Knee':'الركبة','Leg':'الساق','Foot':'القدم'})[n]||n)} ×</button>`).join(''):`<em>${T('No areas selected','لم يتم تحديد مناطق')}</em>`;
+      box.querySelectorAll('[data-zone]').forEach(x=>x.classList.toggle('selected',chosen.has(x.dataset.zone)));
+      selected.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{chosen.delete(b.dataset.remove);sync()});
+    }
+    function toggle(z){
+      if(chosen.has(z))chosen.delete(z);else chosen.set(z,true);
+      // Best-effort sync with original body-map controls by matching text/data.
+      const candidates=[...old.querySelectorAll('button,[data-area],[data-zone]')];
+      const match=candidates.find(x=>(x.dataset.area||x.dataset.zone||x.textContent||'').toLowerCase().includes(z.toLowerCase()));
+      if(match)try{match.click()}catch(e){}
+      sync();
+    }
+    box.querySelectorAll('[data-zone]').forEach(x=>x.onclick=()=>toggle(x.dataset.zone));
+
+    box.querySelectorAll('[data-score]').forEach(b=>b.onclick=()=>{
+      const n=+b.dataset.score;scoreEl.textContent=n;
+      box.querySelectorAll('[data-score]').forEach(x=>x.classList.toggle('active',x===b));
+      label.textContent=n===0?T('No pain','لا يوجد ألم'):n<=3?T('Mild','خفيف'):n<=6?T('Moderate','متوسط'):n<=8?T('Severe','شديد'):T('Very severe','شديد جدًا');
+      const input=root.querySelector('input[type="range"][max="10"],input[name*="pain" i],select[name*="pain" i],#v24-pain');
+      if(input){input.value=n;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}))}
+    });
+
+    box.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
+      box.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));
+      box.querySelector('.v43-silhouette').dataset.v43View=b.dataset.view;
+      // Use original Front/Back engine if present.
+      const ob=[...old.querySelectorAll('button')].find(x=>new RegExp(b.dataset.view,'i').test(x.textContent||''));
+      if(ob)try{ob.click()}catch(e){}
+    });
+
+    box.querySelector('.v43-done').onclick=()=>{
+      const next=root.querySelector('.v35-flow-steps button:nth-child(2),[data-step="2"]');
+      if(next)next.click();
+      else box.scrollIntoView({behavior:'smooth',block:'start'});
+    };
+    sync();
+  }
+
+  function css(){
+    if(document.getElementById('v43-css'))return;
+    const s=document.createElement('style');s.id='v43-css';s.textContent=`
+      .v43-body-canvas{background:linear-gradient(145deg,#f7fbfb,#edf5f5);border:1px solid #d5e4e5;border-radius:18px;padding:14px;margin:8px 0;color:#31565e;box-shadow:0 10px 30px rgba(31,78,86,.055)}
+      .v43-head{display:flex;justify-content:space-between;align-items:center}.v43-head small,.v43-side>small,.v43-selected>small,.v43-pain>small{font-size:10px!important;color:#b0802d;font-weight:900;letter-spacing:.5px}.v43-head h2{font-size:25px!important;margin:2px 0!important}.v43-head p{font-size:13px!important;color:#778d92;margin:0}.v43-score{display:flex;align-items:baseline;gap:2px;background:#174f5b;color:#fff;border-radius:14px;padding:9px 15px}.v43-score small{color:#e2c17b!important;margin-right:8px}.v43-score b{font-size:30px}.v43-score span{font-size:13px}
+      .v43-stage{display:grid;grid-template-columns:180px minmax(330px,1fr) 180px;gap:12px;align-items:center;margin-top:10px}.v43-side{display:grid;gap:6px;align-content:center}.v43-side button{display:flex;justify-content:space-between;align-items:center;border:1px solid #d8e5e6;background:rgba(255,255,255,.9);color:#4e6b72;border-radius:11px;padding:9px 11px;font-size:12px!important;font-weight:800;transition:.18s}.v43-side button:hover,.v43-side button.selected{transform:translateY(-1px);border-color:#4b9297;background:#e6f2f2;color:#174f5b}.v43-side button i{font-style:normal;width:22px;height:22px;display:grid;place-items:center;border-radius:7px;background:#edf4f4}.v43-side button.selected i{background:#174f5b;color:#fff}
+      .v43-figure{position:relative;display:grid;place-items:center;min-height:410px}.v43-view-switch{position:absolute;top:4px;z-index:2;display:flex;background:#e9f1f2;border-radius:10px;padding:3px}.v43-view-switch button{border:0;background:transparent;border-radius:8px;padding:6px 13px;font-size:11px!important;font-weight:800;color:#6a8186}.v43-view-switch button.active{background:#fff;color:#174f5b;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+      .v43-silhouette{position:relative;height:410px;width:100%;display:grid;place-items:center}.v43-silhouette svg{height:385px;width:auto;overflow:visible}.v43-silhouette .body-base>*{fill:#eef4f4;stroke:#aac2c5;stroke-width:2}.v43-silhouette .hotspots>*{fill:transparent;stroke:transparent;cursor:pointer;transition:.18s}.v43-silhouette .hotspots>*:hover{fill:rgba(38,126,132,.18);stroke:#4d9aa0;stroke-width:2}.v43-silhouette .hotspots>*.selected{fill:rgba(201,151,60,.28);stroke:#c9973c}.v43-silhouette[data-v43-view="back"] svg{transform:scaleX(-1)}.v43-hint{position:absolute;bottom:4px;font-size:11px;color:#809499;background:#fff;border:1px solid #dce7e8;border-radius:99px;padding:5px 10px}
+      .v43-bottom{display:grid;grid-template-columns:1.3fr 1fr auto;gap:10px;align-items:end;background:#fff;border:1px solid #dbe7e8;border-radius:13px;padding:10px;margin-top:6px}.v43-selected>[data-v43-selected]{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;min-height:31px}.v43-selected button{border:0;background:#e7f2f2;color:#315f65;border-radius:99px;padding:6px 9px;font-size:11px!important}.v43-selected button span{color:#c9973c;margin-right:4px}.v43-selected em{font-size:11px;color:#899a9e;font-style:normal;padding-top:6px}.v43-scale{display:flex;gap:2px;margin-top:5px}.v43-scale button{width:28px;height:28px;min-height:28px!important;padding:0!important;border:1px solid #d9e4e5;background:#f7fafa;color:#60787e;border-radius:7px;font-size:10px!important}.v43-scale button.active{background:#c9973c;color:#fff;border-color:#c9973c;transform:translateY(-2px)}.v43-pain>span{display:block;font-size:10px;color:#748a8f;margin-top:4px}.v43-done{height:43px!important;border:0!important;background:#174f5b!important;color:#fff!important;border-radius:10px!important;padding:0 16px!important;font-size:12px!important;font-weight:900!important}.v43-done b{margin-left:8px}
+      body.myaims-ar .v43-body-canvas{direction:rtl;text-align:right}body.myaims-ar .v43-done b{display:inline-block;transform:scaleX(-1);margin-left:0;margin-right:8px}body.myaims-ar .v43-selected button span{margin-right:0;margin-left:4px}
+      @media(max-width:900px){.v43-stage{grid-template-columns:1fr}.v43-side{grid-template-columns:repeat(4,1fr)}.v43-side>small{grid-column:1/-1}.v43-figure{order:-1}.v43-bottom{grid-template-columns:1fr}.v43-done{width:100%}}
+    `;document.head.appendChild(s);
+  }
+  function init(){css();setTimeout(build,180);const mo=new MutationObserver(()=>{clearTimeout(window.__v43);window.__v43=setTimeout(build,90)});mo.observe(document.body,{childList:true,subtree:true})}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
