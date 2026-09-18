@@ -11665,3 +11665,103 @@ const css=document.createElement("style");css.textContent=`
 body.myaims-ar #v56-pain{direction:rtl;text-align:right}@media(max-width:900px){#v56-pain main{grid-template-columns:1fr;overflow:auto}.v56-svg{height:520px}.v56-toolbar{flex-wrap:wrap}.v56-global{margin-inline-start:0}}@media(max-width:600px){#v56-pain{padding:0}#v56-pain>section{height:100vh;border-radius:0}.v56-global input{width:120px}}
 `;document.head.appendChild(css);
 })();
+
+/* =========================================================
+   myAIMS V57 — SMART CLINICAL COMMENTS
+   Functional focused documentation workspace.
+   ========================================================= */
+(function(){
+const AR=()=>document.documentElement.dir==="rtl"||document.documentElement.lang==="ar"||document.body.classList.contains("myaims-ar");
+const T=(e,a)=>AR()?a:e;
+const S=()=>window.state||window.appState||{};
+const groups=[
+ {id:"subjective",en:"Subjective",ar:"إفادة المريض",icon:"◌",hint:["Pain improved since previous session","Pain remains unchanged","Pain increased with activity","Reports stiffness","Reports difficulty with daily activities","Tolerated home program well"]},
+ {id:"objective",en:"Objective Findings",ar:"النتائج الموضوعية",icon:"⌖",hint:["Improved range of motion","Reduced range of motion","Muscle weakness noted","Tenderness on palpation","Swelling noted","Improved balance and control"]},
+ {id:"response",en:"Session Response",ar:"استجابة الجلسة",icon:"✓",hint:["Tolerated treatment well","Pain reduced after treatment","Improved mobility after session","Fatigue noted during exercises","No adverse response","Required verbal cueing"]},
+ {id:"next",en:"Next Session",ar:"الجلسة القادمة",icon:"→",hint:["Progress exercises as tolerated","Continue current treatment plan","Reassess pain and ROM","Review home exercise program","Increase strengthening","Continue mobility training"]}
+];
+let draft={subjective:"",objective:"",response:"",next:"",flags:[],confidence:"Routine"};
+
+function context(){
+ const sh=document.querySelector("#v55-clinical-launcher"),db=S(),pid=sh?.dataset.patientId,aid=sh?.dataset.appointmentId;
+ return {p:(db.patients||[]).find(x=>String(x.id)===String(pid))||{},a:(db.appointments||[]).find(x=>String(x.id)===String(aid))||{}};
+}
+function key(){const {p,a}=context();return "myaims-v57-comments-"+(p.id||p.name||"p")+"-"+(a.id||a.date||"a")}
+function load(){try{draft=Object.assign(draft,JSON.parse(localStorage.getItem(key()))||{})}catch(e){}}
+function persist(){localStorage.setItem(key(),JSON.stringify(draft))}
+function completion(){return Math.round(groups.filter(g=>(draft[g.id]||"").trim()).length/groups.length*100)}
+function open(){
+ load();let o=document.querySelector("#v57-comments");if(!o){o=document.createElement("div");o.id="v57-comments";document.body.appendChild(o)}
+ render();o.classList.add("open");document.body.classList.add("v57-lock")
+}
+function render(){
+ const o=document.querySelector("#v57-comments"),{p,a}=context(),pct=completion();if(!o)return;
+ o.innerHTML=`<section>
+ <header><div><small>${T("MYAIMS · SESSION DOCUMENTATION","أهدافي · توثيق الجلسة")}</small><h2>${T("Clinical Comments","الملاحظات السريرية")}</h2><p>${p.name||""} · ${a.date||""} ${a.time||""}</p></div><div class="v57-progress"><span>${T("Documentation","التوثيق")}</span><b>${pct}%</b><i><em style="width:${pct}%"></em></i></div><button data-close>×</button></header>
+ <main>
+  <nav>${groups.map((g,i)=>`<button data-jump="${g.id}" class="${(draft[g.id]||"").trim()?"done":""}"><i>${g.icon}</i><span><b>${T(g.en,g.ar)}</b><small>${(draft[g.id]||"").trim()?T("Documented","تم التوثيق"):T("Needs entry","بانتظار الإدخال")}</small></span><em>${(draft[g.id]||"").trim()?"✓":i+1}</em></button>`).join("")}</nav>
+  <div class="v57-content">
+   ${groups.map(g=>`<section id="v57-${g.id}" class="v57-section"><div class="v57-sectionhead"><div><small>${T("SMART DOCUMENTATION","توثيق ذكي")}</small><h3>${T(g.en,g.ar)}</h3></div><span>${(draft[g.id]||"").length} ${T("characters","حرف")}</span></div>
+    <div class="v57-phrases">${g.hint.map(h=>`<button data-phrase="${g.id}" data-text="${h.replace(/"/g,"&quot;")}">+ ${h}</button>`).join("")}</div>
+    <textarea data-field="${g.id}" placeholder="${T("Type or choose a quick clinical phrase above...","اكتب الملاحظة أو اختر عبارة سريرية سريعة من الأعلى...")}">${draft[g.id]||""}</textarea>
+   </section>`).join("")}
+  </div>
+  <aside>
+   <section><small>${T("CLINICAL SAFETY","السلامة السريرية")}</small><h3>${T("Attention Flags","مؤشرات الانتباه")}</h3>
+    <div class="v57-flags">${[["New symptom","عرض جديد"],["Pain increased","زيادة الألم"],["Fall risk","خطر السقوط"],["Swelling","تورم"],["Dizziness","دوخة"],["Needs review","يحتاج مراجعة"]].map(([e,a])=>`<button data-flag="${e}" class="${draft.flags.includes(e)?"on":""}">${T(e,a)}</button>`).join("")}</div>
+   </section>
+   <section><small>${T("PREVIOUS CONTEXT","السياق السابق")}</small><h3>${T("Previous Session Snapshot","ملخص الجلسة السابقة")}</h3><div class="v57-snapshot">${previousSnapshot()}</div></section>
+   <section><small>${T("QUICK SUMMARY","الملخص السريع")}</small><h3>${T("Session Summary","ملخص الجلسة")}</h3><p>${summary()}</p></section>
+  </aside>
+ </main>
+ <footer><span>● ${T("Autosaved while you type","حفظ تلقائي أثناء الكتابة")}</span><button data-back>${T("Back","رجوع")}</button><button class="v57-save" data-save>${T("Save Comments & Continue","حفظ الملاحظات والمتابعة")}</button></footer>
+ </section>`;
+ bind();
+}
+function previousSnapshot(){
+ const db=S(),{p,a}=context(),notes=(db.sessionNotes||[]).filter(n=>String(n.patientId)===String(p.id)&&String(n.appointmentId)!==String(a.id)).sort((x,y)=>String(y.date||y.updatedAt||"").localeCompare(String(x.date||x.updatedAt||"")));
+ const n=notes[0];if(!n)return T("No previous clinical note available.","لا توجد ملاحظة سريرية سابقة.");
+ return `<b>${n.date||""}</b><p>${(n.response||n.subjective||n.objective||"").toString().slice(0,180)||T("Previous note available.","توجد ملاحظة سابقة.")}</p>`;
+}
+function summary(){
+ const filled=groups.filter(g=>(draft[g.id]||"").trim()).map(g=>T(g.en,g.ar));
+ if(!filled.length)return T("Start documenting to build the session summary automatically.","ابدأ التوثيق ليتم بناء ملخص الجلسة تلقائيًا.");
+ return T("Documented: ","تم توثيق: ")+filled.join(" · ")+(draft.flags.length?T(". Attention: ",". مؤشرات الانتباه: ")+draft.flags.join(", "):"");
+}
+function bind(){
+ const o=document.querySelector("#v57-comments");
+ o.querySelector("[data-close]").onclick=close;o.querySelector("[data-back]").onclick=close;
+ o.querySelectorAll("[data-jump]").forEach(b=>b.onclick=()=>o.querySelector("#v57-"+b.dataset.jump)?.scrollIntoView({behavior:"smooth",block:"start"}));
+ o.querySelectorAll("[data-field]").forEach(t=>t.oninput=()=>{draft[t.dataset.field]=t.value;persist();updateHeader()});
+ o.querySelectorAll("[data-phrase]").forEach(b=>b.onclick=()=>{const id=b.dataset.phrase,ta=o.querySelector(`[data-field="${id}"]`),txt=b.dataset.text;draft[id]=(draft[id]?draft[id].trim()+"; ":"")+txt+".";ta.value=draft[id];persist();updateHeader()});
+ o.querySelectorAll("[data-flag]").forEach(b=>b.onclick=()=>{const f=b.dataset.flag;draft.flags=draft.flags.includes(f)?draft.flags.filter(x=>x!==f):[...draft.flags,f];persist();render()});
+ o.querySelector("[data-save]").onclick=commit;
+}
+function updateHeader(){
+ const o=document.querySelector("#v57-comments"),pct=completion();o.querySelector(".v57-progress b").textContent=pct+"%";o.querySelector(".v57-progress em").style.width=pct+"%";
+ groups.forEach(g=>{const b=o.querySelector(`[data-jump="${g.id}"]`),ok=(draft[g.id]||"").trim();b.classList.toggle("done",!!ok);b.querySelector("small").textContent=ok?T("Documented","تم التوثيق"):T("Needs entry","بانتظار الإدخال");b.querySelector("em").textContent=ok?"✓":groups.indexOf(g)+1});
+}
+function commit(){
+ const db=S(),{p,a}=context();db.sessionNotes=db.sessionNotes||[];
+ let rec=db.sessionNotes.find(n=>String(n.appointmentId)===String(a.id)&&a.id);
+ if(!rec){rec={id:"SN-"+Date.now(),patientId:p.id||"",appointmentId:a.id||"",date:a.date||new Date().toISOString().slice(0,10)};db.sessionNotes.push(rec)}
+ Object.assign(rec,{subjective:draft.subjective,objective:draft.objective,response:draft.response,next:draft.next,attentionFlags:draft.flags,updatedAt:new Date().toISOString()});
+ try{if(window.saveState)window.saveState();else localStorage.setItem("myaims-demo-v2",JSON.stringify(db))}catch(e){}
+ persist();close();
+}
+function close(){document.querySelector("#v57-comments")?.classList.remove("open");document.body.classList.remove("v57-lock")}
+window.openV57ClinicalComments=open;
+
+document.addEventListener("click",function(e){
+ const b=e.target.closest('#v55-workspace [data-sub="comments"]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();open();
+},true);
+
+const css=document.createElement("style");css.textContent=`
+#v57-comments{display:none;position:fixed;inset:0;z-index:530000;background:rgba(7,28,33,.86);backdrop-filter:blur(9px);padding:8px}#v57-comments.open{display:block}.v57-lock{overflow:hidden!important}#v57-comments>section{height:calc(100vh - 16px);display:grid;grid-template-rows:auto 1fr auto;background:#f4f7f7;border-radius:18px;overflow:hidden}#v57-comments header{display:flex;align-items:center;gap:18px;background:linear-gradient(120deg,#123f49,#246874);color:#fff;padding:13px 20px}#v57-comments header>div:first-child{flex:1}#v57-comments header small{color:#efc36c;font-size:9px;font-weight:900}#v57-comments header h2{font-size:25px!important;color:#fff!important;margin:2px 0!important}#v57-comments header p{font-size:10px!important;color:#dce9eb;margin:0}.v57-progress{width:180px}.v57-progress span,.v57-progress b{font-size:9px}.v57-progress b{float:inline-end;color:#efc36c}.v57-progress i{display:block;clear:both;height:5px;background:rgba(255,255,255,.16);border-radius:5px;margin-top:5px;overflow:hidden}.v57-progress em{display:block;height:100%;background:#efc36c;border-radius:5px}#v57-comments header>button{width:42px;height:42px!important;border-radius:10px!important;background:rgba(255,255,255,.1)!important;border:1px solid rgba(255,255,255,.2)!important;color:#fff!important;font-size:23px!important}
+#v57-comments main{min-height:0;display:grid;grid-template-columns:210px minmax(430px,1fr) 275px;gap:10px;padding:10px;overflow:hidden}#v57-comments nav,.v57-content,.v57-content>.v57-section,#v57-comments aside>section{background:#fff;border:1px solid #dbe6e8;border-radius:13px}#v57-comments nav{padding:8px;display:flex;flex-direction:column;gap:6px}#v57-comments nav button{display:grid!important;grid-template-columns:32px 1fr 22px!important;align-items:center!important;gap:7px!important;text-align:start!important;min-height:62px!important;border:1px solid transparent!important;background:#f7fafa!important;border-radius:10px!important;padding:8px!important}#v57-comments nav button.done{background:#edf7f3!important;border-color:#cde4dc!important}#v57-comments nav i{font-style:normal;width:30px;height:30px;border-radius:8px;background:#e5efef;color:#286773;display:grid;place-items:center}#v57-comments nav b,#v57-comments nav small{display:block}#v57-comments nav b{font-size:10.5px!important;color:#31565e}#v57-comments nav small{font-size:8px!important;color:#82969a;margin-top:2px}#v57-comments nav em{font-style:normal;color:#4d927f;font-weight:900}
+.v57-content{min-height:0;overflow:auto;padding:10px;background:#eef3f3}.v57-content>.v57-section{padding:14px;margin-bottom:9px;scroll-margin-top:8px}.v57-sectionhead{display:flex;justify-content:space-between;align-items:center}.v57-sectionhead small,#v57-comments aside small{color:#ad7b29;font-size:8.5px;font-weight:900}.v57-sectionhead h3,#v57-comments aside h3{font-size:16px!important;color:#173f49!important;margin:2px 0!important}.v57-sectionhead>span{font-size:8px;color:#8a9da1}.v57-phrases{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0}.v57-phrases button{min-height:28px!important;border:1px solid #d9e5e6!important;background:#f8fbfb!important;border-radius:99px!important;padding:4px 9px!important;font-size:8.5px!important;color:#52737a!important}.v57-phrases button:hover{background:#eaf4f1!important}.v57-section textarea{width:100%;min-height:125px;border:1px solid #d2e0e2;border-radius:10px;padding:11px;font:inherit;font-size:11px;line-height:1.55;resize:vertical}
+#v57-comments aside{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:9px}#v57-comments aside>section{padding:12px}.v57-flags{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}.v57-flags button{height:30px!important;border:1px solid #ead7d7!important;background:#fffafa!important;border-radius:99px!important;padding:0 9px!important;font-size:8.5px!important;color:#8b5b5e!important}.v57-flags button.on{background:#a84e54!important;color:#fff!important;border-color:#a84e54!important}.v57-snapshot,.v57-snapshot p,#v57-comments aside>section>p{font-size:9px!important;line-height:1.5;color:#71898f}.v57-snapshot b{color:#31565e}
+#v57-comments footer{display:flex;align-items:center;gap:8px;background:#fff;border-top:1px solid #dbe6e8;padding:9px 16px}#v57-comments footer>span{margin-inline-end:auto;font-size:9px;color:#789095}#v57-comments footer button{height:38px!important;border-radius:8px!important;padding:0 15px!important;font-size:10px!important;font-weight:850!important}.v57-save{background:#174f5b!important;color:#fff!important;border:0!important}
+body.myaims-ar #v57-comments{direction:rtl;text-align:right}@media(max-width:1000px){#v57-comments main{grid-template-columns:180px 1fr}#v57-comments aside{display:none}}@media(max-width:650px){#v57-comments{padding:0}#v57-comments>section{height:100vh;border-radius:0}#v57-comments main{grid-template-columns:1fr;overflow:auto}#v57-comments nav{display:grid;grid-template-columns:1fr 1fr}.v57-content{overflow:visible}.v57-progress{display:none}}
+`;document.head.appendChild(css);
+})();
