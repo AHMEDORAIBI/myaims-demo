@@ -10885,3 +10885,257 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V40 - FULL ARABIC / ENGLISH LOCALIZATION LAYER
+   Covers legacy + V18-V39 dynamically generated UI.
+   Keeps internal status/data values in English for compatibility.
+   ========================================================= */
+(function(){
+  const AR = {
+    "Dashboard":"لوحة التحكم","Patients":"المرضى","Appointments":"المواعيد","Billing":"الفواتير",
+    "Receipts":"المقبوضات","Payments":"المدفوعات","Expenses":"المصروفات","Reports":"التقارير",
+    "Settings":"الإعدادات","Insurance":"التأمين","Cash Closing":"إقفال النقدية","Alerts":"التنبيهات",
+    "Users & Audit":"المستخدمون وسجل التدقيق","Clinic Today":"العيادة اليوم","Clinic Today Board":"لوحة تشغيل العيادة اليوم",
+    "Daily Clinic Operations":"التشغيل اليومي للعيادة","Today":"اليوم","Appointments Today":"مواعيد اليوم",
+    "Scheduled":"مجدول","Confirmed":"مؤكد","Checked In":"تم تسجيل الحضور","Waiting":"في الانتظار",
+    "In Session":"قيد الجلسة","Completed":"مكتملة","Cancelled":"ملغاة","No Show":"لم يحضر",
+    "Patient":"المريض","Patient Profile":"ملف المريض","Patient File":"ملف المريض","Profile":"الملف",
+    "Overview":"نظرة عامة","Treatment Plan":"الخطة العلاجية","Sessions":"الجلسات","Progress":"التقدم",
+    "Clinical Timeline":"التسلسل السريري","Documents":"المستندات","Discharge":"إنهاء العلاج",
+    "Clinical Update":"تحديث سريري","Session":"جلسة","Progress Review":"مراجعة التقدم",
+    "New Appointment":"موعد جديد","Recurring Sessions":"جلسات متكررة","Packages":"الباقات",
+    "Waiting List":"قائمة الانتظار","Reminders":"التذكيرات","List View":"عرض القائمة",
+    "Day":"اليوم","Week":"الأسبوع","Rooms":"الغرف","Therapist":"المعالج","Room":"الغرفة",
+    "Duration":"المدة","Visit Type":"نوع الزيارة","Notes":"ملاحظات","Appointment Notes":"ملاحظات الموعد",
+    "Date":"التاريخ","Time":"الوقت","Status":"الحالة","Mobile Number":"رقم الهاتف",
+    "Patient Name":"اسم المريض","New Patient":"مريض جديد","Add Patient":"إضافة مريض",
+    "Search patients...":"البحث عن مريض...","Search documents...":"البحث في المستندات...",
+    "Save":"حفظ","Save Draft":"حفظ كمسودة","Cancel":"إلغاء","Delete":"حذف","Edit":"تعديل","View":"عرض",
+    "Close":"إغلاق","Print":"طباعة","Create Invoice":"إنشاء فاتورة","Check In":"تسجيل الحضور",
+    "Start Session":"بدء الجلسة","Open Session":"فتح الجلسة","Complete Session":"إكمال الجلسة",
+    "Next Visit":"الزيارة التالية","Create Next Visit":"إنشاء الزيارة التالية",
+    "Assessment":"التقييم","Initial Assessment":"التقييم الأولي","Physiotherapy Session":"جلسة علاج طبيعي",
+    "Rehabilitation Session":"جلسة تأهيل","Follow-up":"متابعة","Consultation":"استشارة",
+    "Clinical Session":"الجلسة السريرية","Session Note":"ملاحظة الجلسة","Patient History":"سجل المريض",
+    "Subjective":"التقييم الذاتي","Objective":"التقييم الموضوعي","Session Response":"استجابة الجلسة",
+    "Next Session":"الجلسة القادمة","Pain Score":"درجة الألم","Session Progress":"تقدم الجلسة",
+    "Treatment Area":"منطقة العلاج","Interventions":"التدخلات العلاجية","Home Advice":"إرشادات منزلية",
+    "Treatment Goals":"الأهداف العلاجية","Goal Review":"مراجعة الأهداف","Goal":"الهدف",
+    "Achieved":"متحقق","Partially Achieved":"متحقق جزئيًا","Not Achieved":"غير متحقق","Not Assessed":"لم يتم تقييمه",
+    "Active":"نشط","Inactive":"غير نشط","Closed":"مغلق","Draft":"مسودة",
+    "Home Exercise Program":"برنامج التمارين المنزلية","Home Exercise":"التمارين المنزلية",
+    "Exercise Library":"مكتبة التمارين","Sets":"المجموعات","Reps":"التكرارات","Hold":"الثبات",
+    "Frequency":"التكرار","Instructions":"التعليمات","General Home Advice":"إرشادات منزلية عامة",
+    "Use Previous Program":"استخدام البرنامج السابق","Save Program":"حفظ البرنامج",
+    "Patient Document Center":"مركز مستندات المريض","Clinical, medical and insurance documents":"المستندات السريرية والطبية والتأمينية",
+    "All Categories":"جميع التصنيفات","Add Document":"إضافة مستند","Add First Document":"إضافة أول مستند",
+    "Document Title":"عنوان المستند","Category":"التصنيف","Document Date":"تاريخ المستند",
+    "Expiry Date":"تاريخ الانتهاء","Reference / Approval No.":"رقم المرجع / الموافقة","Attach File":"إرفاق ملف",
+    "Referral":"إحالة","Medical Report":"تقرير طبي","Prescription":"وصفة طبية",
+    "Insurance Approval":"موافقة تأمين","Imaging":"أشعة / تصوير","Lab Result":"نتيجة مختبر",
+    "Consent":"موافقة","ID / Insurance Card":"الهوية / بطاقة التأمين","Other":"أخرى",
+    "Total Documents":"إجمالي المستندات","Insurance Approvals":"موافقات التأمين","Expiry Alerts":"تنبيهات الانتهاء",
+    "Expired":"منتهي","Expiring Soon":"قارب على الانتهاء",
+    "Discharge & Final Assessment":"إنهاء العلاج والتقييم النهائي","Final Clinical Assessment":"التقييم السريري النهائي",
+    "Documented Sessions":"الجلسات الموثقة","Initial Pain":"الألم الأولي","Final Pain":"الألم النهائي",
+    "Final Progress":"التقدم النهائي","Outcome Comparison":"مقارنة النتائج","Initial vs Final Assessment":"مقارنة التقييم الأولي والنهائي",
+    "Initial Session":"الجلسة الأولى","Final / Latest Session":"الجلسة النهائية / الأخيرة",
+    "Treatment Course":"مسار العلاج","Discharge Assessment":"تقييم إنهاء العلاج","Discharge Date":"تاريخ إنهاء العلاج",
+    "Discharge Reason":"سبب إنهاء العلاج","Overall Outcome":"النتيجة العامة","Follow-up Required":"الحاجة للمتابعة",
+    "Final Functional Assessment":"التقييم الوظيفي النهائي","Clinical Outcome Summary":"ملخص النتيجة السريرية",
+    "Recommendations & Home Program":"التوصيات والبرنامج المنزلي","Discharge Recommendations":"توصيات إنهاء العلاج",
+    "Home Exercise / Self-management Plan":"خطة التمارين المنزلية / الإدارة الذاتية",
+    "Review / Follow-up Date":"تاريخ المراجعة / المتابعة","Complete Discharge":"إكمال إنهاء العلاج",
+    "Treatment Goals Achieved":"تحققت الأهداف العلاجية","Maximum Benefit Reached":"تم الوصول لأقصى استفادة",
+    "Patient Request":"بناءً على طلب المريض","Return to Medical Practitioner":"العودة للطبيب المعالج",
+    "Transferred / Referred":"تحويل / إحالة","Non-attendance":"عدم الحضور",
+    "Insurance / Authorization Ended":"انتهاء التأمين / الموافقة",
+    "Excellent Improvement":"تحسن ممتاز","Good Improvement":"تحسن جيد","Moderate Improvement":"تحسن متوسط",
+    "Minimal Improvement":"تحسن بسيط","No Significant Change":"لا يوجد تغير ملحوظ","Deterioration":"تراجع",
+    "Yes":"نعم","No":"لا","PRN":"عند الحاجة",
+    "APPOINTMENTS":"المواعيد","WAITING":"في الانتظار","IN SESSION":"قيد الجلسة","COMPLETED":"مكتملة","NO SHOW":"لم يحضر",
+    "Scheduled today":"مواعيد اليوم","Checked in":"تم تسجيل حضورهم","With therapist":"مع المعالج",
+    "Finished visits":"زيارات مكتملة","Missed visits":"زيارات لم يحضر أصحابها","Upcoming":"القادمة",
+    "Patient Flow":"حركة المرضى","No patients":"لا يوجد مرضى","Exceptions":"الاستثناءات",
+    "No Show / Cancelled":"لم يحضر / ملغى","Balance":"الرصيد","Reminder Sent":"تم إرسال التذكير",
+    "Not Sent":"لم يرسل","Patient Replied":"رد المريض","Reschedule Requested":"طلب تغيير الموعد","No Response":"لا يوجد رد",
+    "Reminder Center":"مركز التذكيرات","Copy Message":"نسخ الرسالة","Mark Reminder Sent":"تحديد التذكير كمرسل",
+    "English":"الإنجليزية","Arabic":"العربية","Language":"اللغة",
+    "Invoice":"فاتورة","Invoices":"الفواتير","Paid":"مدفوع","Partial":"جزئي","Unpaid":"غير مدفوع",
+    "Amount":"المبلغ","Collected":"المحصل","Outstanding":"المستحق","Revenue":"الإيرادات","Net":"الصافي",
+    "Cash":"نقدًا","Bank Transfer":"تحويل بنكي","BenefitPay":"بنفت بي","Cheque":"شيك",
+    "Total":"الإجمالي","Search":"بحث","Filter":"تصفية","Actions":"الإجراءات",
+    "Name":"الاسم","Phone":"الهاتف","ID":"الرقم","Add":"إضافة","Update":"تحديث",
+    "Back":"رجوع","Previous":"السابق","Next":"التالي","Print Summary":"طباعة الملخص",
+    "Open Assessment":"فتح التقييم","Create Discharge":"إنشاء إنهاء العلاج",
+    "Financial Summary":"الملخص المالي","Invoiced":"المفوتر","Patient Share":"حصة المريض",
+    "Clinical Updates":"التحديثات السريرية","Goal Tracking":"متابعة الأهداف",
+    "Pain":"الألم","Review Due":"موعد المراجعة","Treatment Package":"الباقة العلاجية",
+    "Treatment Packages":"الباقات العلاجية","Planned Sessions":"الجلسات المخططة",
+    "Remaining":"المتبقي","Available":"متاح","Conflict":"تعارض","Priority":"الأولوية",
+    "Normal":"عادية","High":"عالية","Urgent":"عاجلة","Booked":"تم الحجز"
+  };
+
+  const EN = {};
+  Object.keys(AR).forEach(k=>EN[AR[k]]=k);
+
+  function isArabic(){
+    try{
+      if(typeof lang!=='undefined') return String(lang).toLowerCase()==='ar';
+    }catch(e){}
+    return document.documentElement.lang==='ar' || document.documentElement.dir==='rtl' ||
+      localStorage.getItem('myaims-lang')==='ar';
+  }
+
+  function translateExact(text,toAr){
+    const t=String(text||'').trim();
+    if(!t)return text;
+    if(toAr && AR[t]) return String(text).replace(t,AR[t]);
+    if(!toAr && EN[t]) return String(text).replace(t,EN[t]);
+    return text;
+  }
+
+  function translateTextNode(node,toAr){
+    if(!node.nodeValue || !node.nodeValue.trim())return;
+    const raw=node.nodeValue, trimmed=raw.trim();
+    if(toAr && AR[trimmed]) node.nodeValue=raw.replace(trimmed,AR[trimmed]);
+    else if(!toAr && EN[trimmed]) node.nodeValue=raw.replace(trimmed,EN[trimmed]);
+  }
+
+  function localize(root=document.body){
+    if(!root)return;
+    const toAr=isArabic();
+    document.documentElement.dir=toAr?'rtl':'ltr';
+    document.documentElement.lang=toAr?'ar':'en';
+    document.body.classList.toggle('myaims-ar',toAr);
+
+    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{
+      acceptNode(n){
+        const p=n.parentElement;
+        if(!p || ['SCRIPT','STYLE','TEXTAREA'].includes(p.tagName))return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    nodes.forEach(n=>translateTextNode(n,toAr));
+
+    root.querySelectorAll?.('input[placeholder],textarea[placeholder]').forEach(el=>{
+      const v=el.getAttribute('placeholder');el.setAttribute('placeholder',translateExact(v,toAr));
+    });
+    root.querySelectorAll?.('input[type="button"],input[type="submit"]').forEach(el=>{
+      el.value=translateExact(el.value,toAr);
+    });
+    root.querySelectorAll?.('option').forEach(el=>{
+      const shown=el.textContent.trim();
+      if(toAr && AR[shown])el.textContent=AR[shown];
+      else if(!toAr && EN[shown])el.textContent=EN[shown];
+      // preserve option value: application logic continues using English values
+    });
+    root.querySelectorAll?.('[title]').forEach(el=>{
+      el.title=translateExact(el.title,toAr);
+    });
+  }
+
+  // Expose helper for future modules.
+  window.myaimsT=function(en){return isArabic()?(AR[en]||en):en};
+  window.applyMyaimsLocalization=()=>localize(document.body);
+
+  function detectLanguageClicks(){
+    document.addEventListener('click',function(e){
+      const el=e.target.closest('button,[role="button"],select,a');
+      if(!el)return;
+      const tx=(el.textContent||'').trim().toLowerCase();
+      if(tx.includes('العربية')||tx==='ar'||tx.includes('arabic')){
+        localStorage.setItem('myaims-lang','ar');
+        setTimeout(()=>localize(document.body),50);
+      } else if(tx.includes('english')||tx==='en'||tx.includes('الإنجليزية')){
+        localStorage.setItem('myaims-lang','en');
+        setTimeout(()=>localize(document.body),50);
+      }
+    },true);
+
+    document.addEventListener('change',function(e){
+      const el=e.target;
+      if(!(el instanceof HTMLSelectElement))return;
+      const v=String(el.value||'').toLowerCase();
+      if(v==='ar'||v==='arabic'){
+        localStorage.setItem('myaims-lang','ar');setTimeout(()=>localize(document.body),30);
+      }else if(v==='en'||v==='english'){
+        localStorage.setItem('myaims-lang','en');setTimeout(()=>localize(document.body),30);
+      }
+    },true);
+  }
+
+  function wrapLangToggle(){
+    try{
+      if(typeof window.toggleLang==='function'&&!window.toggleLang.__v40){
+        const old=window.toggleLang;
+        const fn=function(){
+          const r=old.apply(this,arguments);
+          setTimeout(()=>{
+            const ar=isArabic();
+            localStorage.setItem('myaims-lang',ar?'ar':'en');
+            localize(document.body);
+          },30);
+          return r;
+        };
+        fn.__v40=true;window.toggleLang=fn;
+      }
+    }catch(e){}
+  }
+
+  function css(){
+    if(document.getElementById('v40-css'))return;
+    const s=document.createElement('style');s.id='v40-css';s.textContent=`
+      body.myaims-ar{direction:rtl;text-align:right;font-family:"Noto Naskh Arabic","Segoe UI",Tahoma,Arial,sans-serif!important}
+      body.myaims-ar .sidebar,body.myaims-ar nav,body.myaims-ar .page,body.myaims-ar input,body.myaims-ar select,body.myaims-ar textarea,body.myaims-ar button{font-family:"Noto Naskh Arabic","Segoe UI",Tahoma,Arial,sans-serif!important}
+      body.myaims-ar input,body.myaims-ar textarea{direction:rtl;text-align:right}
+      body.myaims-ar input[type="number"],body.myaims-ar input[type="date"],body.myaims-ar input[type="time"]{direction:ltr;text-align:right}
+      body.myaims-ar table{direction:rtl}
+      body.myaims-ar th,body.myaims-ar td{text-align:right}
+      body.myaims-ar .v39-header>div:first-child,
+      body.myaims-ar .v39-date-nav,
+      body.myaims-ar .v39-actions,
+      body.myaims-ar .v38-dialog>footer>div:last-child,
+      body.myaims-ar .v37-actions{flex-direction:row-reverse}
+      body.myaims-ar .v39-back{transform:scaleX(-1)}
+      body.myaims-ar .v38-arrow{transform:scaleX(-1)}
+      body.myaims-ar .v37-doc-main em{margin-left:0;margin-right:7px}
+      body.myaims-ar .v39-entry{text-align:right}
+      body.myaims-ar .v31-tabs,body.myaims-ar .v24-tabs{direction:rtl}
+      body.myaims-ar small{letter-spacing:0!important}
+      body.myaims-ar .v39-card-top{grid-template-columns:38px 1fr auto}
+      body.myaims-ar .v39-card-top em{text-align:center}
+    `;document.head.appendChild(s);
+  }
+
+  function init(){
+    css();wrapLangToggle();detectLanguageClicks();
+
+    // Respect existing app language first, otherwise last explicit V40 choice.
+    try{
+      if(typeof lang!=='undefined'){
+        localStorage.setItem('myaims-lang',String(lang).toLowerCase()==='ar'?'ar':'en');
+      }
+    }catch(e){}
+
+    localize(document.body);
+    let timer;
+    const observer=new MutationObserver(muts=>{
+      clearTimeout(timer);
+      timer=setTimeout(()=>{
+        wrapLangToggle();
+        muts.forEach(m=>m.addedNodes.forEach(n=>{
+          if(n.nodeType===1)localize(n);
+        }));
+        // Important for dynamically rebuilt screens.
+        localize(document.body);
+      },45);
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
