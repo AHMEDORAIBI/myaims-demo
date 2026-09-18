@@ -11861,9 +11861,9 @@ body.myaims-ar #v57-comments{direction:rtl;text-align:right}@media(max-width:100
 (function(){
 const THREE_VER="0.180.0";
 const MODEL_URL="./assets/anatomy.glb";
-const THREE_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/build/three.module.js`;
-const LOADER_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/examples/jsm/loaders/GLTFLoader.js`;
-const ORBIT_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/examples/jsm/controls/OrbitControls.js`;
+const THREE_URL=`https://esm.sh/three@${THREE_VER}`;
+const LOADER_URL=`https://esm.sh/three@${THREE_VER}/examples/jsm/loaders/GLTFLoader.js`;
+const ORBIT_URL=`https://esm.sh/three@${THREE_VER}/examples/jsm/controls/OrbitControls.js`;
 const AR=()=>document.documentElement.dir==="rtl"||document.documentElement.lang==="ar"||document.body.classList.contains("myaims-ar");
 const T=(e,a)=>AR()?a:e;
 const DB=()=>window.state||window.appState||{};
@@ -12045,3 +12045,6 @@ body.v61-lock{overflow:hidden!important}#v61-real3d{display:none;position:fixed;
 body.myaims-ar #v61-real3d{direction:rtl;text-align:right}@media(max-width:1000px){#v61-real3d main{grid-template-columns:165px 1fr 250px}}@media(max-width:720px){#v61-real3d main{overflow:auto;grid-template-columns:1fr}.v61-stagewrap{min-height:600px}.v61-patient,.v61-help{display:none}.v61-right,.v61-left{overflow:visible}.v61-steps{display:none}}
 `;document.head.appendChild(css);
 })();
+
+/* myAIMS build marker */
+window.MYAIMS_BUILD="V63 3D LOADER FIX";
