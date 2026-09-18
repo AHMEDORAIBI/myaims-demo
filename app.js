@@ -12292,3 +12292,120 @@ st.textContent=`
 document.head.appendChild(st);
 window.MYAIMS_BUILD="V65 PREMIUM 3D CLINICAL VIEWER";
 })();
+
+/* =========================================================
+   myAIMS V66 — ULTRA 3D ANATOMY
+   Premium muscle materials, studio lighting, selection glow,
+   bilingual structure naming, focus/isolate polish.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>window.app || (typeof app!=="undefined"?app:null);
+const arabicMap={
+ "sternocleidomastoid":"العضلة القصية الترقوية الخشائية","trapezius":"العضلة شبه المنحرفة",
+ "deltoid":"العضلة الدالية","pectoralis major":"العضلة الصدرية الكبرى","pectoralis minor":"العضلة الصدرية الصغرى",
+ "biceps brachii":"العضلة ذات الرأسين العضدية","triceps brachii":"العضلة ثلاثية الرؤوس العضدية",
+ "brachialis":"العضلة العضدية","latissimus dorsi":"العضلة الظهرية العريضة",
+ "rectus abdominis":"العضلة المستقيمة البطنية","external oblique":"العضلة المائلة الخارجية",
+ "gluteus maximus":"العضلة الألوية الكبرى","gluteus medius":"العضلة الألوية الوسطى",
+ "rectus femoris":"العضلة المستقيمة الفخذية","vastus lateralis":"العضلة المتسعة الوحشية",
+ "vastus medialis":"العضلة المتسعة الإنسية","biceps femoris":"العضلة ذات الرأسين الفخذية",
+ "semitendinosus":"العضلة نصف الوترية","semimembranosus":"العضلة نصف الغشائية",
+ "gastrocnemius":"العضلة التوأمية الساقية","soleus":"العضلة النعلية","tibialis anterior":"العضلة الظنبوبية الأمامية",
+ "achilles tendon":"وتر أخيل","erector spinae":"العضلات الناصبة للفقار","rhomboid major":"العضلة المعينية الكبرى",
+ "supraspinatus":"العضلة فوق الشوكة","infraspinatus":"العضلة تحت الشوكة","teres major":"العضلة المدورة الكبرى"
+};
+function clean(n){return String(n||"Anatomical Structure").replace(/[_-]+/g," ").replace(/\.\d+$/,"").replace(/\s+/g," ").trim()}
+function arName(n){let x=clean(n).toLowerCase();for(const [k,v] of Object.entries(arabicMap))if(x.includes(k))return v;return "بنية عضلية تشريحية"}
+function enhance(){
+ const a=A(),r=R(); if(!a?.THREE||!a.meshes?.length||!r)return;
+ if(a.__v66)return;a.__v66=true;
+ const THREE=a.THREE;
+ // Premium physically-inspired material pass, retaining each independent selectable mesh.
+ a.meshes.forEach(m=>{
+   const n=clean(m.name).toLowerCase(), tendon=/tendon|ligament|retinaculum|aponeuros|fascia/.test(n);
+   const mat=new THREE.MeshPhysicalMaterial({
+     color:new THREE.Color(tendon?0xd9c8aa:0x9e3f32),
+     roughness:tendon?.52:.42, metalness:0,
+     clearcoat:tendon?.08:.18, clearcoatRoughness:.55,
+     sheen:tendon?0:.18, sheenRoughness:.65, sheenColor:new THREE.Color(0xffb49d),
+     side:THREE.DoubleSide
+   });
+   m.material=mat;
+   if(a.original)a.original.set(m.uuid,{material:mat});
+   m.userData.v66Base=mat.clone();
+  });
+ // Studio rim lights for more anatomical depth.
+ const warm=new THREE.DirectionalLight(0xffc7ad,1.45);warm.position.set(-18,18,-22);a.scene.add(warm);
+ const cool=new THREE.DirectionalLight(0xcceeff,1.15);cool.position.set(22,8,-12);a.scene.add(cool);
+ const top=new THREE.DirectionalLight(0xffffff,1.4);top.position.set(0,35,5);a.scene.add(top);
+ a.renderer.toneMappingExposure=1.22;
+ if("shadowMap" in a.renderer){a.renderer.shadowMap.enabled=false}
+ const badge=document.createElement("div");badge.className="v66-studio-badge";
+ badge.innerHTML="<b>ULTRA 3D</b><span>Clinical Anatomy Rendering</span>";r.querySelector(".v61-stagewrap")?.appendChild(badge);
+}
+function selectedV(){
+ try{return [...selected.values()].at(-1)||null}catch(e){return null}
+}
+function polishSelection(){
+ const a=A(),r=R(),v=selectedV();if(!a||!r||!v?.object)return;
+ // Make selected muscle vivid while preserving V65 isolate/fade behavior.
+ const m=v.object,base=m.userData.v66Base;
+ if(base){
+  const mat=base.clone(), col=v.mode==="treatment"?0x188be8:v.mode==="both"?0x8c4bd5:0xf13f4c;
+  mat.color.set(col);mat.emissive=new a.THREE.Color(col);mat.emissiveIntensity=.22;mat.clearcoat=.38;mat.roughness=.32;m.material=mat;
+ }
+ const card=r.querySelector(".v65-muscle-card");if(card){
+   const en=clean(v.name||m.name), ar=arName(en);
+   let title=card.querySelector("h2");
+   if(title)title.innerHTML=`${en}<small class="v66-arname">${ar}</small>`;
+   let preview=card.querySelector(".v65-preview div:nth-child(2)");
+   if(preview)preview.innerHTML=`<b>${en}</b><strong>${ar}</strong><small>Muscular System · الجهاز العضلي</small>`;
+ }
+ showFloatingLabel(m,v);
+}
+function showFloatingLabel(m,v){
+ const a=A(),r=R();if(!a||!r)return;
+ let el=r.querySelector(".v66-floating-label");
+ if(!el){el=document.createElement("div");el.className="v66-floating-label";r.querySelector(".v61-stagewrap")?.appendChild(el)}
+ const en=clean(v.name||m.name);
+ el.innerHTML=`<i></i><div><b>${en}</b><span>${arName(en)}</span></div>`;
+ el.classList.add("show");
+}
+function addViewPanel(){
+ const r=R();if(!r||r.querySelector(".v66-viewdock"))return;
+ const d=document.createElement("div");d.className="v66-viewdock";
+ d.innerHTML=`<button data-v66v="front" class="on"><span>F</span><b>Front</b></button><button data-v66v="back"><span>B</span><b>Back</b></button><button data-v66v="left"><span>L</span><b>Left</b></button><button data-v66v="right"><span>R</span><b>Right</b></button>`;
+ r.querySelector(".v61-stagewrap")?.appendChild(d);
+ d.querySelectorAll("button").forEach(b=>b.onclick=()=>{try{fit(b.dataset.v66v)}catch(e){}d.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b))});
+}
+function boot(){
+ const r=R();if(!r?.classList.contains("open"))return;
+ const timer=setInterval(()=>{
+   if(A()?.meshes?.length){clearInterval(timer);enhance();addViewPanel()}
+ },120);
+ setTimeout(()=>clearInterval(timer),15000);
+}
+document.addEventListener("click",e=>{
+ if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,120);
+},false);
+document.addEventListener("pointerup",e=>{
+ if(e.target.closest("#v61-canvas"))setTimeout(polishSelection,50);
+},false);
+document.addEventListener("input",e=>{
+ if(e.target.matches("#v61-real3d [data-range]"))setTimeout(polishSelection,20);
+},false);
+
+const st=document.createElement("style");st.textContent=`
+#v61-real3d .v61-stagewrap{background:radial-gradient(ellipse at 50% 38%,#ffffff 0%,#f5f9fa 40%,#e8f0f2 100%)!important}
+#v61-real3d #v61-canvas:before{content:"";position:absolute;left:18%;right:18%;bottom:7%;height:6%;border-radius:50%;background:radial-gradient(ellipse,rgba(27,57,63,.18),rgba(27,57,63,0) 68%);filter:blur(9px);pointer-events:none;z-index:1}
+.v66-studio-badge{position:absolute;right:13px;top:116px;z-index:7;padding:7px 9px;border-radius:8px;background:rgba(18,63,74,.88);color:#fff;backdrop-filter:blur(8px);box-shadow:0 6px 18px rgba(13,54,64,.14)}.v66-studio-badge b,.v66-studio-badge span{display:block}.v66-studio-badge b{font-size:6px;letter-spacing:.08em}.v66-studio-badge span{font-size:4.8px;opacity:.7;margin-top:1px}
+.v66-viewdock{position:absolute;right:12px;top:170px;z-index:8;display:grid;gap:5px}.v66-viewdock button{width:46px!important;height:48px!important;padding:3px!important;border:1px solid #d8e5e7!important;background:rgba(255,255,255,.94)!important;border-radius:9px!important;box-shadow:0 4px 14px rgba(21,63,71,.07)}.v66-viewdock button span,.v66-viewdock button b{display:block}.v66-viewdock button span{font-size:9px;color:#276573}.v66-viewdock button b{font-size:5px;margin-top:2px;color:#6d858a}.v66-viewdock button.on{border-color:#0b6b81!important;box-shadow:0 0 0 1px #0b6b81 inset,0 5px 16px rgba(11,107,129,.1)}
+.v66-arname{display:block!important;font-size:8px!important;color:#4f737a!important;font-weight:700!important;margin-top:3px!important;direction:rtl}.v65-preview strong{display:block;font-size:6.5px;color:#315f68;direction:rtl;margin-top:2px}
+.v66-floating-label{position:absolute;left:50%;top:17%;z-index:9;transform:translateX(-50%) translateY(-6px);display:none;align-items:center;gap:6px;background:rgba(255,255,255,.94);border:1px solid #d5e3e5;border-radius:8px;padding:6px 9px;box-shadow:0 7px 24px rgba(19,61,69,.11);pointer-events:none;backdrop-filter:blur(8px)}.v66-floating-label.show{display:flex}.v66-floating-label>i{width:7px;height:7px;border-radius:50%;background:#ef4650;box-shadow:0 0 0 4px rgba(239,70,80,.12)}.v66-floating-label b,.v66-floating-label span{display:block}.v66-floating-label b{font-size:6.5px;color:#153f49}.v66-floating-label span{font-size:5.5px;color:#6f888d;direction:rtl;margin-top:1px}
+#v61-real3d .v65-muscle-card{border-color:#d5e3e5!important;box-shadow:0 8px 25px rgba(21,64,72,.06)!important}
+#v61-real3d .v65-muscle-symbol{background:radial-gradient(circle at 35% 25%,#d77a68,#a64538 50%,#713028)!important;box-shadow:inset -5px -5px 10px rgba(73,22,18,.18),inset 3px 3px 8px rgba(255,205,190,.25)}
+@media(max-width:900px){.v66-viewdock,.v66-studio-badge{display:none}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V66 ULTRA 3D ANATOMY";
+})();
