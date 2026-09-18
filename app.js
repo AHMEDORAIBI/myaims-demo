@@ -11717,3 +11717,225 @@ render();
   function init(){css();setTimeout(build,180);const mo=new MutationObserver(()=>{clearTimeout(window.__v44);window.__v44=setTimeout(build,90)});mo.observe(document.body,{childList:true,subtree:true})}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V45 - PAIN MAP WORKSPACE
+   FIX:
+   - Pain mapping is no longer buried down the Clinical Session page.
+   - Adds a permanent top-level "Pain Map" tab beside Session Note.
+   - Opens the anatomical experience as a dedicated full-screen workspace.
+   - Uses #v26-body-map as the reliable integration anchor.
+   - Removes the old long body-map section from the scrolling document flow.
+   ========================================================= */
+(function(){
+  const ar=()=>document.documentElement.dir==='rtl'||document.body.classList.contains('myaims-ar');
+  const T=(e,a)=>ar()?a:e;
+
+  function clinical(){return document.querySelector('#v24-clinical-modal .v34-clinical-workspace')||document.querySelector('#v24-clinical-modal')}
+  function ensureV44(){
+    const r=clinical(); if(!r)return;
+    const legacy=r.querySelector('#v26-body-map');
+    if(!legacy)return;
+
+    /* V44 originally searched for V42/V43. On the user's real screen those
+       wrappers may never have been created. Make the real V26 map the explicit
+       V44 source, then allow V44's existing builder to create the new UI. */
+    if(!r.querySelector('.v44-experience') && !legacy.classList.contains('v43-body-canvas')){
+      legacy.classList.add('v43-body-canvas');
+      legacy.style.display='';
+      // Trigger DOM mutation so the V44 observer runs.
+      legacy.setAttribute('data-v45-v44-anchor','1');
+    }
+  }
+
+  function install(){
+    const r=clinical(); if(!r)return;
+    ensureV44();
+
+    const tabs=r.querySelector('.v24-tabs');
+    if(tabs && !tabs.querySelector('[data-v45-pain-tab]')){
+      const b=document.createElement('button');
+      b.type='button'; b.dataset.v45PainTab='1'; b.className='v45-pain-tab';
+      b.innerHTML=`<span>◎</span> ${T('Pain Map','خريطة الألم')}`;
+      b.onclick=openV45PainWorkspace;
+      tabs.prepend(b);
+    }
+
+    // Also place a highly visible shortcut in the clinical workflow bar.
+    const flow=r.querySelector('.v35-flow-steps');
+    if(flow && !flow.querySelector('[data-v45-flow-pain]')){
+      const b=document.createElement('button');
+      b.type='button'; b.dataset.v45FlowPain='1'; b.className='v45-flow-pain';
+      b.innerHTML=`<span>◎</span><b>${T('Pain Map','خريطة الألم')}</b><small>${T('Open','فتح')}</small>`;
+      b.onclick=openV45PainWorkspace;
+      flow.prepend(b);
+    }
+
+    const legacy=r.querySelector('#v26-body-map');
+    const v44=r.querySelector('.v44-experience');
+
+    // The original section must never consume vertical space in Session Note.
+    if(legacy) legacy.classList.add('v45-legacy-hidden');
+
+    // Once V44 exists, keep it out of the normal scrolling document flow.
+    if(v44 && !v44.closest('#v45-pain-workspace')){
+      v44.classList.add('v45-detached');
+      v44.style.display='none';
+    }
+
+    // Hide the old first Pain/Treatment title + quick chips because Pain Map is now a tab.
+    const session=r.querySelector('#v24-tab-session');
+    if(session){
+      const titles=[...session.querySelectorAll('.v24-section-title')];
+      const first=titles.find(x=>/Pain|Treatment Areas|الألم|العلاج/i.test(x.textContent||''));
+      if(first){
+        first.classList.add('v45-old-pain-title');
+        // Hide quick area chips immediately following the title until metrics.
+        let n=first.nextElementSibling;
+        while(n && !n.classList.contains('v24-metrics')){
+          if(n.id!=='v26-body-map') n.classList.add('v45-old-pain-content');
+          n=n.nextElementSibling;
+        }
+      }
+    }
+  }
+
+  window.openV45PainWorkspace=function(){
+    const r=clinical(); if(!r)return;
+    ensureV44();
+
+    // Give V44 observer a moment if it has not built yet.
+    setTimeout(()=>{
+      install();
+      let overlay=document.getElementById('v45-pain-workspace');
+      if(!overlay){
+        overlay=document.createElement('div');
+        overlay.id='v45-pain-workspace';
+        overlay.innerHTML=`
+          <div class="v45-pain-shell">
+            <header class="v45-pain-head">
+              <div>
+                <small>${T('CLINICAL SESSION · VISUAL MAPPING','الجلسة السريرية · التحديد المرئي')}</small>
+                <h2>${T('Pain Map','خريطة الألم')}</h2>
+                <p>${T('Record pain areas without leaving the clinical session.','سجل مناطق الألم دون مغادرة الجلسة السريرية.')}</p>
+              </div>
+              <div class="v45-head-actions">
+                <button type="button" onclick="clearV26BodyMap?.()">${T('Clear','مسح')}</button>
+                <button type="button" class="done" onclick="closeV45PainWorkspace()">${T('Done · Return to Session','تم · العودة للجلسة')}</button>
+              </div>
+            </header>
+            <main class="v45-pain-stage"></main>
+          </div>`;
+        document.body.appendChild(overlay);
+      }
+
+      const stage=overlay.querySelector('.v45-pain-stage');
+      let visual=r.querySelector('.v44-experience');
+
+      if(visual){
+        visual.style.display='';
+        visual.classList.remove('v45-detached');
+        stage.replaceChildren(visual);
+      }else{
+        // Fallback is still a dedicated no-scroll workspace using the proven V26 map.
+        const legacy=r.querySelector('#v26-body-map');
+        if(legacy){
+          legacy.classList.remove('v45-legacy-hidden');
+          legacy.style.display='';
+          stage.replaceChildren(legacy);
+        }
+      }
+      overlay.classList.add('open');
+      document.body.classList.add('v45-pain-open');
+    },120);
+  };
+
+  window.closeV45PainWorkspace=function(){
+    const overlay=document.getElementById('v45-pain-workspace');
+    const r=clinical();
+    if(overlay){
+      const visual=overlay.querySelector('.v44-experience');
+      const legacy=overlay.querySelector('#v26-body-map');
+      if(visual && r){
+        visual.style.display='none';
+        visual.classList.add('v45-detached');
+        r.appendChild(visual);
+      }
+      if(legacy && r){
+        legacy.style.display='none';
+        legacy.classList.add('v45-legacy-hidden');
+        r.querySelector('#v24-tab-session')?.appendChild(legacy);
+      }
+      overlay.classList.remove('open');
+    }
+    document.body.classList.remove('v45-pain-open');
+  };
+
+  function css(){
+    if(document.getElementById('v45-css'))return;
+    const s=document.createElement('style');s.id='v45-css';s.textContent=`
+      /* Remove old buried pain block from Session Note */
+      #v24-clinical-modal .v45-legacy-hidden,
+      #v24-clinical-modal .v45-old-pain-title,
+      #v24-clinical-modal .v45-old-pain-content,
+      #v24-clinical-modal .v44-experience.v45-detached{display:none!important}
+
+      /* Pain Map is now a first-class clinical tab */
+      #v24-clinical-modal .v24-tabs .v45-pain-tab{
+        background:linear-gradient(135deg,#c9963d,#b7802d)!important;color:#fff!important;
+        border-color:#b7802d!important;font-weight:900!important;box-shadow:0 5px 14px rgba(183,128,45,.16)
+      }
+      #v24-clinical-modal .v24-tabs .v45-pain-tab span{font-size:16px;margin-inline-end:5px}
+      #v24-clinical-modal .v35-flow-steps .v45-flow-pain{
+        background:#174f5b!important;color:#fff!important;border-color:#174f5b!important;
+        display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important
+      }
+      #v24-clinical-modal .v35-flow-steps .v45-flow-pain small{color:#d7e8ea!important}
+
+      /* Full-screen clinical workspace */
+      #v45-pain-workspace{display:none;position:fixed;inset:0;z-index:250000;background:rgba(13,39,44,.78);backdrop-filter:blur(7px);padding:18px}
+      #v45-pain-workspace.open{display:block}
+      body.v45-pain-open{overflow:hidden!important}
+      .v45-pain-shell{height:calc(100vh - 36px);max-width:1500px;margin:auto;background:#edf4f4;border-radius:20px;overflow:hidden;display:grid;grid-template-rows:auto 1fr;box-shadow:0 35px 100px rgba(0,0,0,.32)}
+      .v45-pain-head{display:flex;justify-content:space-between;align-items:center;gap:16px;background:#174f5b;color:#fff;padding:14px 18px}
+      .v45-pain-head small{font-size:10px!important;color:#e4bf73!important;font-weight:900;letter-spacing:.6px}
+      .v45-pain-head h2{font-size:25px!important;margin:2px 0!important;color:#fff!important}
+      .v45-pain-head p{font-size:12px!important;margin:0;color:#d8e6e8}
+      .v45-head-actions{display:flex;gap:7px}
+      .v45-head-actions button{height:39px!important;border:1px solid rgba(255,255,255,.22)!important;background:rgba(255,255,255,.09)!important;color:#fff!important;border-radius:9px!important;padding:0 13px!important;font-size:12px!important;font-weight:800!important}
+      .v45-head-actions .done{background:#c9963d!important;border-color:#c9963d!important}
+      .v45-pain-stage{min-height:0;overflow:hidden;padding:10px;display:grid}
+      .v45-pain-stage>.v44-experience{display:grid!important;height:100%!important;margin:0!important;grid-template-rows:auto 1fr auto;min-height:0}
+      .v45-pain-stage>.v44-experience .v44-main{min-height:0!important;height:100%!important;overflow:hidden!important}
+      .v45-pain-stage>.v44-experience .v44-bodies{min-height:0!important}
+      .v45-pain-stage>.v44-experience .v44-body-unit{height:min(55vh,500px)!important}
+      .v45-pain-stage>.v44-experience .v44-body-unit>svg{height:min(52vh,465px)!important}
+      .v45-pain-stage>#v26-body-map{display:block!important;height:100%!important;margin:0!important;overflow:hidden!important;background:#fff;border-radius:15px;padding:12px}
+      .v45-pain-stage>#v26-body-map .v26-map-layout{height:calc(100% - 60px)!important}
+      .v45-pain-stage>#v26-body-map .v26-figure,.v45-pain-stage>#v26-body-map .v26-selection-panel{height:100%!important;min-height:0!important}
+      .v45-pain-stage>#v26-body-map .v26-body-svg{height:100%!important;max-height:58vh!important}
+      .v45-pain-stage>#v26-body-map .v26-selected-list{max-height:48vh!important}
+      body.myaims-ar .v45-pain-shell{direction:rtl;text-align:right}
+      body.myaims-ar .v45-pain-head{direction:rtl}
+      @media(max-width:850px){
+        #v45-pain-workspace{padding:0}.v45-pain-shell{height:100vh;border-radius:0}
+        .v45-pain-head{align-items:flex-start;flex-direction:column}.v45-head-actions{width:100%}.v45-head-actions .done{flex:1}
+        .v45-pain-stage{overflow:auto}.v45-pain-stage>.v44-experience{height:auto!important}
+      }
+    `;document.head.appendChild(s);
+  }
+
+  function init(){
+    css();
+    let tries=0;
+    const timer=setInterval(()=>{
+      install();
+      tries++;
+      if(tries>30)clearInterval(timer);
+    },180);
+    const mo=new MutationObserver(()=>{clearTimeout(window.__v45);window.__v45=setTimeout(install,80)});
+    mo.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
