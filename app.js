@@ -12409,3 +12409,108 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V66 ULTRA 3D ANATOMY";
 })();
+
+/* =========================================================
+   myAIMS V67 — SMART MUSCLE INSPECTOR
+   Dedicated clinical inspector for the selected 3D structure.
+   Built on V66; does not replace the working V64 3D engine.
+   ========================================================= */
+(function(){
+const root=()=>document.getElementById("v61-real3d");
+const last=()=>{try{return [...selected.values()].at(-1)||null}catch(e){return null}};
+const clean=n=>String(n||"Anatomical Structure").replace(/[_-]+/g," ").replace(/\.\d+$/,"").replace(/\s+/g," ").trim();
+const AR={
+ sternocleidomastoid:"العضلة القصية الترقوية الخشائية",trapezius:"العضلة شبه المنحرفة",deltoid:"العضلة الدالية",
+ "pectoralis major":"العضلة الصدرية الكبرى","pectoralis minor":"العضلة الصدرية الصغرى",
+ "biceps brachii":"العضلة ذات الرأسين العضدية","triceps brachii":"العضلة ثلاثية الرؤوس العضدية",
+ brachialis:"العضلة العضدية","latissimus dorsi":"العضلة الظهرية العريضة","rectus abdominis":"العضلة المستقيمة البطنية",
+ "external oblique":"العضلة المائلة الخارجية","gluteus maximus":"العضلة الألوية الكبرى","gluteus medius":"العضلة الألوية الوسطى",
+ "rectus femoris":"العضلة المستقيمة الفخذية","vastus lateralis":"العضلة المتسعة الوحشية","vastus medialis":"العضلة المتسعة الإنسية",
+ "biceps femoris":"العضلة ذات الرأسين الفخذية",gastrocnemius:"العضلة التوأمية الساقية",soleus:"العضلة النعلية",
+ "tibialis anterior":"العضلة الظنبوبية الأمامية","erector spinae":"العضلات الناصبة للفقار",supraspinatus:"العضلة فوق الشوكة",
+ infraspinatus:"العضلة تحت الشوكة","teres major":"العضلة المدورة الكبرى"
+};
+function ar(n){let q=clean(n).toLowerCase();for(const [k,v] of Object.entries(AR))if(q.includes(k))return v;return "بنية عضلية تشريحية"}
+function ensure(){
+ const r=root(),right=r?.querySelector(".v61-right"); if(!right)return;
+ let p=r.querySelector("#v67-inspector");
+ if(!p){
+  p=document.createElement("section");p.id="v67-inspector";
+  right.insertBefore(p,right.firstChild);
+ }
+ render();
+}
+function render(){
+ const r=root(),p=r?.querySelector("#v67-inspector");if(!p)return;
+ const v=last();
+ if(!v){p.innerHTML=`<div class="v67-empty"><span>◎</span><b>Muscle Inspector</b><strong>عارض العضلة السريري</strong><small>اختر عضلة مباشرة من نموذج 3D</small></div>`;return}
+ const n=clean(v.name||v.object?.name), an=ar(n), pain=Number(v.pain||0), m=v.mode||"pain";
+ p.innerHTML=`
+ <header><div><small>SMART MUSCLE INSPECTOR</small><h2>${n}</h2><h3>${an}</h3></div><span class="v67-status ${m}">${m==="pain"?"PAIN":m==="treatment"?"TREATMENT":"BOTH"}</span></header>
+ <nav class="v67-tabs"><button class="on" data-tab="clinical">Clinical</button><button data-tab="anatomy">Anatomy</button><button data-tab="session">Session</button></nav>
+ <div class="v67-pane" data-pane="clinical">
+   <div class="v67-actions"><button data-act="focus">⌖<b>Focus</b></button><button data-act="isolate">◇<b>Isolate</b></button><button data-act="hide">◉<b>Hide Others</b></button><button data-act="fade">◐<b>Fade Others</b></button></div>
+   <div class="v67-mode"><span>Clinical marking · نوع التحديد</span><div><button data-mode="pain" class="${m==="pain"?"on":""}">● Pain</button><button data-mode="treatment" class="${m==="treatment"?"on":""}">● Treatment</button><button data-mode="both" class="${m==="both"?"on":""}">● Both</button></div></div>
+   <div class="v67-pain"><div><span>Pain intensity · شدة الألم</span><strong data-pain>${pain}/10</strong></div><input type="range" min="0" max="10" value="${pain}" data-v67pain><div class="v67-scale"><i>0</i><i>2</i><i>4</i><i>6</i><i>8</i><i>10</i></div></div>
+   <label class="v67-notes"><span>Structure note · ملاحظة المنطقة</span><textarea data-v67note placeholder="Clinical observation, tenderness, movement response…">${v.note||""}</textarea></label>
+ </div>
+ <div class="v67-pane" data-pane="anatomy" hidden>
+   <div class="v67-anatomy"><span>3D</span><div><b>${n}</b><strong>${an}</strong><small>Muscular System · الجهاز العضلي</small></div></div>
+   <div class="v67-facts"><p><b>Structure</b><span>${n}</span></p><p><b>System</b><span>Muscular</span></p><p><b>Viewer</b><span>Interactive 3D Mesh</span></p><p><b>Selection</b><span>Direct anatomical mesh</span></p></div>
+ </div>
+ <div class="v67-pane" data-pane="session" hidden>
+   <div class="v67-session"><b>Session Clinical Link</b><small>يتم حفظ هذه المنطقة مع تقييم الألم والجلسة الحالية.</small><div><span>Mode</span><strong>${m}</strong></div><div><span>Pain</span><strong>${pain}/10</strong></div></div>
+ </div>
+ <footer><button data-act="reset">↻ Reset View</button><button class="primary" data-v67save>✓ Save Structure</button></footer>`;
+ bind(p,v);
+}
+function bind(p,v){
+ p.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{
+   p.querySelectorAll("[data-tab]").forEach(x=>x.classList.toggle("on",x===b));
+   p.querySelectorAll("[data-pane]").forEach(x=>x.hidden=x.dataset.pane!==b.dataset.tab);
+ });
+ p.querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>action(b.dataset.act,v));
+ p.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{
+   v.mode=b.dataset.mode;
+   try{recolor(v.object,v.mode)}catch(e){}
+   render();
+ });
+ const range=p.querySelector("[data-v67pain]");
+ if(range)range.oninput=()=>{v.pain=+range.value;p.querySelector("[data-pain]").textContent=v.pain+"/10";try{renderSelected()}catch(e){}};
+ const note=p.querySelector("[data-v67note]");if(note)note.oninput=()=>v.note=note.value;
+ p.querySelector("[data-v67save]")?.addEventListener("click",()=>{try{save()}catch(e){};toast(p)});
+}
+function action(a,v){
+ if(a==="focus"){try{focusSelected()}catch(e){}}
+ if(a==="isolate"){try{isolate()}catch(e){}}
+ if(a==="fade"){try{fadeOthers()}catch(e){}}
+ if(a==="hide"){
+   try{app.meshes.forEach(m=>m.visible=m===v.object)}catch(e){}
+ }
+ if(a==="reset"){try{resetPremium()}catch(e){}}
+}
+function toast(p){
+ let t=p.querySelector(".v67-toast");if(!t){t=document.createElement("div");t.className="v67-toast";p.appendChild(t)}
+ t.textContent="✓ Saved to current clinical session · تم الحفظ";t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800);
+}
+document.addEventListener("pointerup",e=>{if(e.target.closest("#v61-canvas"))setTimeout(()=>{ensure();render()},70)},false);
+document.addEventListener("click",e=>{
+ if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(ensure,250);
+},false);
+
+const st=document.createElement("style");st.textContent=`
+#v67-inspector{position:relative;border:1px solid #d8e5e7;border-radius:11px;background:#fff;margin-bottom:9px;box-shadow:0 7px 24px rgba(17,62,71,.055);overflow:hidden}
+#v67-inspector header{display:flex;justify-content:space-between;gap:8px;padding:11px 11px 7px;background:linear-gradient(180deg,#fff,#f8fbfb)}
+#v67-inspector header small{font-size:5px;color:#b17c2d;font-weight:900;letter-spacing:.08em}#v67-inspector h2{font-size:12px!important;margin:2px 0 0!important;color:#143e48!important;line-height:1.15}#v67-inspector h3{font-size:8px!important;margin:3px 0!important;color:#52767d!important;direction:rtl}
+.v67-status{align-self:flex-start;font-size:5px;font-weight:900;padding:4px 7px;border-radius:12px;background:#fdebed;color:#ca3d49}.v67-status.treatment{background:#e8f3ff;color:#2778c8}.v67-status.both{background:#f2ebfb;color:#784bc0}
+.v67-tabs{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #e4ecee;border-bottom:1px solid #e4ecee}.v67-tabs button{height:29px!important;border:0!important;border-radius:0!important;background:#fff!important;font-size:6px!important;color:#758d92!important}.v67-tabs button.on{color:#0c6076!important;font-weight:900!important;box-shadow:inset 0 -2px #0c6076}
+.v67-pane{padding:9px}.v67-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.v67-actions button{height:43px!important;border:1px solid #dbe6e8!important;background:#f9fbfc!important;border-radius:7px!important;padding:4px 1px!important;font-size:11px!important;color:#285c67!important}.v67-actions b{display:block;font-size:5px;margin-top:2px}
+.v67-mode,.v67-pain,.v67-notes{display:block;border-top:1px solid #e7edef;margin-top:8px;padding-top:8px}.v67-mode>span,.v67-pain span,.v67-notes>span{font-size:6px;font-weight:900;color:#4b6e75}.v67-mode>div{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:5px}.v67-mode button{height:27px!important;border:1px solid #dbe5e7!important;background:#fff!important;border-radius:6px!important;font-size:5.5px!important}.v67-mode button.on{background:#eef7f8!important;border-color:#12677a!important;color:#12677a!important;font-weight:900!important}
+.v67-pain>div{display:flex;justify-content:space-between}.v67-pain strong{font-size:12px}.v67-pain input{width:100%;accent-color:#ed4650}.v67-scale{display:flex!important;justify-content:space-between!important}.v67-scale i{font-size:4.5px;color:#9aabad;font-style:normal}.v67-notes textarea{display:block;width:100%;min-height:55px;margin-top:4px;border:1px solid #dbe5e7;border-radius:7px;padding:6px;font-size:6px;resize:vertical}
+.v67-anatomy{display:flex;align-items:center;gap:9px;padding:9px;background:#eef5f6;border-radius:8px}.v67-anatomy>span{width:42px;height:42px;border-radius:9px;background:linear-gradient(145deg,#b95a48,#7e3029);display:grid;place-items:center;color:#fff;font-size:9px;font-weight:900}.v67-anatomy b,.v67-anatomy strong,.v67-anatomy small{display:block}.v67-anatomy b{font-size:7px}.v67-anatomy strong{font-size:6px;color:#486e75;direction:rtl}.v67-anatomy small{font-size:5px;color:#8a9ca0;margin-top:2px}.v67-facts{margin-top:7px}.v67-facts p{display:grid;grid-template-columns:70px 1fr;margin:0;padding:6px;border-bottom:1px solid #e8edef;font-size:5.5px}.v67-facts b{color:#315f68}.v67-facts span{color:#758d92}
+.v67-session>b,.v67-session>small{display:block}.v67-session>b{font-size:8px}.v67-session>small{font-size:6px;color:#71898e;direction:rtl;margin:3px 0 8px}.v67-session>div{display:flex;justify-content:space-between;border-top:1px solid #e6edef;padding:7px 0;font-size:6px}
+#v67-inspector footer{display:grid!important;grid-template-columns:1fr 1fr!important;gap:5px!important;padding:8px!important;border-top:1px solid #e2eaec!important;background:#f9fbfb!important}#v67-inspector footer button{height:29px!important;border:1px solid #d7e3e5!important;border-radius:6px!important;background:#fff!important;font-size:5.5px!important}#v67-inspector footer .primary{background:#115a6c!important;color:#fff!important;border-color:#115a6c!important}
+.v67-empty{text-align:center;padding:17px}.v67-empty span{display:block;font-size:24px;color:#a7bcc0}.v67-empty b,.v67-empty strong,.v67-empty small{display:block}.v67-empty b{font-size:8px}.v67-empty strong{font-size:7px;color:#52747b;direction:rtl}.v67-empty small{font-size:5.5px;color:#94a5a8;margin-top:3px;direction:rtl}.v67-toast{position:absolute;left:8px;right:8px;bottom:8px;background:#174f5b;color:#fff;border-radius:7px;padding:7px;text-align:center;font-size:6px;opacity:0;transform:translateY(6px);pointer-events:none;transition:.2s}.v67-toast.show{opacity:1;transform:none}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V67 SMART MUSCLE INSPECTOR";
+})();
