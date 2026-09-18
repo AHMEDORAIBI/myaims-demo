@@ -11939,3 +11939,90 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V46 - PAIN MAP LARGE POPUP
+   Clicking Pain Map opens immediately as a near-full-screen modal.
+   ========================================================= */
+(function(){
+  function css(){
+    if(document.getElementById('v46-css')) return;
+    const s=document.createElement('style');
+    s.id='v46-css';
+    s.textContent=`
+      #v45-pain-workspace{
+        padding:8px!important;
+        background:rgba(12,35,40,.72)!important;
+        backdrop-filter:blur(8px)!important;
+      }
+      #v45-pain-workspace .v45-pain-shell{
+        width:calc(100vw - 16px)!important;
+        max-width:none!important;
+        height:calc(100vh - 16px)!important;
+        margin:0 auto!important;
+        border-radius:18px!important;
+      }
+      #v45-pain-workspace .v45-pain-stage{
+        padding:8px 12px 12px!important;
+        overflow:hidden!important;
+      }
+      #v45-pain-workspace .v44-experience{
+        width:100%!important;
+        height:100%!important;
+        max-width:none!important;
+      }
+      #v45-pain-workspace .v44-main{
+        grid-template-columns:210px minmax(560px,1fr) 270px!important;
+        gap:12px!important;
+      }
+      #v45-pain-workspace .v44-body-unit{
+        height:min(64vh,610px)!important;
+      }
+      #v45-pain-workspace .v44-body-unit>svg{
+        height:min(61vh,570px)!important;
+      }
+      #v45-pain-workspace .v45-pain-head{
+        padding:12px 18px!important;
+      }
+      #v45-pain-workspace .v45-pain-head h2{
+        font-size:27px!important;
+      }
+      @media(max-width:1100px){
+        #v45-pain-workspace .v44-main{
+          grid-template-columns:170px minmax(430px,1fr) 230px!important;
+        }
+      }
+      @media(max-width:850px){
+        #v45-pain-workspace{padding:0!important}
+        #v45-pain-workspace .v45-pain-shell{
+          width:100vw!important;height:100vh!important;border-radius:0!important
+        }
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function strengthenButton(){
+    const r=document.querySelector('#v24-clinical-modal .v34-clinical-workspace')||
+            document.querySelector('#v24-clinical-modal');
+    if(!r)return;
+    r.querySelectorAll('[data-v45-pain-tab],[data-v45-flow-pain]').forEach(b=>{
+      if(b.dataset.v46==='1')return;
+      b.dataset.v46='1';
+      b.addEventListener('click',function(e){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if(typeof window.openV45PainWorkspace==='function') window.openV45PainWorkspace();
+      },true);
+    });
+  }
+
+  function init(){
+    css();
+    strengthenButton();
+    const mo=new MutationObserver(()=>{clearTimeout(window.__v46);window.__v46=setTimeout(strengthenButton,60)});
+    mo.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
