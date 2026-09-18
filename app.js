@@ -11564,3 +11564,156 @@ render();
   function init(){css();setTimeout(build,180);const mo=new MutationObserver(()=>{clearTimeout(window.__v43);window.__v43=setTimeout(build,90)});mo.observe(document.body,{childList:true,subtree:true})}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V44 - ANATOMICAL PAIN EXPERIENCE
+   Premium "3D-like" clinical mapping matching the approved concept:
+   - Front + Back anatomical-style body presentation
+   - Independent pain score per selected area
+   - Glowing pain markers
+   - Selected-area cards
+   - Detail inspector
+   - Single-screen workflow / no long page scrolling
+   NOTE: visual 3D-like experience, not a WebGL 360-degree 3D model.
+   ========================================================= */
+(function(){
+  const isAR=()=>document.documentElement.dir==='rtl'||document.body.classList.contains('myaims-ar');
+  const T=(en,ar)=>isAR()?ar:en;
+  const Z={
+    shoulderR:['Right Shoulder','الكتف الأيمن'],shoulderL:['Left Shoulder','الكتف الأيسر'],
+    neck:['Neck','الرقبة'],chest:['Chest','الصدر'],abdomen:['Abdomen','البطن'],
+    elbowR:['Right Elbow','المرفق الأيمن'],elbowL:['Left Elbow','المرفق الأيسر'],
+    handR:['Right Hand','اليد اليمنى'],handL:['Left Hand','اليد اليسرى'],
+    hipR:['Right Hip','الورك الأيمن'],hipL:['Left Hip','الورك الأيسر'],
+    kneeR:['Right Knee','الركبة اليمنى'],kneeL:['Left Knee','الركبة اليسرى'],
+    ankleR:['Right Ankle','الكاحل الأيمن'],ankleL:['Left Ankle','الكاحل الأيسر'],
+    upperBack:['Upper Back','أعلى الظهر'],lowerBack:['Lower Back','أسفل الظهر'],
+    thighR:['Right Thigh','الفخذ الأيمن'],thighL:['Left Thigh','الفخذ الأيسر']
+  };
+  const name=k=>T(...(Z[k]||[k,k]));
+  function root(){return document.querySelector('#v24-clinical-modal .v34-clinical-workspace')||document.querySelector('#v24-clinical-modal')}
+  function previous(r){return r?.querySelector('.v43-body-canvas')||r?.querySelector('.v42-pain-command')}
+
+  function bodySVG(back=false){
+    const pts=back?[
+      ['neck',150,91],['shoulderR',105,126],['shoulderL',195,126],['upperBack',150,160],['lowerBack',150,225],
+      ['hipR',119,274],['hipL',181,274],['thighR',116,350],['thighL',184,350],['kneeR',111,425],['kneeL',189,425],
+      ['ankleR',100,526],['ankleL',200,526]
+    ]:[
+      ['neck',150,91],['shoulderR',105,126],['shoulderL',195,126],['chest',150,160],['abdomen',150,220],
+      ['elbowR',65,258],['elbowL',235,258],['handR',49,310],['handL',251,310],['hipR',119,274],['hipL',181,274],
+      ['thighR',116,350],['thighL',184,350],['kneeR',111,425],['kneeL',189,425],['ankleR',100,526],['ankleL',200,526]
+    ];
+    return `<svg viewBox="0 0 300 575" class="v44-anatomy ${back?'back':'front'}">
+      <defs>
+        <linearGradient id="skin${back?'b':'f'}" x1="0" x2="1"><stop stop-color="#f7d6c5"/><stop offset=".5" stop-color="#efbba4"/><stop offset="1" stop-color="#d99077"/></linearGradient>
+        <filter id="glow${back?'b':'f'}"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <g class="v44-body">
+        <ellipse cx="150" cy="47" rx="31" ry="39"/><rect x="136" y="82" width="28" height="28" rx="10"/>
+        <path d="M106 111 Q150 96 194 111 Q211 145 204 235 Q190 263 150 270 Q110 263 96 235 Q89 145 106 111Z"/>
+        <path d="M103 119 Q78 127 69 161 L43 286 Q40 302 54 307 Q68 308 75 291 L106 175Z"/>
+        <path d="M197 119 Q222 127 231 161 L257 286 Q260 302 246 307 Q232 308 225 291 L194 175Z"/>
+        <path d="M111 255 L142 258 L137 420 L119 553 Q116 571 101 570 Q88 568 90 548 L95 405Z"/>
+        <path d="M189 255 L158 258 L163 420 L181 553 Q184 571 199 570 Q212 568 210 548 L205 405Z"/>
+        <g class="v44-muscle-lines">
+          <path d="M110 122 Q150 145 190 122 M104 155 Q150 180 196 155 M106 195 Q150 216 194 195 M111 235 Q150 249 189 235"/>
+          <path d="M116 286 Q130 348 111 407 M184 286 Q170 348 189 407 M106 437 Q112 487 101 532 M194 437 Q188 487 199 532"/>
+        </g>
+      </g>
+      <g class="v44-points">${pts.map(([k,x,y])=>`<g data-v44-zone="${k}" transform="translate(${x} ${y})"><circle class="halo" r="18"/><circle class="dot" r="7"/><circle class="core" r="3"/></g>`).join('')}</g>
+    </svg>`;
+  }
+
+  function build(){
+    const r=root(), old=previous(r);if(!r||!old||r.querySelector('.v44-experience'))return;
+    old.style.display='none';
+    const ui=document.createElement('section');ui.className='v44-experience';
+    ui.innerHTML=`
+      <header class="v44-header">
+        <div><small>${T('ANATOMICAL PAIN MAPPING','خريطة الألم التشريحية')}</small><h2>${T('Pain & Treatment Areas','مناطق الألم والعلاج')}</h2><p>${T('Select the exact area and record its pain intensity.','حدد موضع الألم بدقة وسجل شدته لكل منطقة.')}</p></div>
+        <div class="v44-summary"><span><small>${T('AREAS','المناطق')}</small><b data-v44-count>0</b></span><span><small>${T('HIGHEST PAIN','أعلى ألم')}</small><b data-v44-max>0/10</b></span></div>
+      </header>
+      <div class="v44-main">
+        <aside class="v44-tools">
+          <div><small>${T('QUICK SELECTION','تحديد سريع')}</small><h3>${T('Body Regions','مناطق الجسم')}</h3></div>
+          ${[['neck','Head & Neck','الرأس والرقبة'],['shoulderR','Shoulders & Arms','الكتف والذراع'],['upperBack','Back & Trunk','الظهر والجذع'],['hipR','Hip & Legs','الورك والساق'],['handR','Hands','اليد'],['ankleR','Foot & Ankle','القدم والكاحل']].map(x=>`<button data-v44-quick="${x[0]}"><span>${T(x[1],x[2])}</span><b>+</b></button>`).join('')}
+          <button class="clear" data-v44-clear>${T('Clear selections','مسح التحديدات')}</button>
+        </aside>
+        <section class="v44-bodies">
+          <div class="v44-body-unit">${bodySVG(false)}<b>${T('Front','أمام')}</b></div>
+          <div class="v44-body-unit">${bodySVG(true)}<b>${T('Back','خلف')}</b></div>
+        </section>
+        <aside class="v44-inspector">
+          <div class="v44-inspector-empty"><span>◎</span><h3>${T('Select an area','حدد منطقة')}</h3><p>${T('Tap a point on the body to record pain details.','اضغط على نقطة في الجسم لتسجيل تفاصيل الألم.')}</p></div>
+          <div class="v44-inspector-active" hidden>
+            <small>${T('SELECTED AREA','المنطقة المحددة')}</small><h3 data-v44-current>—</h3>
+            <div class="v44-big-score"><b data-v44-current-score>0</b><span>/10</span></div>
+            <div class="v44-scale">${Array.from({length:11},(_,i)=>`<button data-v44-score="${i}">${i}</button>`).join('')}</div>
+            <div class="v44-severity"><span data-v44-severity>${T('No pain','لا يوجد ألم')}</span></div>
+            <label><span>${T('Quick Note','ملاحظة سريعة')}</span><textarea data-v44-note rows="3" placeholder="${T('e.g. pain with movement...','مثال: ألم عند الحركة...')}"></textarea></label>
+            <button class="v44-apply" data-v44-apply>${T('Add to Session','إضافة إلى الجلسة')} +</button>
+          </div>
+        </aside>
+      </div>
+      <footer class="v44-footer">
+        <div class="v44-selected"><div><small>${T('SELECTED AREAS','المناطق المحددة')}</small><b><span data-v44-count2>0</span> ${T('areas','مناطق')}</b></div><div data-v44-cards><em>${T('No areas selected yet','لم يتم تحديد مناطق بعد')}</em></div></div>
+        <button class="v44-next">${T('Apply & Continue','اعتماد ومتابعة')} <b>→</b></button>
+      </footer>`;
+    old.parentNode.insertBefore(ui,old);
+
+    const data=new Map();let current=null;
+    const empty=ui.querySelector('.v44-inspector-empty'),active=ui.querySelector('.v44-inspector-active');
+    function severity(n){return n===0?T('No pain','لا يوجد ألم'):n<=3?T('Mild','خفيف'):n<=6?T('Moderate','متوسط'):n<=8?T('Severe','شديد'):T('Very severe','شديد جدًا')}
+    function open(k){
+      current=k;if(!data.has(k))data.set(k,{score:0,note:''});
+      const d=data.get(k);empty.hidden=true;active.hidden=false;
+      ui.querySelector('[data-v44-current]').textContent=name(k);ui.querySelector('[data-v44-current-score]').textContent=d.score;
+      ui.querySelector('[data-v44-severity]').textContent=severity(d.score);ui.querySelector('[data-v44-note]').value=d.note||'';
+      ui.querySelectorAll('[data-v44-score]').forEach(b=>b.classList.toggle('active',+b.dataset.v44Score===d.score));
+      ui.querySelectorAll(`[data-v44-zone]`).forEach(p=>p.classList.toggle('focus',p.dataset.v44Zone===k));
+    }
+    function render(){
+      const arr=[...data.entries()].filter(([,d])=>d.added);
+      ui.querySelector('[data-v44-count]').textContent=arr.length;ui.querySelector('[data-v44-count2]').textContent=arr.length;
+      ui.querySelector('[data-v44-max]').textContent=(arr.length?Math.max(...arr.map(([,d])=>d.score)):0)+'/10';
+      ui.querySelectorAll('[data-v44-zone]').forEach(p=>{const d=data.get(p.dataset.v44Zone);p.classList.toggle('selected',!!d?.added);p.style.setProperty('--pain',d?.score||0)});
+      ui.querySelector('[data-v44-cards]').innerHTML=arr.length?arr.map(([k,d])=>`<article><span class="mini-dot"></span><div><b>${name(k)}</b><small>${severity(d.score)}</small></div><strong>${d.score}/10</strong><button data-v44-remove="${k}">×</button></article>`).join(''):`<em>${T('No areas selected yet','لم يتم تحديد مناطق بعد')}</em>`;
+      ui.querySelectorAll('[data-v44-remove]').forEach(b=>b.onclick=()=>{data.delete(b.dataset.v44Remove);if(current===b.dataset.v44Remove){current=null;active.hidden=true;empty.hidden=false}render()});
+    }
+    ui.querySelectorAll('[data-v44-zone]').forEach(p=>p.onclick=()=>open(p.dataset.v44Zone));
+    ui.querySelectorAll('[data-v44-quick]').forEach(b=>b.onclick=()=>open(b.dataset.v44Quick));
+    ui.querySelectorAll('[data-v44-score]').forEach(b=>b.onclick=()=>{
+      if(!current)return;const d=data.get(current);d.score=+b.dataset.v44Score;
+      ui.querySelector('[data-v44-current-score]').textContent=d.score;ui.querySelector('[data-v44-severity]').textContent=severity(d.score);
+      ui.querySelectorAll('[data-v44-score]').forEach(x=>x.classList.toggle('active',x===b));
+    });
+    ui.querySelector('[data-v44-apply]').onclick=()=>{
+      if(!current)return;const d=data.get(current);d.note=ui.querySelector('[data-v44-note]').value.trim();d.added=true;
+      // Best-effort synchronization with legacy clinical body-map/pain controls.
+      const legacy=[...old.querySelectorAll('button,[data-area],[data-zone]')].find(x=>(x.textContent||x.dataset.area||x.dataset.zone||'').toLowerCase().includes((Z[current]?.[0]||current).toLowerCase()));
+      if(legacy)try{legacy.click()}catch(e){}
+      const pain=r.querySelector('input[type="range"][max="10"],input[name*="pain" i],select[name*="pain" i],#v24-pain');
+      if(pain){pain.value=d.score;pain.dispatchEvent(new Event('input',{bubbles:true}));pain.dispatchEvent(new Event('change',{bubbles:true}))}
+      render();
+    };
+    ui.querySelector('[data-v44-clear]').onclick=()=>{data.clear();current=null;active.hidden=true;empty.hidden=false;render()};
+    ui.querySelector('.v44-next').onclick=()=>{const n=r.querySelector('.v35-flow-steps button:nth-child(2),[data-step="2"]');if(n)n.click()};
+    render();
+  }
+
+  function css(){
+    if(document.getElementById('v44-css'))return;const s=document.createElement('style');s.id='v44-css';s.textContent=`
+      .v44-experience{background:#f8fbfb;border:1px solid #d9e6e7;border-radius:18px;margin:8px 0;overflow:hidden;color:#31565e;box-shadow:0 10px 30px rgba(25,70,78,.05)}
+      .v44-header{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:#fff;border-bottom:1px solid #e0eaeb}.v44-header small,.v44-tools small,.v44-inspector small,.v44-selected small{font-size:10px!important;color:#a97c2e;font-weight:900}.v44-header h2{font-size:23px!important;margin:2px 0!important}.v44-header p{font-size:12px!important;margin:0;color:#819397}.v44-summary{display:flex;gap:6px}.v44-summary>span{min-width:95px;background:#edf5f5;border-radius:10px;padding:7px 10px}.v44-summary small,.v44-summary b{display:block}.v44-summary b{font-size:17px;margin-top:2px}
+      .v44-main{display:grid;grid-template-columns:190px minmax(430px,1fr) 235px;gap:10px;padding:10px;min-height:455px}.v44-tools,.v44-inspector{background:#fff;border:1px solid #dce7e8;border-radius:13px;padding:10px}.v44-tools h3{font-size:16px!important;margin:2px 0 9px}.v44-tools button{width:100%;display:flex;justify-content:space-between;align-items:center;border:1px solid #dce7e8;background:#f7fafa;border-radius:9px;padding:8px 9px;margin-bottom:5px;font-size:11px!important;color:#4d6a71;font-weight:800}.v44-tools button b{width:21px;height:21px;display:grid;place-items:center;background:#e7f0f1;border-radius:6px}.v44-tools .clear{justify-content:center;background:#fff;color:#98605f;margin-top:10px}
+      .v44-bodies{display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;background:radial-gradient(circle at center,#fff 0,#f4f8f8 68%,transparent 69%);border-radius:15px}.v44-body-unit{display:grid;place-items:center;position:relative;height:440px}.v44-body-unit>svg{height:410px;width:auto}.v44-body-unit>b{position:absolute;bottom:3px;background:#fff;border:1px solid #d9e5e6;border-radius:99px;padding:5px 13px;font-size:11px}.v44-body>*{fill:url(#skinf);stroke:#c9856f;stroke-width:1.4}.v44-anatomy.back .v44-body>*{fill:url(#skinb)}.v44-muscle-lines path{fill:none!important;stroke:#d79b85!important;stroke-width:1!important;opacity:.75}.v44-points g{cursor:pointer}.v44-points .halo{fill:transparent;transition:.2s}.v44-points .dot{fill:transparent;stroke:transparent;transition:.2s}.v44-points .core{fill:transparent}.v44-points g:hover .halo,.v44-points g.focus .halo{fill:rgba(35,121,127,.15)}.v44-points g:hover .dot,.v44-points g.focus .dot{fill:#fff;stroke:#3e9096;stroke-width:3}.v44-points g.selected .halo{fill:rgba(238,83,48,.22);filter:drop-shadow(0 0 7px rgba(238,83,48,.7))}.v44-points g.selected .dot{fill:#ef5535;stroke:#fff;stroke-width:3}.v44-points g.selected .core{fill:#fff}
+      .v44-inspector{display:grid;align-content:center}.v44-inspector-empty{text-align:center;color:#819397}.v44-inspector-empty>span{display:grid;place-items:center;margin:auto;width:58px;height:58px;border-radius:50%;background:#edf5f5;color:#337b81;font-size:28px}.v44-inspector-empty h3{font-size:17px!important;color:#31565e;margin:8px 0 3px}.v44-inspector-empty p{font-size:11px!important;line-height:1.5}.v44-inspector-active h3{font-size:18px!important;margin:3px 0 7px}.v44-big-score{display:flex;align-items:baseline;justify-content:center;background:#174f5b;color:#fff;border-radius:11px;padding:7px}.v44-big-score b{font-size:29px}.v44-big-score span{font-size:12px}.v44-scale{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;margin-top:8px}.v44-scale button{height:30px!important;min-height:30px!important;border:1px solid #d9e4e5;background:#f7fafa;border-radius:7px;font-size:10px!important;color:#5e777d}.v44-scale button.active{background:#ef5535;color:#fff;border-color:#ef5535}.v44-severity{text-align:center;margin:5px 0 8px}.v44-severity span{display:inline-block;background:#fff0e9;color:#b05e45;border-radius:99px;padding:4px 9px;font-size:10px}.v44-inspector label>span{display:block;font-size:10px!important;font-weight:800;margin-bottom:4px}.v44-inspector textarea{width:100%;box-sizing:border-box;border:1px solid #d8e4e5;border-radius:8px;padding:7px;font-size:11px!important}.v44-apply{width:100%;border:0!important;background:#174f5b!important;color:#fff!important;border-radius:8px!important;margin-top:7px;padding:8px!important;font-size:11px!important}
+      .v44-footer{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:#fff;border-top:1px solid #dce7e8;padding:9px 12px}.v44-selected{display:grid;grid-template-columns:105px 1fr;align-items:center}.v44-selected>div:first-child b{display:block;font-size:12px}.v44-selected>[data-v44-cards]{display:flex;gap:5px;overflow-x:auto;padding:2px}.v44-selected em{font-size:11px;color:#89999d;font-style:normal}.v44-selected article{min-width:150px;display:grid;grid-template-columns:9px 1fr auto 20px;gap:6px;align-items:center;background:#f6f9f9;border:1px solid #dce6e7;border-radius:8px;padding:6px}.v44-selected .mini-dot{width:8px;height:8px;border-radius:50%;background:#ef5535}.v44-selected article b,.v44-selected article small{display:block}.v44-selected article b{font-size:10px}.v44-selected article small{font-size:8px!important;color:#8a999d}.v44-selected article strong{font-size:11px;color:#d44e35}.v44-selected article button{border:0;background:#eaf1f2;border-radius:5px;width:20px;height:20px;min-height:20px!important;padding:0!important}.v44-next{height:40px!important;border:0!important;background:#174f5b!important;color:#fff!important;border-radius:9px!important;padding:0 17px!important;font-size:11px!important;font-weight:900!important}
+      body.myaims-ar .v44-experience{direction:rtl;text-align:right}body.myaims-ar .v44-next b{display:inline-block;transform:scaleX(-1)}
+      @media(max-width:1000px){.v44-main{grid-template-columns:160px 1fr}.v44-inspector{grid-column:1/-1}.v44-bodies{min-width:430px}.v44-footer{grid-template-columns:1fr}.v44-next{width:100%}} 
+    `;document.head.appendChild(s)}
+  function init(){css();setTimeout(build,180);const mo=new MutationObserver(()=>{clearTimeout(window.__v44);window.__v44=setTimeout(build,90)});mo.observe(document.body,{childList:true,subtree:true})}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
