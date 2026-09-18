@@ -13019,3 +13019,124 @@ window.MYAIMS_BUILD="V71 ANATOMICAL SURFACE DETAIL";
  document.head.appendChild(st);
  window.MYAIMS_BUILD="V74 NATIVE HD ENGINE";
 })();
+
+/* =========================================================
+   myAIMS V75 — HD CAMERA / ORIENTATION / MATERIALS
+   Native-HD refinement: auto-fit, clinical view presets,
+   studio lighting, tissue-aware materials and HD selection.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+let bodyHeight=30,bodyWidth=12,bodyDepth=7;
+
+function bounds(){
+ const a=A();if(!a?.THREE||!a?.model)return null;
+ const b=new a.THREE.Box3().setFromObject(a.model),s=b.getSize(new a.THREE.Vector3()),c=b.getCenter(new a.THREE.Vector3());
+ return {b,s,c};
+}
+function fitView(view="front",zoom=1){
+ const a=A(),q=bounds();if(!a||!q)return;
+ const {THREE,camera,controls}=a,{s,c}=q;
+ bodyHeight=s.y;bodyWidth=s.x;bodyDepth=s.z;
+ const vfov=THREE.MathUtils.degToRad(camera.fov||30);
+ const aspect=Math.max(.35,camera.aspect||1);
+ const distV=(s.y/2)/Math.tan(vfov/2);
+ const hfov=2*Math.atan(Math.tan(vfov/2)*aspect);
+ const distH=(s.x/2)/Math.tan(hfov/2);
+ const d=Math.max(distV,distH)*1.16/zoom;
+ const pos={
+  front:[c.x,c.y+s.y*.015,c.z+d],
+  back:[c.x,c.y+s.y*.015,c.z-d],
+  left:[c.x-d,c.y+s.y*.015,c.z],
+  right:[c.x+d,c.y+s.y*.015,c.z]
+ }[view]||[c.x,c.y,c.z+d];
+ camera.position.set(...pos);camera.near=Math.max(.01,d/1000);camera.far=d*12;camera.updateProjectionMatrix();
+ controls.target.copy(c);controls.minDistance=d*.42;controls.maxDistance=d*3.2;controls.update();
+}
+function materialPass(){
+ const a=A();if(!a?.meshes)return;
+ a.meshes.forEach(m=>{
+   const n=String(m.name||"").toLowerCase();
+   const tendon=/tendon|ligament|fascia|aponeuros|retinaculum/.test(n);
+   const bone=/bone|skull|vertebr|rib|femur|tibia|fibula|humerus|radius|ulna|patella|clavicle|scapula/.test(n);
+   const mats=Array.isArray(m.material)?m.material:[m.material];
+   mats.filter(Boolean).forEach(mat=>{
+     if(mat.userData?.v75)return;
+     mat.userData=mat.userData||{};mat.userData.v75=true;
+     if("metalness" in mat)mat.metalness=0;
+     if("roughness" in mat)mat.roughness=bone?.66:tendon?.56:.43;
+     if("clearcoat" in mat)mat.clearcoat=bone?.02:tendon?.04:.10;
+     if("clearcoatRoughness" in mat)mat.clearcoatRoughness=.68;
+     // Only recolor untextured/plain materials. Preserve embedded HD textures.
+     if(!mat.map && mat.color){
+       if(tendon)mat.color.set(0xe6d5b9);
+       else if(bone)mat.color.set(0xe8dfcf);
+       else mat.color.set(0xa94d3f);
+     }
+     mat.needsUpdate=true;
+   });
+   m.userData.v75Base=Array.isArray(m.material)?m.material.map(x=>x.clone()):m.material?.clone?.();
+ });
+}
+function studio(){
+ const a=A();if(!a?.THREE||a.__v75Lights)return;a.__v75Lights=true;const T=a.THREE;
+ // Reduce older directional rigs to avoid washed-out anatomy.
+ a.scene.children.filter(x=>x.isDirectionalLight).forEach(x=>x.intensity*=.55);
+ const add=(color,intensity,x,y,z)=>{const l=new T.DirectionalLight(color,intensity);l.position.set(x,y,z);l.userData.v75=true;a.scene.add(l)};
+ add(0xffe7da,2.25,16,22,26);add(0xdcefff,1.05,-20,10,18);add(0xffbba4,1.15,18,14,-24);add(0xd6efff,.82,-16,22,-18);
+ try{a.renderer.toneMapping=T.ACESFilmicToneMapping;a.renderer.toneMappingExposure=1.03;a.renderer.outputColorSpace=T.SRGBColorSpace;a.renderer.setPixelRatio(Math.min(devicePixelRatio,2))}catch(e){}
+}
+function dock(){
+ const r=R();if(!r||r.querySelector("#v75-viewdock"))return;
+ const d=document.createElement("div");d.id="v75-viewdock";
+ d.innerHTML=`<button class="on" data-v="front">Front</button><button data-v="back">Back</button><button data-v="left">Left</button><button data-v="right">Right</button><i></i><button data-z="in">＋</button><button data-z="out">−</button><button data-reset>Reset</button>`;
+ (r.querySelector(".v61-stagewrap")||r).appendChild(d);
+ d.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{d.querySelectorAll("[data-v]").forEach(x=>x.classList.toggle("on",x===b));fitView(b.dataset.v)});
+ d.querySelector("[data-z=in]").onclick=()=>fitView(d.querySelector("[data-v].on")?.dataset.v||"front",1.18);
+ d.querySelector("[data-z=out]").onclick=()=>fitView(d.querySelector("[data-v].on")?.dataset.v||"front",.86);
+ d.querySelector("[data-reset]").onclick=()=>fitView("front");
+}
+function selectedPass(){
+ let v=null;try{v=[...selected.values()].at(-1)}catch(e){}
+ if(!v?.object)return;
+ const m=v.object,a=A();if(!a)return;
+ const base=m.userData.v75Base;
+ if(base){
+   try{m.material=Array.isArray(base)?base.map(x=>x.clone()):base.clone()}catch(e){}
+ }
+ const mats=Array.isArray(m.material)?m.material:[m.material];
+ mats.filter(Boolean).forEach(mat=>{
+   const c=v.mode==="treatment"?0x168ee8:v.mode==="both"?0x8650d7:0x1598d1;
+   if(mat.color)mat.color.set(c);if(mat.emissive)mat.emissive.set(c);
+   if("emissiveIntensity" in mat)mat.emissiveIntensity=.13;
+   if("roughness" in mat)mat.roughness=.31;if("clearcoat" in mat)mat.clearcoat=.22;mat.needsUpdate=true;
+ });
+}
+function activate(){
+ const a=A(),r=R();if(!a?.model||!a?.meshes?.length||!r||a.__v75)return;
+ // Only apply this pass to the native HD asset.
+ if(!(a.__v73HD||a.hd||r.dataset.anatomyAsset==="myaims-anatomy-hd.glb"||r.dataset.anatomyAsset==="HD"))return;
+ a.__v75=true;studio();materialPass();fitView("front");dock();r.classList.add("v75-hd");
+}
+function boot(){
+ const t=setInterval(()=>{if(A()?.model&&A()?.meshes?.length){activate();if(A()?.__v75)clearInterval(t)}},120);
+ setTimeout(()=>clearInterval(t),15000);
+}
+document.addEventListener("click",e=>{
+ if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,500);
+},false);
+document.addEventListener("pointerup",e=>{if(e.target.closest("#v61-canvas"))setTimeout(selectedPass,90)},false);
+document.addEventListener("myaims:anatomy-ready",()=>setTimeout(activate,120));
+
+const st=document.createElement("style");st.textContent=`
+#v61-real3d.v75-hd .v61-stagewrap{background:radial-gradient(ellipse at 50% 40%,#fff 0%,#f7fafb 45%,#e9f1f3 100%)!important}
+#v75-viewdock{position:absolute;z-index:31;top:64px;right:14px;display:flex;align-items:center;gap:3px;padding:4px;border:1px solid #d7e4e7;border-radius:9px;background:rgba(255,255,255,.94);box-shadow:0 7px 22px rgba(21,62,70,.08);backdrop-filter:blur(9px)}
+#v75-viewdock button{height:27px!important;min-width:35px!important;padding:0 7px!important;border:0!important;border-radius:6px!important;background:transparent!important;color:#607a80!important;font-size:5.5px!important;font-weight:700!important}
+#v75-viewdock button.on{background:#145f71!important;color:#fff!important}
+#v75-viewdock i{height:18px;width:1px;background:#dbe5e7;margin:0 2px}
+#v61-real3d.v75-hd #v61-canvas canvas{filter:saturate(1.04) contrast(1.045) brightness(1.015)}
+@media(max-width:900px){#v75-viewdock{right:6px;top:52px}#v75-viewdock button{min-width:27px!important;padding:0 4px!important}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V75 HD CAMERA MATERIALS";
+})();
