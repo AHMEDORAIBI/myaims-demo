@@ -12746,3 +12746,151 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V69 3D PAIN MARKER SYSTEM";
 })();
+
+/* =========================================================
+   myAIMS V70 — ULTRA RENDERING UPGRADE
+   Visual-quality pass only: camera, renderer, materials,
+   studio lighting, depth, tendons, selected-muscle contrast.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+
+function isTendon(n){
+ return /tendon|ligament|fascia|aponeuros|retinaculum|cartilage/i.test(String(n||""));
+}
+function upgrade(){
+ const a=A(),r=R(); if(!a?.THREE||!a?.renderer||!a?.scene||!a?.camera||!a?.meshes?.length||!r)return;
+ if(a.__v70)return; a.__v70=true;
+ const T=a.THREE;
+
+ // Renderer quality
+ try{
+   a.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+   a.renderer.outputColorSpace=T.SRGBColorSpace;
+   a.renderer.toneMapping=T.ACESFilmicToneMapping;
+   a.renderer.toneMappingExposure=1.08;
+   a.renderer.setClearColor(0xf4f8f9,1);
+ }catch(e){}
+
+ // Remove excessive V66 studio lights before replacing with a balanced rig.
+ try{
+   [...a.scene.children].filter(o=>o.isLight && o.userData?.v70!==true).forEach(o=>{
+     if(o.type==="DirectionalLight" && o.intensity>1) a.scene.remove(o);
+   });
+ }catch(e){}
+
+ function light(type,color,intensity,pos){
+   const l=new type(color,intensity); l.position.set(...pos); l.userData.v70=true; a.scene.add(l); return l;
+ }
+ try{
+   light(T.HemisphereLight,0xfff7ef,.68,[0,20,0]);
+   light(T.DirectionalLight,0xffe4d6,2.15,[12,18,28]);       // key
+   light(T.DirectionalLight,0xd9efff,1.15,[-20,10,18]);      // fill
+   light(T.DirectionalLight,0xffb99f,1.35,[18,14,-24]);      // warm rim
+   light(T.DirectionalLight,0xcde9ff,1.05,[-16,20,-20]);     // cool rim
+   light(T.DirectionalLight,0xffffff,.75,[0,-12,15]);        // lower fill
+ }catch(e){}
+
+ // High-quality anatomical materials.
+ a.meshes.forEach(m=>{
+   const tendon=isTendon(m.name);
+   const mat=new T.MeshPhysicalMaterial({
+     color:new T.Color(tendon?0xe4d6bd:0xa94c3d),
+     roughness:tendon?.58:.46,
+     metalness:0,
+     clearcoat:tendon?.04:.10,
+     clearcoatRoughness:.68,
+     sheen:tendon?.04:.14,
+     sheenRoughness:.72,
+     sheenColor:new T.Color(tendon?0xf7ead7:0xffb09b),
+     side:T.DoubleSide
+   });
+   mat.emissive=new T.Color(tendon?0x160f08:0x210604);
+   mat.emissiveIntensity=tendon?.012:.018;
+   m.material=mat;
+   m.userData.v70Base=mat.clone();
+   try{m.geometry.computeVertexNormals()}catch(e){}
+ });
+
+ // Ground disc + soft contact shadow illusion.
+ try{
+   const old=a.scene.getObjectByName("v70-ground"); if(old)a.scene.remove(old);
+   const g=new T.Mesh(
+     new T.CircleGeometry(13,96),
+     new T.MeshBasicMaterial({color:0xdce8ea,transparent:true,opacity:.32,depthWrite:false})
+   );
+   g.name="v70-ground"; g.rotation.x=-Math.PI/2; g.position.y=-15.2; g.position.z=0; a.scene.add(g);
+ }catch(e){}
+
+ // Camera refinement.
+ try{
+   a.camera.fov=31; a.camera.near=.1; a.camera.far=500; a.camera.updateProjectionMatrix();
+   if(a.controls){a.controls.enableDamping=true;a.controls.dampingFactor=.075;a.controls.rotateSpeed=.58;a.controls.zoomSpeed=.72}
+   fit("front");
+ }catch(e){}
+
+ r.classList.add("v70-render");
+ addBadge(r);
+}
+function addBadge(r){
+ if(r.querySelector(".v70-render-badge"))return;
+ const d=document.createElement("div");d.className="v70-render-badge";
+ d.innerHTML=`<i></i><div><b>HD ANATOMICAL RENDER</b><span>Enhanced clinical visualization</span></div>`;
+ r.querySelector(".v61-stagewrap")?.appendChild(d);
+}
+function enhanceSelected(){
+ const a=A(); if(!a)return;
+ let v=null;try{v=[...selected.values()].at(-1)}catch(e){}
+ if(!v?.object)return;
+ a.meshes.forEach(m=>{
+   if(m===v.object){
+     const base=m.userData.v70Base||m.material;
+     const x=base.clone();
+     const c=v.mode==="treatment"?0x168fe8:v.mode==="both"?0x8750d7:0x1598d1;
+     x.color.set(c); x.emissive.set(c); x.emissiveIntensity=.18;
+     x.roughness=.31; x.clearcoat=.24; x.clearcoatRoughness=.38;
+     m.material=x;
+   }
+ });
+}
+function boot(){
+ const r=R();if(!r?.classList.contains("open"))return;
+ const t=setInterval(()=>{if(A()?.meshes?.length){clearInterval(t);upgrade()}},100);
+ setTimeout(()=>clearInterval(t),15000);
+}
+document.addEventListener("click",e=>{
+ if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,180);
+},false);
+document.addEventListener("pointerup",e=>{
+ if(e.target.closest("#v61-canvas"))setTimeout(enhanceSelected,80);
+},false);
+
+const st=document.createElement("style");st.textContent=`
+#v61-real3d.v70-render .v61-stagewrap{
+ background:
+ radial-gradient(ellipse at 50% 37%,rgba(255,255,255,1) 0%,rgba(248,251,252,1) 42%,rgba(231,240,242,1) 100%)!important;
+}
+#v61-real3d.v70-render #v61-canvas canvas{
+ filter:saturate(1.08) contrast(1.055) brightness(1.015)!important;
+}
+#v61-real3d.v70-render #v61-canvas:before{
+ left:28%!important;right:28%!important;bottom:5%!important;height:4.5%!important;
+ background:radial-gradient(ellipse,rgba(25,48,53,.23),rgba(25,48,53,0) 70%)!important;
+ filter:blur(12px)!important;
+}
+.v70-render-badge{
+ position:absolute;z-index:8;left:50%;top:112px;transform:translateX(-50%);
+ display:flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid rgba(207,224,227,.9);
+ border-radius:20px;background:rgba(255,255,255,.83);backdrop-filter:blur(9px);
+ box-shadow:0 6px 18px rgba(19,58,66,.055);pointer-events:none
+}
+.v70-render-badge>i{width:6px;height:6px;border-radius:50%;background:#27a47d;box-shadow:0 0 0 3px rgba(39,164,125,.11)}
+.v70-render-badge b,.v70-render-badge span{display:block}.v70-render-badge b{font-size:5px;letter-spacing:.06em;color:#27545e}.v70-render-badge span{font-size:4.3px;color:#899da1}
+#v61-real3d.v70-render .v66-studio-badge{display:none!important}
+#v61-real3d.v70-render .v65-quality{background:rgba(255,255,255,.86)!important;backdrop-filter:blur(8px)}
+#v61-real3d.v70-render .v61-stagewrap{box-shadow:inset 0 0 70px rgba(74,112,119,.035)}
+@media(max-width:900px){.v70-render-badge{display:none}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V70 ULTRA RENDERING UPGRADE";
+})();
