@@ -12505,3 +12505,80 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+/* ===== myAIMS V50 — CLEAN CLINICAL WORKSPACE REBUILD ===== */
+(function(){
+const ar=()=>document.documentElement.dir==="rtl"||document.body.classList.contains("myaims-ar");
+const T=(e,a)=>ar()?a:e;
+const R=()=>document.querySelector("#v24-clinical-modal .v34-clinical-workspace")||document.querySelector("#v24-clinical-modal");
+const mods=[
+["assessment","◉","Assessment","التقييم","Pain map & clinical assessment","خريطة الألم والتقييم السريري"],
+["plan","✚","Treatment Plan","الخطة العلاجية","Goals, sessions & clinical plan","الأهداف والجلسات والخطة السريرية"],
+["note","▤","Session Note","ملاحظة الجلسة","Subjective, objective & response","التقييم الذاتي والموضوعي والاستجابة"],
+["history","↺","Patient History","سجل المريض","Previous sessions & history","الجلسات السابقة والسجل"],
+["progress","◎","Goals & Progress","الأهداف والتقدم","Goals and progress review","الأهداف ومراجعة التقدم"],
+["hep","⌁","Home Exercise","التمارين المنزلية","Exercise program & instructions","برنامج التمارين والتعليمات"]
+];
+function btn(r,re){return [...r.querySelectorAll("button")].find(x=>re.test((x.textContent||"").trim()))}
+function hideLegacy(r){
+ r.querySelectorAll(".v49-command-center").forEach(x=>x.remove());
+ r.querySelectorAll(".v24-tabs,.v35-flow-steps,.v34-phrase-assistant,.v35-compare,.v35-completion,#v24-tab-session,#v24-tab-plan,#v24-tab-history,#v26-body-map,.v44-experience,.v42-pain-command,.v43-body-canvas").forEach(x=>x.classList.add("v50-legacy"));
+}
+function build(){
+ const r=R();if(!r)return;
+ hideLegacy(r);
+ if(r.querySelector("#v50-hub"))return;
+ const h=document.createElement("section");h.id="v50-hub";
+ h.innerHTML=`<header><div><small>${T("CLINICAL SESSION","الجلسة السريرية")}</small><h2>${T("Clinical Command Center","مركز التحكم السريري")}</h2><p>${T("Choose one task. It opens in a large dedicated workspace.","اختر المهمة، وستفتح في شاشة كبيرة مستقلة.")}</p></div><span class="v50-live">● ${T("Session Active","الجلسة نشطة")}</span></header>
+ <div class="v50-grid">${mods.map((m,i)=>`<button data-v50="${m[0]}" class="${i===0?"main":""}"><i>${m[1]}</i><span><b>${T(m[2],m[3])}</b><small>${T(m[4],m[5])}</small></span><em>${T("Open","فتح")} ›</em></button>`).join("")}</div>
+ <footer><b>${T("Quick Actions","إجراءات سريعة")}</b><button data-q="save">${T("Save Session","حفظ الجلسة")}</button><button data-q="report">${T("Preview Report","معاينة التقرير")}</button><button data-q="complete">${T("Complete Session","إكمال الجلسة")}</button></footer>`;
+ const a=r.querySelector(".v35-flow-steps")||r.querySelector(".v24-tabs");
+ (a||r.firstElementChild)?.insertAdjacentElement("afterend",h);
+ h.querySelectorAll("[data-v50]").forEach(x=>x.onclick=()=>open(x.dataset.v50));
+ h.querySelector('[data-q="save"]').onclick=()=>btn(r,/Save Clinical Session|حفظ الجلسة السريرية/i)?.click();
+ h.querySelector('[data-q="report"]').onclick=()=>btn(r,/Preview Report|معاينة التقرير/i)?.click();
+ h.querySelector('[data-q="complete"]').onclick=()=>btn(r,/Complete.*Session|إكمال.*الجلسة/i)?.click();
+}
+function panel(id,r){
+ if(id==="plan")return r.querySelector("#v24-tab-plan");
+ if(id==="note")return r.querySelector("#v24-tab-session");
+ if(id==="history")return r.querySelector("#v24-tab-history");
+}
+function overlay(){
+ let o=document.querySelector("#v50-overlay");if(o)return o;
+ o=document.createElement("div");o.id="v50-overlay";
+ o.innerHTML=`<section><header><div><small>${T("CLINICAL WORKSPACE","مساحة العمل السريرية")}</small><h2></h2><p></p></div><button data-x>×</button></header><main></main><footer><span>● ${T("Linked to current session","مرتبط بالجلسة الحالية")}</span><button data-back>${T("Done · Back to Command Center","تم · العودة لمركز التحكم")}</button></footer></section>`;
+ document.body.appendChild(o);o.querySelector("[data-x]").onclick=close;o.querySelector("[data-back]").onclick=close;return o;
+}
+function open(id){
+ const r=R();if(!r)return;
+ if(id==="assessment"&&window.openV47PainMap)return window.openV47PainMap();
+ if(id==="plan")btn(r,/^(Treatment Plan|الخطة العلاجية)$/i)?.click();
+ if(id==="note")btn(r,/^(Session Note|ملاحظة الجلسة)$/i)?.click();
+ if(id==="history")btn(r,/^(Patient History|سجل المريض)$/i)?.click();
+ if(id==="progress"){if(window.openV30ProgressReview)return window.openV30ProgressReview();btn(r,/Progress Review|مراجعة التقدم/i)?.click();return}
+ if(id==="hep"){btn(r,/Home Exercise|Exercise Program|التمارين المنزلية/i)?.click();return}
+ setTimeout(()=>{const p=panel(id,r),o=overlay(),m=mods.find(x=>x[0]===id);if(!p)return;
+ o.querySelector("h2").textContent=T(m[2],m[3]);o.querySelector("header p").textContent=T(m[4],m[5]);
+ p.__home=p.parentElement;p.__next=p.nextSibling;p.classList.remove("v50-legacy");p.style.setProperty("display","block","important");o.querySelector("main").replaceChildren(p);
+ o.classList.add("open");document.body.classList.add("v50-open")},80);
+}
+function close(){
+ const o=document.querySelector("#v50-overlay");if(!o)return;const p=o.querySelector("main").firstElementChild;
+ if(p&&p.__home){if(p.__next&&p.__next.parentNode===p.__home)p.__home.insertBefore(p,p.__next);else p.__home.appendChild(p);p.classList.add("v50-legacy");p.style.removeProperty("display")}
+ o.classList.remove("open");document.body.classList.remove("v50-open");setTimeout(build,20);
+}
+window.openV50Workspace=open;
+const css=document.createElement("style");css.id="v50-css";css.textContent=`
+#v24-clinical-modal .v50-legacy{display:none!important}#v24-clinical-modal .v49-command-center{display:none!important}
+#v50-hub{margin:10px 14px;padding:16px;background:#fff;border:1px solid #d9e6e8;border-radius:17px;box-shadow:0 9px 26px rgba(25,69,77,.06)}
+#v50-hub>header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e4ecee;padding-bottom:13px}#v50-hub header small{font-size:10px!important;color:#b18132;font-weight:900}#v50-hub h2{font-size:25px!important;color:#173f49!important;margin:2px 0!important}#v50-hub p{font-size:12px!important;color:#748b90;margin:0}.v50-live{background:#eaf4f1;color:#347064;border-radius:99px;padding:7px 11px;font-size:11px;font-weight:800}
+.v50-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:13px}.v50-grid>button{min-height:112px!important;display:grid!important;grid-template-columns:50px 1fr!important;grid-template-rows:1fr auto!important;gap:9px!important;text-align:start!important;padding:13px!important;border:1px solid #dbe6e8!important;border-radius:14px!important;background:#f7fafa!important;color:#31565e!important;transition:.16s!important}.v50-grid>button:hover{transform:translateY(-2px)!important;border-color:#8eb4b7!important;box-shadow:0 9px 20px rgba(25,69,77,.08)!important}.v50-grid>button.main{background:linear-gradient(135deg,#174f5b,#246a75)!important;color:#fff!important}.v50-grid i{grid-row:1/3;width:48px;height:48px;display:grid;place-items:center;border-radius:12px;background:#e4efef;color:#23636d;font-style:normal;font-size:22px}.v50-grid .main i{background:rgba(255,255,255,.14);color:#efc46d}.v50-grid span b,.v50-grid span small{display:block}.v50-grid span b{font-size:15px!important}.v50-grid span small{font-size:11px!important;color:#789095;margin-top:4px}.v50-grid .main span small{color:#dce9eb}.v50-grid em{grid-column:2;font-size:10px;color:#a07834;font-style:normal;font-weight:900}
+#v50-hub>footer{display:flex;align-items:center;gap:6px;border-top:1px solid #e5edef;margin-top:12px;padding-top:10px}#v50-hub>footer>b{margin-inline-end:auto;font-size:10px;color:#9a7a3e}#v50-hub>footer button{min-height:35px!important;border:1px solid #d8e4e5!important;background:#fff!important;border-radius:8px!important;padding:0 11px!important;font-size:10.5px!important}
+#v50-overlay{display:none;position:fixed;inset:0;z-index:420000;background:rgba(10,31,36,.83);backdrop-filter:blur(8px);padding:8px}#v50-overlay.open{display:block}body.v50-open{overflow:hidden!important}#v50-overlay>section{width:calc(100vw - 16px);height:calc(100vh - 16px);display:grid;grid-template-rows:auto 1fr auto;background:#f2f7f7;border-radius:18px;overflow:hidden;box-shadow:0 40px 120px rgba(0,0,0,.42)}#v50-overlay>section>header{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(125deg,#143f49,#205e68);color:#fff;padding:14px 20px}#v50-overlay header small{font-size:10px!important;color:#e5bd6d!important;font-weight:900}#v50-overlay h2{font-size:28px!important;color:#fff!important;margin:2px 0!important}#v50-overlay header p{font-size:12px!important;color:#d8e6e8;margin:0}#v50-overlay header>button{width:42px;height:42px!important;min-height:42px!important;background:rgba(255,255,255,.1)!important;color:#fff!important;border:1px solid rgba(255,255,255,.2)!important;border-radius:10px!important;font-size:23px!important}
+#v50-overlay main{min-height:0;overflow:auto;padding:15px 18px}#v50-overlay main>*{display:block!important;max-width:1500px!important;min-height:calc(100% - 2px);margin:0 auto!important;padding:15px!important;box-sizing:border-box!important;background:#fff!important;border:1px solid #dce7e8!important;border-radius:14px!important}#v50-overlay>section>footer{display:flex;justify-content:space-between;align-items:center;background:#fff;border-top:1px solid #d9e5e6;padding:10px 16px;font-size:11px;color:#789096}#v50-overlay footer button{height:40px!important;background:#174f5b!important;color:#fff!important;border:0!important;border-radius:9px!important;padding:0 17px!important;font-size:12px!important;font-weight:900!important}
+body.myaims-ar #v50-hub,body.myaims-ar #v50-overlay>section{direction:rtl;text-align:right}@media(max-width:950px){.v50-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.v50-grid{grid-template-columns:1fr}#v50-overlay{padding:0}#v50-overlay>section{width:100vw;height:100vh;border-radius:0}}
+`;document.head.appendChild(css);
+function init(){build();let n=0,t=setInterval(()=>{build();if(++n>40)clearInterval(t)},150);new MutationObserver(()=>{clearTimeout(window.__v50);window.__v50=setTimeout(build,70)}).observe(document.body,{childList:true,subtree:true})}
+document.readyState==="loading"?document.addEventListener("DOMContentLoaded",init):init();
+})();
