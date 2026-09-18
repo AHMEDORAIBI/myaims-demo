@@ -12894,3 +12894,106 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V70 ULTRA RENDERING UPGRADE";
 })();
+
+/* =========================================================
+   myAIMS V71 — ANATOMICAL SURFACE DETAIL
+   Adds procedural muscle-fiber surface detail where the GLB
+   provides UV coordinates, plus refined tissue separation.
+   Preserves the working V64 engine and V70 renderer.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+
+function fiberTexture(T, renderer){
+ const c=document.createElement("canvas"); c.width=512; c.height=512;
+ const x=c.getContext("2d");
+ x.fillStyle="#888"; x.fillRect(0,0,512,512);
+
+ // Fine longitudinal muscle-fibre relief.
+ for(let i=0;i<170;i++){
+   const px=(i/169)*512 + (Math.random()-.5)*4;
+   const g=x.createLinearGradient(px-2,0,px+2,0);
+   g.addColorStop(0,"#747474"); g.addColorStop(.5,"#a6a6a6"); g.addColorStop(1,"#777");
+   x.strokeStyle=g; x.lineWidth=.7+Math.random()*1.3;
+   x.beginPath();
+   x.moveTo(px,0);
+   x.bezierCurveTo(px+Math.sin(i)*5,150,px-Math.cos(i*.7)*5,360,px+Math.sin(i*.4)*3,512);
+   x.stroke();
+ }
+ // Very subtle cross-fibre variation.
+ x.globalAlpha=.12;
+ for(let y=8;y<512;y+=14){
+   x.strokeStyle=(y%28===0)?"#666":"#bbb"; x.lineWidth=.5;
+   x.beginPath();x.moveTo(0,y);x.lineTo(512,y+3);x.stroke();
+ }
+ x.globalAlpha=1;
+ const t=new T.CanvasTexture(c);
+ t.wrapS=t.wrapT=T.RepeatWrapping; t.repeat.set(7,2);
+ try{t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy())}catch(e){}
+ t.needsUpdate=true; return t;
+}
+function tendonTexture(T,renderer){
+ const c=document.createElement("canvas");c.width=256;c.height=256;const x=c.getContext("2d");
+ x.fillStyle="#999";x.fillRect(0,0,256,256);
+ for(let i=0;i<90;i++){x.strokeStyle=i%3?"#aaa":"#777";x.globalAlpha=.22;x.lineWidth=.6;x.beginPath();x.moveTo(i*3,0);x.lineTo(i*3+5,256);x.stroke()}
+ x.globalAlpha=1;const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;t.repeat.set(5,2);
+ try{t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy())}catch(e){}return t;
+}
+function tendon(n){return /tendon|ligament|fascia|aponeuros|retinaculum|cartilage/i.test(String(n||""))}
+
+function apply(){
+ const a=A(),r=R();if(!a?.THREE||!a?.meshes?.length||!a.renderer||!r||a.__v71)return;
+ a.__v71=true;const T=a.THREE, muscleMap=fiberTexture(T,a.renderer), tendonMap=tendonTexture(T,a.renderer);
+ let enhanced=0, uvless=0;
+ a.meshes.forEach(m=>{
+   const mat=m.material;if(!mat)return;
+   const isT=tendon(m.name);
+   // Keep V70 material but add real surface relief only where UVs exist.
+   if(m.geometry?.attributes?.uv){
+     mat.bumpMap=isT?tendonMap:muscleMap;
+     mat.bumpScale=isT?.045:.075;
+     mat.roughness=isT?.56:.43;
+     mat.clearcoat=isT?.03:.12;
+     mat.needsUpdate=true; enhanced++;
+   }else uvless++;
+   // More natural tissue palette.
+   mat.color.set(isT?0xe7d8bd:0xa84b3d);
+   if(mat.sheenColor)mat.sheenColor.set(isT?0xf8ead5:0xffb29e);
+   m.userData.v71Base=mat.clone();
+ });
+ r.dataset.v71Enhanced=enhanced;
+ addQualityPanel(r,enhanced,uvless);
+}
+function addQualityPanel(r,enhanced,uvless){
+ if(r.querySelector(".v71-quality"))return;
+ const q=document.createElement("div");q.className="v71-quality";
+ q.innerHTML=`<div class="v71-hd">HD</div><div><b>Anatomical Surface Detail</b><span>${enhanced} structures enhanced${uvless?` · ${uvless} geometry-only`:""}</span></div>`;
+ r.querySelector(".v61-stagewrap")?.appendChild(q);
+}
+function selection(){
+ const a=A();if(!a)return;let v=null;try{v=[...selected.values()].at(-1)}catch(e){}
+ if(!v?.object)return;
+ const m=v.object,base=m.userData.v71Base;if(!base)return;
+ const z=base.clone(),c=v.mode==="treatment"?0x168ee8:v.mode==="both"?0x8650d7:0x159bd3;
+ z.color.set(c);z.emissive.set(c);z.emissiveIntensity=.16;z.bumpMap=base.bumpMap;z.bumpScale=(base.bumpScale||.06)*1.08;z.roughness=.32;z.clearcoat=.22;z.needsUpdate=true;m.material=z;
+}
+function boot(){
+ const r=R();if(!r?.classList.contains("open"))return;
+ const t=setInterval(()=>{if(A()?.meshes?.length){clearInterval(t);apply()}},100);
+ setTimeout(()=>clearInterval(t),15000);
+}
+document.addEventListener("click",e=>{
+ if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,220);
+},false);
+document.addEventListener("pointerup",e=>{if(e.target.closest("#v61-canvas"))setTimeout(selection,90)},false);
+
+const st=document.createElement("style");st.textContent=`
+#v61-real3d.v70-render #v61-canvas canvas{filter:saturate(1.035) contrast(1.075) brightness(1.025)!important}
+.v71-quality{position:absolute;z-index:9;left:50%;bottom:106px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid rgba(211,226,229,.92);border-radius:9px;background:rgba(255,255,255,.88);box-shadow:0 7px 22px rgba(18,57,65,.06);backdrop-filter:blur(10px);pointer-events:none}
+.v71-hd{width:24px;height:24px;border-radius:7px;background:#135c6d;color:#fff;display:grid;place-items:center;font-size:7px;font-weight:900}
+.v71-quality b,.v71-quality span{display:block}.v71-quality b{font-size:5.5px;color:#28545e}.v71-quality span{font-size:4.5px;color:#84999d;margin-top:1px}
+@media(max-width:900px){.v71-quality{display:none}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V71 ANATOMICAL SURFACE DETAIL";
+})();
