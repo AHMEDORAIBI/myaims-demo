@@ -12115,3 +12115,180 @@ body.myaims-ar #v61-real3d{direction:rtl;text-align:right}@media(max-width:1000p
 
 /* myAIMS build marker */
 window.MYAIMS_BUILD="V64 BODYEXPLORER ENGINE FIX";
+
+/* =========================================================
+   myAIMS V65 — PREMIUM 3D CLINICAL VIEWER
+   Visual/interaction upgrade on top of the working V64 engine.
+   ========================================================= */
+(function(){
+const $=(q,r=document)=>r.querySelector(q), $$=(q,r=document)=>[...r.querySelectorAll(q)];
+let isolated=null, faded=false, labels=false;
+
+function root(){ return $("#v61-real3d"); }
+function selectedEntry(){
+  try { return [...selected.values()].at(-1) || null; } catch(e){ return null; }
+}
+function injectPremium(){
+ const r=root(); if(!r || r.dataset.v65==="1") return;
+ r.dataset.v65="1";
+ const stage=$(".v61-stagewrap",r), right=$(".v61-right",r);
+ if(stage){
+   const bar=document.createElement("div");
+   bar.className="v65-toolbar";
+   bar.innerHTML=`
+    <button data-v65-tool="select" class="on">⌖<span>Select</span></button>
+    <button data-v65-tool="rotate">↻<span>Rotate</span></button>
+    <button data-v65-tool="isolate">◇<span>Isolate</span></button>
+    <button data-v65-tool="fade">◐<span>Fade</span></button>
+    <button data-v65-tool="reset">⟲<span>Reset</span></button>`;
+   stage.appendChild(bar);
+
+   const quality=document.createElement("div");
+   quality.className="v65-quality";
+   quality.innerHTML=`<span><i></i> REAL 3D</span><b>High Detail</b>`;
+   stage.appendChild(quality);
+ }
+ if(right){
+   const card=document.createElement("section");
+   card.className="v65-muscle-card";
+   card.innerHTML=`
+    <div class="v65-emptyinfo">
+      <div class="v65-anatomy-icon">◎</div>
+      <b>Select an anatomical structure</b>
+      <small>اختر عضلة من النموذج لعرض تفاصيلها السريرية</small>
+    </div>`;
+   right.insertBefore(card,right.firstChild?.nextSibling||right.firstChild);
+ }
+ const foot=$(".v61-legend",r);
+ if(foot){
+   const controls=document.createElement("div");
+   controls.className="v65-bottom-controls";
+   controls.innerHTML=`
+    <label><input type="checkbox" data-v65-labels> <span>Show Labels</span></label>
+    <label><input type="checkbox" data-v65-transparent> <span>Transparent Mode</span></label>
+    <div class="v65-layer">▱ Muscular System</div>
+    <div class="v65-detail">⚙ High Detail</div>`;
+   foot.parentNode.insertBefore(controls,foot);
+ }
+ bindPremium(r);
+}
+
+function meshName(v){
+ return (v?.name||v?.object?.userData?.displayName||v?.object?.name||"Anatomical Structure")
+   .replace(/[_-]+/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+}
+function updateInfo(){
+ const r=root(), card=$(".v65-muscle-card",r); if(!card)return;
+ const v=selectedEntry();
+ if(!v){
+   card.innerHTML=`<div class="v65-emptyinfo"><div class="v65-anatomy-icon">◎</div><b>Select an anatomical structure</b><small>اختر عضلة من النموذج لعرض تفاصيلها السريرية</small></div>`;
+   return;
+ }
+ const n=meshName(v), pain=Number(v.pain||0);
+ card.innerHTML=`
+   <div class="v65-cardhead"><div><small>SELECTED STRUCTURE · البنية المحددة</small><h2>${n}</h2></div><span class="${v.mode||"pain"}">${String(v.mode||"pain").toUpperCase()}</span></div>
+   <div class="v65-preview"><div class="v65-muscle-symbol">◈</div><div><b>${n}</b><small>Muscular structure · بنية عضلية</small></div></div>
+   <div class="v65-actions">
+     <button data-v65-card="isolate">◇ Isolate</button>
+     <button data-v65-card="fade">◐ Fade Others</button>
+     <button data-v65-card="focus">⌖ Focus</button>
+   </div>
+   <div class="v65-painrow"><span>Pain intensity · شدة الألم</span><strong>${pain}/10</strong></div>
+   <div class="v65-painbar"><i style="width:${pain*10}%"></i></div>
+   <div class="v65-tags"><span>Clinical Selection</span><span>3D Anatomy</span><span>${v.mode||"Pain"}</span></div>`;
+ $$(".v65-actions button",card).forEach(b=>b.onclick=()=>premiumAction(b.dataset.v65Card));
+}
+function setOpacity(mesh,opacity){
+ if(!mesh?.material)return;
+ mesh.material.transparent=opacity<1;
+ mesh.material.opacity=opacity;
+ mesh.material.depthWrite=opacity>.35;
+}
+function isolate(){
+ if(!app?.meshes?.length)return;
+ const v=selectedEntry(); if(!v)return;
+ isolated=v.object;
+ app.meshes.forEach(m=>{m.visible=(m===isolated)});
+}
+function fadeOthers(){
+ if(!app?.meshes?.length)return;
+ const v=selectedEntry(); if(!v)return;
+ faded=!faded;
+ app.meshes.forEach(m=>setOpacity(m,m===v.object?1:(faded?.12:1)));
+}
+function resetPremium(){
+ if(!app?.meshes)return;
+ isolated=null; faded=false;
+ app.meshes.forEach(m=>{m.visible=true;setOpacity(m,1)});
+ try{fit("front")}catch(e){}
+}
+function focusSelected(){
+ if(!app)return; const v=selectedEntry(); if(!v)return;
+ const THREE=app.THREE, box=new THREE.Box3().setFromObject(v.object);
+ const c=box.getCenter(new THREE.Vector3()), size=box.getSize(new THREE.Vector3());
+ const d=Math.max(size.x,size.y,size.z)*7+8;
+ app.controls.target.copy(c);
+ app.camera.position.set(c.x,c.y,c.z+d);
+ app.controls.update();
+}
+function transparentMode(on){
+ if(!app?.meshes)return;
+ const v=selectedEntry();
+ app.meshes.forEach(m=>setOpacity(m,on?(m===v?.object?1:.24):1));
+}
+function premiumAction(a){
+ if(a==="isolate")isolate();
+ if(a==="fade")fadeOthers();
+ if(a==="focus")focusSelected();
+ if(a==="reset")resetPremium();
+}
+function bindPremium(r){
+ $$("[data-v65-tool]",r).forEach(b=>b.onclick=()=>{
+   const a=b.dataset.v65Tool;
+   if(a==="isolate")isolate(); else if(a==="fade")fadeOthers(); else if(a==="reset")resetPremium();
+   $$("[data-v65-tool]",r).forEach(x=>x.classList.toggle("on",x===b));
+ });
+ $("[data-v65-transparent]",r)?.addEventListener("change",e=>transparentMode(e.target.checked));
+ $("[data-v65-labels]",r)?.addEventListener("change",e=>{labels=e.target.checked;r.classList.toggle("v65-label-mode",labels)});
+}
+
+/* Narrow hook: refresh premium detail after a real V64 mesh selection. */
+document.addEventListener("pointerup",e=>{
+ const r=root(); if(!r?.classList.contains("open") || !e.target.closest("#v61-canvas"))return;
+ setTimeout(updateInfo,30);
+},false);
+document.addEventListener("input",e=>{
+ if(e.target.closest("#v61-real3d")?.id==="v61-real3d" && e.target.matches("[data-range]")) setTimeout(updateInfo,0);
+},false);
+
+/* Add premium shell whenever V64 opens, without changing the working engine. */
+document.addEventListener("click",e=>{
+ if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]')){
+   setTimeout(()=>{injectPremium();updateInfo()},80);
+ }
+},false);
+
+const st=document.createElement("style");
+st.textContent=`
+#v61-real3d{--v65-navy:#123f4a;--v65-teal:#086078;--v65-line:#dce8ea;--v65-soft:#f5f9fa}
+#v61-real3d .v61-stagewrap{background:radial-gradient(circle at 50% 38%,#fff 0,#f4f8f9 48%,#eaf1f3 100%)!important}
+#v61-real3d #v61-canvas canvas{filter:saturate(1.18) contrast(1.035)}
+.v65-toolbar{position:absolute;z-index:8;left:14px;top:74px;display:grid;gap:6px}
+.v65-toolbar button{width:52px!important;height:52px!important;padding:5px 2px!important;border:1px solid #d6e3e6!important;background:rgba(255,255,255,.96)!important;border-radius:10px!important;box-shadow:0 5px 18px rgba(19,63,74,.08);font-size:15px!important;color:#194d59!important}
+.v65-toolbar button span{display:block;font-size:6px!important;margin-top:2px}
+.v65-toolbar button.on{background:#0c5870!important;color:white!important;border-color:#0c5870!important}
+.v65-quality{position:absolute;z-index:8;right:13px;top:74px;background:rgba(255,255,255,.92);border:1px solid #dbe7e9;border-radius:9px;padding:7px 10px;box-shadow:0 4px 14px rgba(19,63,74,.06)}
+.v65-quality span,.v65-quality b{display:block;font-size:6px}.v65-quality span{color:#52757c}.v65-quality i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#27a67d;margin-inline-end:4px}.v65-quality b{margin-top:2px;color:#153f49}
+.v65-muscle-card{border:1px solid var(--v65-line);border-radius:10px;background:linear-gradient(180deg,#fff,#f8fbfb);margin:7px 0 10px;padding:10px;box-shadow:0 5px 18px rgba(23,70,78,.045)}
+.v65-emptyinfo{text-align:center;padding:12px 5px}.v65-anatomy-icon{font-size:25px;color:#8aaeb5}.v65-emptyinfo b,.v65-emptyinfo small{display:block}.v65-emptyinfo b{font-size:8px;margin:4px}.v65-emptyinfo small{font-size:6px;color:#84999d}
+.v65-cardhead{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.v65-cardhead small{font-size:5.5px;color:#b08032;font-weight:900}.v65-cardhead h2{font-size:12px!important;margin:2px 0 7px!important;color:#153f49!important;line-height:1.2}.v65-cardhead>span{font-size:5px;padding:4px 6px;border-radius:10px;background:#fdebed;color:#c94750;font-weight:900}.v65-cardhead>span.treatment{background:#e9f3ff;color:#2675c9}.v65-cardhead>span.both{background:#f2ecfb;color:#7a4fc1}
+.v65-preview{display:flex;align-items:center;gap:8px;background:#eef5f6;border-radius:8px;padding:8px}.v65-muscle-symbol{width:35px;height:35px;border-radius:8px;background:linear-gradient(145deg,#b64d3e,#7e2d28);display:grid;place-items:center;color:#fff;font-size:16px}.v65-preview b,.v65-preview small{display:block}.v65-preview b{font-size:7px}.v65-preview small{font-size:5.5px;color:#7c9398}
+.v65-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:7px}.v65-actions button{height:27px!important;border:1px solid #d8e5e7!important;background:#fff!important;border-radius:6px!important;padding:0!important;font-size:5.7px!important;color:#315e67!important}
+.v65-painrow{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:6px}.v65-painrow strong{font-size:10px}.v65-painbar{height:4px;background:#e6eeee;border-radius:5px;overflow:hidden;margin-top:4px}.v65-painbar i{display:block;height:100%;background:linear-gradient(90deg,#ef6a65,#e23e4b);border-radius:5px}.v65-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}.v65-tags span{font-size:5px;padding:3px 6px;background:#edf4f5;border-radius:10px;color:#55757c}
+.v65-bottom-controls{position:absolute;z-index:7;bottom:29px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.94);border:1px solid #dbe6e8;border-radius:9px;padding:6px 9px;box-shadow:0 4px 16px rgba(21,64,72,.07);white-space:nowrap}.v65-bottom-controls label{font-size:5.8px;display:flex;align-items:center;gap:4px}.v65-bottom-controls input{accent-color:#0c6076}.v65-layer,.v65-detail{font-size:5.8px;padding:5px 7px;background:#f1f6f7;border-radius:6px;color:#315e67}
+#v61-real3d.v65-label-mode #v61-canvas:after{content:"Interactive anatomical labels enabled";position:absolute;left:50%;top:12px;transform:translateX(-50%);font-size:6px;background:#123f4ae8;color:#fff;padding:5px 9px;border-radius:10px;pointer-events:none}
+@media(max-width:900px){.v65-bottom-controls{display:none}.v65-toolbar{left:6px}.v65-quality{display:none}}
+`;
+document.head.appendChild(st);
+window.MYAIMS_BUILD="V65 PREMIUM 3D CLINICAL VIEWER";
+})();
