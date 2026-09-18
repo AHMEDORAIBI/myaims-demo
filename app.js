@@ -12721,111 +12721,111 @@ document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ini
 })();
 
 /* =========================================================
- myAIMS V52 — CLINICAL SESSION WORKSPACE
- Actual implementation of the approved visual concept.
+ myAIMS V53 — SAFE CLINICAL LAUNCHER
+ Built from V51 stable base, NOT from broken V52.
+ New visual launcher + explicit action routing.
+ No hidden-button click dependency for the launcher itself.
  ========================================================= */
 (function(){
 const AR=()=>document.documentElement.dir==="rtl"||document.body.classList.contains("myaims-ar");
 const T=(e,a)=>AR()?a:e;
-const M=()=>document.querySelector("#v24-clinical-modal");
-const R=()=>M()?.querySelector(".v34-clinical-workspace")||M();
+const modal=()=>document.querySelector("#v24-clinical-modal");
+const root=()=>modal()?.querySelector(".v34-clinical-workspace")||modal();
+const S=()=>window.state||window.appState||{};
 const modules=[
-["assessment","♙","Assessment & Pain Map","التقييم وخريطة الألم","Assess pain, ROM, functional status and clinical findings","تقييم الألم ومدى الحركة والحالة الوظيفية والنتائج السريرية"],
-["plan","☷","Treatment Plan","الخطة العلاجية","Set goals, plan interventions and treatment frequency","تحديد الأهداف والتدخلات وتكرار العلاج"],
-["note","▤","Session Note","ملاحظة الجلسة","Document today's session quickly and efficiently","توثيق جلسة اليوم بسرعة ووضوح"],
-["progress","▥","Progress Review","مراجعة التقدم","Track outcomes and compare with previous sessions","متابعة النتائج ومقارنتها بالجلسات السابقة"],
-["hep","⌁","Home Exercise Program","التمارين المنزلية","Assign exercises and provide patient instructions","تحديد التمارين وتعليمات المريض"],
-["history","▱","Patient History","سجل المريض","View history, documents and past clinical notes","عرض السجل والمستندات والملاحظات السابقة"]
+ ["assessment","◉","Assessment & Pain Map","التقييم وخريطة الألم","Pain, body areas and clinical assessment","الألم، مناطق الجسم والتقييم السريري"],
+ ["plan","✚","Treatment Plan","الخطة العلاجية","Goals, sessions and treatment planning","الأهداف والجلسات والتخطيط العلاجي"],
+ ["note","▤","Session Note","ملاحظة الجلسة","Clinical comments and interventions","الملاحظات السريرية والتدخلات العلاجية"],
+ ["progress","◎","Progress Review","مراجعة التقدم","Goals, outcomes and comparison","الأهداف والنتائج والمقارنة"],
+ ["hep","⌁","Home Exercise Program","برنامج التمارين المنزلية","Exercises and patient instructions","التمارين وتعليمات المريض"],
+ ["history","↺","Patient History","سجل المريض","Previous sessions and clinical history","الجلسات السابقة والسجل السريري"]
 ];
-function oldBtn(r,re){return [...r.querySelectorAll("button")].find(b=>re.test((b.textContent||"").trim()))}
-function patient(){
- const db=window.state||window.appState||{};
- const name=(R()?.querySelector(".v34-patient h3,.v34-patient strong")?.textContent||"Sara Ahmed").trim();
- const p=(db.patients||[]).find(x=>x.name===name)||(db.patients||[])[0]||{};
- return {name:name,id:p.id||"P-1001",phone:p.phone||p.mobile||"+973 3600 1122"};
+
+function exactButton(r,re){return [...r.querySelectorAll("button")].find(b=>re.test((b.textContent||"").trim()))}
+function currentPatient(){
+ const r=root(),db=S();
+ const name=(r?.querySelector(".v34-patient h3,.v34-patient strong")?.textContent||"").trim();
+ return (db.patients||[]).find(p=>p.name===name)||(db.patients||[])[0]||{name:name||"Patient"};
 }
-function appt(){
- const db=window.state||window.appState||{},p=patient();
- const a=(db.appointments||[]).find(x=>x.patient===p.name)||{};
- return {date:a.date||"2026-09-19",time:a.time||"09:30",therapist:a.therapist||"Dr. Eman",room:a.room||"Treatment Room 1",duration:a.duration||60,visit:a.visitType||a.service||"Initial Assessment"};
+function currentAppointment(){
+ const db=S(),p=currentPatient();
+ const visibleDate=(root()?.querySelector(".v34-session-facts")?.textContent||"").match(/20\d{2}-\d{2}-\d{2}/)?.[0];
+ return (db.appointments||[]).find(a=>a.patient===p.name && (!visibleDate||a.date===visibleDate)) ||
+        (db.appointments||[]).find(a=>a.patient===p.name)||{};
 }
-function recent(){
- const db=window.state||window.appState||{},p=patient();
- return (db.appointments||[]).filter(x=>x.patient===p.name).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time)).slice(0,3);
-}
-function hideOld(r){
- r.querySelectorAll("#v49-clinical-hub,#v50-hub,#v51-hub,.v49-command-center,.v35-flow-steps,.v35-completion,.v24-tabs,.v34-phrase-assistant,.v35-compare,#v24-tab-session,#v24-tab-plan,#v24-tab-history,#v26-body-map,.v44-experience,.v42-pain-command,.v43-body-canvas").forEach(x=>x.classList.add("v52-hide"));
+function hideLegacy(r){
+ r.querySelectorAll("#v49-clinical-hub,#v50-hub,#v51-hub,.v49-command-center,.v35-flow-steps,.v35-completion,.v24-tabs,.v34-phrase-assistant,.v35-compare,#v24-tab-session,#v24-tab-plan,#v24-tab-history,#v26-body-map,.v44-experience,.v42-pain-command,.v43-body-canvas").forEach(x=>x.classList.add("v53-engine"));
 }
 function build(){
- const r=R();if(!r)return;hideOld(r);
- if(r.querySelector("#v52-workspace"))return;
- const p=patient(),a=appt(),rec=recent();
- const w=document.createElement("section");w.id="v52-workspace";
+ const r=root();if(!r)return;hideLegacy(r);
+ if(r.querySelector("#v53-launcher"))return;
+ const p=currentPatient(),a=currentAppointment();
+ const initials=(p.name||"P").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase();
+ const w=document.createElement("section");w.id="v53-launcher";
  w.innerHTML=`
- <div class="v52-patient">
-   <div class="v52-avatar">${p.name.split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div>
-   <div><small>${T("PATIENT","المريض")}</small><h2>${p.name}</h2><p>${p.id} &nbsp; | &nbsp; ${p.phone}</p></div>
-   <div class="v52-patient-spacer"></div>
-   <div class="v52-visit"><small>${T("SESSION","الجلسة")}</small><b>${a.date} · ${a.time}</b><span>${a.therapist} · ${a.room}</span></div>
-   <button data-v52-profile>${T("View Patient Profile","عرض ملف المريض")} →</button>
+ <div class="v53-patientbar">
+  <div class="v53-avatar">${initials}</div>
+  <div><small>${T("CURRENT PATIENT","المريض الحالي")}</small><h2>${p.name||""}</h2><p>${p.id||""}${p.phone?" · "+p.phone:""}</p></div>
+  <div class="v53-spacer"></div>
+  <div class="v53-session"><small>${T("CURRENT SESSION","الجلسة الحالية")}</small><b>${a.date||""}${a.time?" · "+a.time:""}</b><span>${a.therapist||""}${a.room?" · "+a.room:""}</span></div>
  </div>
- <div class="v52-layout">
-  <main>
-   <div class="v52-heading"><div><span class="v52-clip">▣</span><div><h1>${T("Clinical Session Workspace","مساحة عمل الجلسة السريرية")}</h1><p>${T("Choose a section to open a full-screen workspace","اختر القسم لفتحه في شاشة عمل كاملة")}</p></div></div><div class="v52-tags"><span>▣ ${a.date} ${a.time}</span><span>⌖ ${a.room}</span></div></div>
-   <div class="v52-modules">${modules.map((m,i)=>`<button data-v52="${m[0]}" class="m${i+1}"><i>${m[1]}</i><div><b>${T(m[2],m[3])}</b><strong>${T(m[3],m[2])}</strong><small>${T(m[4],m[5])}</small></div><em>→</em></button>`).join("")}</div>
-   <div class="v52-quote"><span>“</span><b>${T("Small steps. Significant progress.","خطوات صغيرة .. نحو حياة أفضل")}</b></div>
-  </main>
-  <aside>
-   <section><h3>${T("Session Information","معلومات الجلسة")}</h3><dl><div><dt>▣ ${T("Date & Time","التاريخ والوقت")}</dt><dd>${a.date} ${a.time}</dd></div><div><dt>⌖ ${T("Room","الغرفة")}</dt><dd>${a.room}</dd></div><div><dt>◷ ${T("Duration","المدة")}</dt><dd>${a.duration} ${T("minutes","دقيقة")}</dd></div><div><dt>● ${T("Therapist","المعالج")}</dt><dd>${a.therapist}</dd></div></dl></section>
-   <section><h3>${T("Quick Actions","إجراءات سريعة")}</h3><div class="v52-actions"><button data-v52-action="update">♥ ${T("Clinical Update","تحديث سريري")}</button><button data-v52-action="document">⌕ ${T("Upload Document","رفع مستند")}</button><button data-v52-action="follow">▣ ${T("Add Follow-up","إضافة متابعة")}</button><button data-v52-action="print">▤ ${T("Print / Export","طباعة / تصدير")}</button></div></section>
-   <section><div class="v52-aside-head"><h3>${T("Recent Sessions","الجلسات الأخيرة")}</h3><button data-v52-history>${T("View All","عرض الكل")}</button></div><div class="v52-recent">${rec.length?rec.map(x=>`<article><span>▤</span><small>${x.date||""}</small><div><b>${x.visitType||x.service||T("Treatment Session","جلسة علاجية")}</b><em>${x.therapist||""}</em></div></article>`).join(""):`<p>${T("No previous sessions","لا توجد جلسات سابقة")}</p>`}</div></section>
-  </aside>
- </div>`;
- const ctx=r.querySelector(".v34-context");
- (ctx||r.firstElementChild)?.insertAdjacentElement("afterend",w);
- w.querySelectorAll("[data-v52]").forEach(b=>b.onclick=()=>openModule(b.dataset.v52));
- w.querySelector("[data-v52-history]").onclick=()=>openModule("history");
- w.querySelector("[data-v52-profile]").onclick=()=>{const b=[...document.querySelectorAll("button")].find(x=>/Patient Profile|ملف المريض/i.test(x.textContent||""));if(b)b.click()};
- w.querySelector('[data-v52-action="update"]').onclick=()=>{if(window.openV29ClinicalUpdate)window.openV29ClinicalUpdate(p.id)};
- w.querySelector('[data-v52-action="print"]').onclick=()=>oldBtn(r,/Preview Report|معاينة التقرير/i)?.click();
+ <div class="v53-head"><div><small>${T("CLINICAL WORKSPACE","مساحة العمل السريرية")}</small><h1>${T("What would you like to document?","ماذا تريد أن توثق؟")}</h1><p>${T("Open one focused workspace. No searching and no long scrolling.","افتح مساحة عمل واحدة واضحة، بدون بحث وبدون تمرير طويل.")}</p></div><span class="v53-live">● ${T("Session Active","الجلسة نشطة")}</span></div>
+ <div class="v53-grid">${modules.map((m,i)=>`<button type="button" data-v53="${m[0]}" class="${i===0?"primary":""}"><i>${m[1]}</i><div><b>${T(m[2],m[3])}</b><small>${T(m[4],m[5])}</small></div><em>${T("Open","فتح")} ›</em></button>`).join("")}</div>
+ <div class="v53-actions"><span>${T("SESSION ACTIONS","إجراءات الجلسة")}</span><button data-v53-save>${T("Save Clinical Session","حفظ الجلسة السريرية")}</button><button data-v53-report>${T("Preview Report","معاينة التقرير")}</button><button data-v53-close>${T("Close","إغلاق")}</button></div>`;
+ const context=r.querySelector(".v34-context");
+ (context||r.firstElementChild)?.insertAdjacentElement("afterend",w);
+ w.querySelectorAll("[data-v53]").forEach(b=>b.addEventListener("click",()=>route(b.dataset.v53)));
+ w.querySelector("[data-v53-save]").onclick=()=>safeCall(["saveV24ClinicalSession","saveClinicalSession"],/Save Clinical Session|حفظ الجلسة السريرية/i);
+ w.querySelector("[data-v53-report]").onclick=()=>safeCall(["previewV24ClinicalReport","previewClinicalReport"],/Preview Report|معاينة التقرير/i);
+ w.querySelector("[data-v53-close]").onclick=()=>{const b=exactButton(r,/^(Close|إغلاق)$/i);if(b)b.click()};
 }
-function panel(id,r){
- if(id==="note")return r.querySelector("#v24-tab-session");
- if(id==="plan")return r.querySelector("#v24-tab-plan");
- if(id==="history")return r.querySelector("#v24-tab-history");
+function safeCall(names,fallback){
+ for(const n of names)if(typeof window[n]==="function"){try{window[n]();return true}catch(e){}}
+ const b=exactButton(root(),fallback);if(b){b.click();return true}return false;
 }
-function shell(){
- let o=document.querySelector("#v52-full");if(o)return o;
- o=document.createElement("div");o.id="v52-full";o.innerHTML=`<section><header><div><small>${T("MYAIMS · CLINICAL WORKSPACE","أهدافي · مساحة العمل السريرية")}</small><h2></h2><p></p></div><button data-x>×</button></header><main></main><footer><span>● ${T("Changes are linked to the current patient session","التغييرات مرتبطة بجلسة المريض الحالية")}</span><button data-back>${T("Done · Back to Clinical Session","تم · العودة للجلسة السريرية")}</button></footer></section>`;
- document.body.appendChild(o);o.querySelector("[data-x]").onclick=close;o.querySelector("[data-back]").onclick=close;return o;
+function openOverlay(id,title,sub,node){
+ if(!node)return false;
+ let o=document.querySelector("#v53-overlay");
+ if(!o){o=document.createElement("div");o.id="v53-overlay";o.innerHTML=`<section><header><div><small>${T("MYAIMS · CLINICAL WORKSPACE","أهدافي · مساحة العمل السريرية")}</small><h2></h2><p></p></div><button data-v53x>×</button></header><main></main><footer><span>● ${T("Linked to current clinical session","مرتبط بالجلسة السريرية الحالية")}</span><button data-v53done>${T("Done · Back to Clinical Menu","تم · العودة للقائمة السريرية")}</button></footer></section>`;document.body.appendChild(o);o.querySelector("[data-v53x]").onclick=closeOverlay;o.querySelector("[data-v53done]").onclick=closeOverlay}
+ node.__v53parent=node.parentElement;node.__v53next=node.nextSibling;node.classList.remove("v53-engine","v51-old-panel","v50-legacy");node.style.setProperty("display","block","important");
+ o.querySelector("h2").textContent=title;o.querySelector("header p").textContent=sub;o.querySelector("main").replaceChildren(node);o.classList.add("open");document.body.classList.add("v53-lock");return true;
 }
-function move(n,stage){if(!n)return false;n.__v52p=n.parentElement;n.__v52n=n.nextSibling;n.classList.remove("v52-hide","v51-old-panel","v50-legacy");n.style.setProperty("display","block","important");stage.replaceChildren(n);return true}
-function openModule(id){
- const r=R();if(!r)return;
- if(id==="assessment"&&window.openV47PainMap)return window.openV47PainMap();
- if(id==="plan")oldBtn(r,/^(Treatment Plan|الخطة العلاجية)$/i)?.click();
- if(id==="note")oldBtn(r,/^(Session Note|ملاحظة الجلسة)$/i)?.click();
- if(id==="history")oldBtn(r,/^(Patient History|سجل المريض)$/i)?.click();
- if(id==="progress"){if(window.openV30ProgressReview)return window.openV30ProgressReview();oldBtn(r,/Progress Review|مراجعة التقدم/i)?.click();return}
- if(id==="hep"){oldBtn(r,/Home Exercise|Exercise Program|التمارين المنزلية/i)?.click();return}
- setTimeout(()=>{const m=modules.find(x=>x[0]===id),o=shell(),n=panel(id,r);o.querySelector("h2").textContent=T(m[2],m[3]);o.querySelector("header p").textContent=T(m[4],m[5]);if(move(n,o.querySelector("main"))){o.classList.add("open");document.body.classList.add("v52-lock")}},100)
+function closeOverlay(){
+ const o=document.querySelector("#v53-overlay");if(!o)return,n=o.querySelector("main").firstElementChild;
+ if(n&&n.__v53parent){if(n.__v53next&&n.__v53next.parentNode===n.__v53parent)n.__v53parent.insertBefore(n,n.__v53next);else n.__v53parent.appendChild(n);n.classList.add("v53-engine");n.style.removeProperty("display")}
+ o.classList.remove("open");document.body.classList.remove("v53-lock");setTimeout(build,20);
 }
-function close(){
- const o=document.querySelector("#v52-full");if(!o)return,n=o.querySelector("main").firstElementChild;
- if(n&&n.__v52p){if(n.__v52n&&n.__v52n.parentNode===n.__v52p)n.__v52p.insertBefore(n,n.__v52n);else n.__v52p.appendChild(n);n.classList.add("v52-hide");n.style.removeProperty("display")}
- o.classList.remove("open");document.body.classList.remove("v52-lock")
+function route(id){
+ const r=root(),m=modules.find(x=>x[0]===id);
+ if(!r||!m)return;
+ if(id==="assessment"){
+   if(typeof window.openV47PainMap==="function"){window.openV47PainMap();return}
+   const map=r.querySelector("#v26-body-map");if(map){openOverlay(id,T(m[2],m[3]),T(m[4],m[5]),map);return}
+ }
+ if(id==="progress"){
+   for(const n of ["openV30ProgressReview","openProgressReview"])if(typeof window[n]==="function"){window[n]();return}
+ }
+ if(id==="hep"){
+   for(const n of ["openV36HEP","openHomeExerciseProgram"])if(typeof window[n]==="function"){window[n]();return}
+ }
+ const selectors={plan:"#v24-tab-plan",note:"#v24-tab-session",history:"#v24-tab-history"};
+ const p=r.querySelector(selectors[id]||"");
+ if(p){openOverlay(id,T(m[2],m[3]),T(m[4],m[5]),p);return}
+ /* Last-resort compatibility only when a dedicated function/panel does not exist. */
+ const regex={plan:/^(Treatment Plan|الخطة العلاجية)$/i,note:/^(Session Note|ملاحظة الجلسة)$/i,history:/^(Patient History|سجل المريض)$/i,hep:/Home Exercise|Exercise Program|التمارين المنزلية/i,progress:/Progress Review|مراجعة التقدم/i}[id];
+ const b=regex&&exactButton(r,regex);if(b)b.click();
 }
-window.openV52ClinicalWorkspace=openModule;
-if(!document.querySelector("#v52-css")){const s=document.createElement("style");s.id="v52-css";s.textContent=`
-#v24-clinical-modal .v52-hide,#v24-clinical-modal #v49-clinical-hub,#v24-clinical-modal #v50-hub,#v24-clinical-modal #v51-hub{display:none!important}
-#v52-workspace{margin:12px 14px 16px!important}.v52-patient{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #dbe6e8;border-radius:15px;padding:13px 16px;box-shadow:0 6px 18px rgba(25,69,77,.04)}.v52-avatar{width:58px;height:58px;border-radius:14px;background:linear-gradient(135deg,#2b6975,#174d58);color:#fff;display:grid;place-items:center;font-size:20px;font-weight:900}.v52-patient small,.v52-visit small{display:block;font-size:9px!important;color:#b07f2e;font-weight:900}.v52-patient h2{font-size:21px!important;margin:2px 0!important;color:#173f49!important}.v52-patient p{font-size:11px!important;color:#789095;margin:0}.v52-patient-spacer{flex:1}.v52-visit{padding-inline:18px;border-inline-start:1px solid #e1eaeb}.v52-visit b,.v52-visit span{display:block;font-size:11px;color:#31565e}.v52-visit span{font-size:10px;color:#81959a;margin-top:3px}.v52-patient>button{height:42px!important;border:1px solid #d7a94f!important;background:#fffaf1!important;color:#9b6b1d!important;border-radius:10px!important;padding:0 16px!important;font-weight:850!important}
-.v52-layout{display:grid;grid-template-columns:minmax(0,1fr) 265px;gap:12px;margin-top:12px}.v52-layout>main,.v52-layout>aside>section{background:#fff;border:1px solid #dbe6e8;border-radius:15px;box-shadow:0 6px 18px rgba(25,69,77,.04)}.v52-layout>main{padding:16px}.v52-heading,.v52-heading>div:first-child{display:flex;justify-content:space-between;align-items:center;gap:10px}.v52-clip{font-size:29px;color:#174f5b}.v52-heading h1{font-size:24px!important;color:#173f49!important;margin:0!important}.v52-heading p{font-size:11.5px!important;color:#71898f;margin:2px 0 0}.v52-tags{display:flex;gap:6px}.v52-tags span{background:#f1f6f6;border-radius:9px;padding:8px 10px;font-size:10px;color:#41636b}
-.v52-modules{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}.v52-modules>button{min-height:205px!important;position:relative!important;text-align:start!important;border:0!important;border-radius:14px!important;padding:17px!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;align-items:flex-start!important;transition:.18s!important}.v52-modules>button:hover{transform:translateY(-3px)!important;box-shadow:0 13px 25px rgba(25,69,77,.10)!important}.v52-modules .m1{background:#eaf6ff!important}.v52-modules .m2{background:#fff6e9!important}.v52-modules .m3{background:#eaf7f4!important}.v52-modules .m4{background:#f1efff!important}.v52-modules .m5{background:#fff0f0!important}.v52-modules .m6{background:#eaf5ff!important}.v52-modules i{font-style:normal;font-size:47px;line-height:1;color:#286f83;margin:4px 0 22px}.v52-modules .m2 i{color:#c58a26}.v52-modules .m3 i{color:#087067}.v52-modules .m4 i{color:#6556bd}.v52-modules .m5 i{color:#db5c60}.v52-modules .m6 i{color:#287ac3}.v52-modules b,.v52-modules strong,.v52-modules small{display:block}.v52-modules b{font-size:15px!important;color:#183e47}.v52-modules strong{font-size:14px!important;color:#172f35;margin:2px 0 8px}.v52-modules small{font-size:10.5px!important;line-height:1.45;color:#53747c;max-width:85%}.v52-modules em{position:absolute;inset-inline-end:15px;top:108px;width:37px;height:37px;border-radius:50%;display:grid;place-items:center;background:#1b5b68;color:#fff;font-style:normal;font-size:20px}.v52-modules .m2 em{background:#c68a24}.v52-modules .m3 em{background:#087067}.v52-modules .m4 em{background:#6657bd}.v52-modules .m5 em{background:#db5b60}.v52-modules .m6 em{background:#287ac3}.v52-quote{display:flex;align-items:center;gap:10px;margin-top:13px;padding:11px 15px;border-top:1px solid #ead7ad;color:#a87120}.v52-quote span{font-size:31px;color:#d6ae5d}.v52-quote b{font-size:12px;font-style:italic}
-.v52-layout>aside{display:flex;flex-direction:column;gap:10px}.v52-layout>aside>section{padding:13px}.v52-layout aside h3{font-size:13px!important;color:#173f49!important;margin:0 0 10px!important}.v52-layout dl{margin:0}.v52-layout dl>div{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #edf2f3;font-size:10px}.v52-layout dt{color:#496b73}.v52-layout dd{margin:0;color:#31565e;font-weight:800}.v52-actions{display:grid;gap:6px}.v52-actions button{height:35px!important;text-align:start!important;border:1px solid #dbe5e7!important;background:#f9fbfb!important;border-radius:8px!important;padding:0 10px!important;color:#31565e!important;font-size:10.5px!important;font-weight:750!important}.v52-aside-head{display:flex;justify-content:space-between;align-items:center}.v52-aside-head button{border:0!important;background:transparent!important;color:#226a77!important;font-size:9px!important}.v52-recent article{display:grid;grid-template-columns:20px 65px 1fr;gap:6px;align-items:start;padding:7px 0;border-bottom:1px solid #edf2f3}.v52-recent article>span{color:#267488}.v52-recent article>small{font-size:8.5px!important;color:#57767d}.v52-recent b,.v52-recent em{display:block;font-size:9.5px;color:#31565e}.v52-recent em{font-style:normal;color:#718b91;margin-top:2px}
-#v52-full{display:none;position:fixed;inset:0;z-index:440000;background:rgba(8,29,34,.84);backdrop-filter:blur(9px);padding:8px}#v52-full.open{display:block}body.v52-lock{overflow:hidden!important}#v52-full>section{width:calc(100vw - 16px);height:calc(100vh - 16px);display:grid;grid-template-rows:auto 1fr auto;background:#f3f7f7;border-radius:18px;overflow:hidden;box-shadow:0 45px 130px rgba(0,0,0,.45)}#v52-full>section>header{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(125deg,#123f49,#205f69);color:#fff;padding:14px 20px}#v52-full header small{font-size:9px!important;color:#e6bd69!important;font-weight:900}#v52-full h2{font-size:27px!important;color:#fff!important;margin:2px 0!important}#v52-full header p{font-size:11px!important;color:#d7e6e8;margin:0}#v52-full header>button{width:42px;height:42px!important;min-height:42px!important;background:rgba(255,255,255,.1)!important;color:#fff!important;border:1px solid rgba(255,255,255,.2)!important;border-radius:10px!important;font-size:23px!important}#v52-full main{min-height:0;overflow:auto;padding:15px 18px}#v52-full main>*{display:block!important;max-width:1500px!important;min-height:calc(100% - 2px);margin:0 auto!important;padding:16px!important;background:#fff!important;border:1px solid #dbe6e8!important;border-radius:14px!important;box-sizing:border-box!important}#v52-full>section>footer{display:flex;justify-content:space-between;align-items:center;background:#fff;border-top:1px solid #d9e5e6;padding:10px 16px;font-size:10px;color:#758d92}#v52-full footer button{height:40px!important;background:#174f5b!important;color:#fff!important;border:0!important;border-radius:9px!important;padding:0 17px!important;font-size:11px!important;font-weight:900!important}
-body.myaims-ar #v52-workspace,body.myaims-ar #v52-full>section{direction:rtl;text-align:right}
-@media(max-width:1100px){.v52-layout{grid-template-columns:1fr}.v52-layout>aside{display:grid;grid-template-columns:repeat(3,1fr)}.v52-modules{grid-template-columns:repeat(2,1fr)}}@media(max-width:680px){.v52-modules{grid-template-columns:1fr}.v52-layout>aside{grid-template-columns:1fr}.v52-patient{flex-wrap:wrap}.v52-patient-spacer{display:none}.v52-visit{border:0;padding:0}.v52-heading{align-items:flex-start;flex-direction:column}#v52-full{padding:0}#v52-full>section{width:100vw;height:100vh;border-radius:0}}
+window.openV53ClinicalWorkspace=route;
+
+if(!document.querySelector("#v53-css")){const s=document.createElement("style");s.id="v53-css";s.textContent=`
+#v24-clinical-modal .v53-engine,#v24-clinical-modal #v49-clinical-hub,#v24-clinical-modal #v50-hub,#v24-clinical-modal #v51-hub{display:none!important}
+#v53-launcher{margin:12px 14px 16px;padding:0;background:transparent}.v53-patientbar{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #d9e6e8;border-radius:15px;padding:13px 15px}.v53-avatar{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#174f5b,#2b6e79);color:#fff;display:grid;place-items:center;font-size:19px;font-weight:900}.v53-patientbar small,.v53-session small{display:block;font-size:9px!important;color:#b07d29;font-weight:900}.v53-patientbar h2{font-size:20px!important;color:#173f49!important;margin:2px 0!important}.v53-patientbar p{font-size:10.5px!important;color:#789095;margin:0}.v53-spacer{flex:1}.v53-session{border-inline-start:1px solid #e2eaeb;padding-inline-start:18px}.v53-session b,.v53-session span{display:block;font-size:11px;color:#31565e}.v53-session span{font-size:10px;color:#7b9196;margin-top:3px}
+.v53-head{display:flex;justify-content:space-between;align-items:center;gap:14px;background:#fff;border:1px solid #d9e6e8;border-radius:15px 15px 0 0;margin-top:10px;padding:15px 17px 12px;border-bottom:0}.v53-head small{font-size:9px!important;color:#b07d29;font-weight:900}.v53-head h1{font-size:25px!important;color:#173f49!important;margin:2px 0!important}.v53-head p{font-size:11.5px!important;color:#71898f;margin:0}.v53-live{background:#eaf4f1;color:#347064;border-radius:99px;padding:7px 11px;font-size:10px;font-weight:850}
+.v53-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;background:#fff;border-inline:1px solid #d9e6e8;padding:4px 17px 15px}.v53-grid>button{min-height:145px!important;display:grid!important;grid-template-columns:52px 1fr!important;grid-template-rows:1fr auto!important;gap:10px!important;text-align:start!important;border:1px solid #dce7e8!important;background:#f7fafa!important;border-radius:14px!important;padding:14px!important;color:#31565e!important;transition:.16s!important}.v53-grid>button:hover{transform:translateY(-2px)!important;border-color:#8eb4b8!important;box-shadow:0 10px 22px rgba(25,69,77,.08)!important}.v53-grid>button.primary{background:linear-gradient(135deg,#174f5b,#246b76)!important;color:#fff!important;border-color:#174f5b!important}.v53-grid i{grid-row:1/3;width:50px;height:50px;display:grid;place-items:center;border-radius:13px;background:#e3efef;color:#23636d;font-style:normal;font-size:23px}.v53-grid .primary i{background:rgba(255,255,255,.14);color:#efc46d}.v53-grid b,.v53-grid small{display:block}.v53-grid b{font-size:15.5px!important}.v53-grid small{font-size:11px!important;line-height:1.45;color:#789095;margin-top:5px}.v53-grid .primary small{color:#dce9eb}.v53-grid em{grid-column:2;font-style:normal;font-size:10px;font-weight:900;color:#a17834}.v53-grid .primary em{color:#efc46d}
+.v53-actions{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #d9e6e8;border-top:1px solid #e7eeee;border-radius:0 0 15px 15px;padding:10px 17px}.v53-actions>span{margin-inline-end:auto;font-size:9px;font-weight:900;color:#a07834}.v53-actions button{height:36px!important;border:1px solid #d8e4e5!important;background:#fff!important;border-radius:8px!important;padding:0 12px!important;font-size:10.5px!important;font-weight:800!important}
+#v53-overlay{display:none;position:fixed;inset:0;z-index:450000;background:rgba(8,29,34,.84);backdrop-filter:blur(9px);padding:8px}#v53-overlay.open{display:block}body.v53-lock{overflow:hidden!important}#v53-overlay>section{width:calc(100vw - 16px);height:calc(100vh - 16px);display:grid;grid-template-rows:auto 1fr auto;background:#f3f7f7;border-radius:18px;overflow:hidden;box-shadow:0 45px 130px rgba(0,0,0,.45)}#v53-overlay>section>header{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(125deg,#123f49,#205f69);color:#fff;padding:14px 20px}#v53-overlay header small{font-size:9px!important;color:#e6bd69!important;font-weight:900}#v53-overlay h2{font-size:27px!important;color:#fff!important;margin:2px 0!important}#v53-overlay header p{font-size:11px!important;color:#d7e6e8;margin:0}#v53-overlay header>button{width:42px;height:42px!important;min-height:42px!important;background:rgba(255,255,255,.1)!important;color:#fff!important;border:1px solid rgba(255,255,255,.2)!important;border-radius:10px!important;font-size:23px!important}#v53-overlay main{min-height:0;overflow:auto;padding:15px 18px}#v53-overlay main>*{display:block!important;max-width:1500px!important;min-height:calc(100% - 2px);margin:0 auto!important;padding:16px!important;background:#fff!important;border:1px solid #dbe6e8!important;border-radius:14px!important;box-sizing:border-box!important}#v53-overlay>section>footer{display:flex;justify-content:space-between;align-items:center;background:#fff;border-top:1px solid #d9e5e6;padding:10px 16px;font-size:10px;color:#758d92}#v53-overlay footer button{height:40px!important;background:#174f5b!important;color:#fff!important;border:0!important;border-radius:9px!important;padding:0 17px!important;font-size:11px!important;font-weight:900!important}
+body.myaims-ar #v53-launcher,body.myaims-ar #v53-overlay>section{direction:rtl;text-align:right}@media(max-width:950px){.v53-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.v53-grid{grid-template-columns:1fr}.v53-patientbar{flex-wrap:wrap}.v53-spacer{display:none}.v53-session{border:0;padding:0}.v53-head{align-items:flex-start;flex-direction:column}#v53-overlay{padding:0}#v53-overlay>section{width:100vw;height:100vh;border-radius:0}}
 `;document.head.appendChild(s)}
-function init(){build();let i=0,t=setInterval(()=>{build();if(++i>50)clearInterval(t)},120);new MutationObserver(()=>{clearTimeout(window.__v52);window.__v52=setTimeout(build,55)}).observe(document.body,{childList:true,subtree:true})}
+function init(){build();let i=0,t=setInterval(()=>{build();if(++i>50)clearInterval(t)},120);new MutationObserver(()=>{clearTimeout(window.__v53);window.__v53=setTimeout(build,60)}).observe(document.body,{childList:true,subtree:true})}
 document.readyState==="loading"?document.addEventListener("DOMContentLoaded",init):init();
 })();
