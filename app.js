@@ -11544,3 +11544,124 @@ window.MYAIMS_BUILD = "V54 CLEAN CORE";
   `;
   document.head.appendChild(css);
 })();
+
+/* =========================================================
+   myAIMS V56 — PAIN & TREATMENT AREAS WORKSPACE
+   Functional module on top of V55 Clean Launcher.
+   ========================================================= */
+(function(){
+const AR=()=>document.documentElement.dir==="rtl"||document.documentElement.lang==="ar"||document.body.classList.contains("myaims-ar");
+const T=(e,a)=>AR()?a:e;
+const S=()=>window.state||window.appState||{};
+const AREAS=[
+["Head","الرأس"],["Neck","الرقبة"],["Left Shoulder","الكتف الأيسر"],["Right Shoulder","الكتف الأيمن"],
+["Upper Back","أعلى الظهر"],["Lower Back","أسفل الظهر"],["Left Arm","الذراع الأيسر"],["Right Arm","الذراع الأيمن"],
+["Left Elbow","المرفق الأيسر"],["Right Elbow","المرفق الأيمن"],["Left Wrist / Hand","الرسغ / اليد اليسرى"],["Right Wrist / Hand","الرسغ / اليد اليمنى"],
+["Hip / Pelvis","الورك / الحوض"],["Left Thigh","الفخذ الأيسر"],["Right Thigh","الفخذ الأيمن"],["Left Knee","الركبة اليسرى"],
+["Right Knee","الركبة اليمنى"],["Left Calf","الساق اليسرى"],["Right Calf","الساق اليمنى"],["Left Ankle / Foot","الكاحل / القدم اليسرى"],["Right Ankle / Foot","الكاحل / القدم اليمنى"]
+];
+let draft={view:"front",areas:{},globalPain:0};
+
+function ctx(){
+ const sh=document.querySelector("#v55-clinical-launcher"),db=S(),pid=sh?.dataset.patientId,aid=sh?.dataset.appointmentId;
+ return {p:(db.patients||[]).find(x=>String(x.id)===String(pid))||{},a:(db.appointments||[]).find(x=>String(x.id)===String(aid))||{}};
+}
+function key(){const {p,a}=ctx();return "myaims-v56-pain-"+(p.id||p.name||"p")+"-"+(a.id||a.date||"a")}
+function load(){try{draft=JSON.parse(localStorage.getItem(key()))||draft}catch(e){}}
+function saveLocal(){localStorage.setItem(key(),JSON.stringify(draft))}
+function selected(){return Object.entries(draft.areas).filter(([,v])=>v>0)}
+function color(v){return v>=8?"#c94c54":v>=5?"#e38b42":v>=3?"#e6bd59":"#58a78f"}
+
+function bodySvg(){
+ return `<svg viewBox="0 0 280 560" class="v56-svg" aria-label="Body map">
+ <g fill="#dce9e8" stroke="#7fa4a7" stroke-width="2">
+ <circle cx="140" cy="48" r="30"/>
+ <path d="M115 84 Q140 72 165 84 L180 185 Q172 218 162 245 L158 330 L122 330 L118 245 Q108 218 100 185Z"/>
+ <path d="M102 105 L72 132 L48 245 L68 252 L94 170Z"/><path d="M178 105 L208 132 L232 245 L212 252 L186 170Z"/>
+ <path d="M123 325 L104 455 L110 535 L132 535 L140 390 L140 330Z"/><path d="M157 325 L176 455 L170 535 L148 535 L140 390 L140 330Z"/>
+ </g>
+ <g class="v56-points">
+ ${[
+ [140,48,"Head"],[140,98,"Neck"],[105,120,"Left Shoulder"],[175,120,"Right Shoulder"],
+ [140,155,draft.view==="back"?"Upper Back":"Upper Back"],[140,245,"Lower Back"],
+ [79,175,"Left Arm"],[201,175,"Right Arm"],[65,235,"Left Elbow"],[215,235,"Right Elbow"],
+ [56,275,"Left Wrist / Hand"],[224,275,"Right Wrist / Hand"],[140,315,"Hip / Pelvis"],
+ [120,375,"Left Thigh"],[160,375,"Right Thigh"],[112,445,"Left Knee"],[168,445,"Right Knee"],
+ [112,490,"Left Calf"],[168,490,"Right Calf"],[110,535,"Left Ankle / Foot"],[170,535,"Right Ankle / Foot"]
+ ].map(([x,y,n])=>`<circle data-area="${n}" cx="${x}" cy="${y}" r="${draft.areas[n]?13:9}" fill="${draft.areas[n]?color(draft.areas[n]):"#fff"}" stroke="#1d6570" stroke-width="3"/><text x="${x}" y="${y+3}" text-anchor="middle" font-size="8" fill="${draft.areas[n]?"#fff":"#1d6570"}">${draft.areas[n]||"+"}</text>`).join("")}
+ </g></svg>`;
+}
+
+function open(){
+ load();
+ let o=document.querySelector("#v56-pain");
+ if(!o){o=document.createElement("div");o.id="v56-pain";document.body.appendChild(o)}
+ render();o.classList.add("open");document.body.classList.add("v56-lock");
+}
+function render(){
+ const o=document.querySelector("#v56-pain");if(!o)return;
+ const {p,a}=ctx(),sel=selected();
+ o.innerHTML=`<section>
+ <header><div><small>${T("MYAIMS · CLINICAL ASSESSMENT","أهدافي · التقييم السريري")}</small><h2>${T("Pain & Treatment Areas","مناطق الألم والعلاج")}</h2><p>${p.name||""} · ${a.date||""} ${a.time||""}</p></div><button data-close>×</button></header>
+ <div class="v56-toolbar">
+   <div class="v56-toggle"><button data-view="front" class="${draft.view==="front"?"active":""}">${T("Front","أمامي")}</button><button data-view="back" class="${draft.view==="back"?"active":""}">${T("Back","خلفي")}</button></div>
+   <div class="v56-global"><span>${T("Overall Pain","شدة الألم العامة")}</span><input type="range" min="0" max="10" value="${draft.globalPain}"><b>${draft.globalPain}/10</b></div>
+   <button data-clear>${T("Clear All","مسح الكل")}</button>
+ </div>
+ <main>
+  <section class="v56-map"><div class="v56-maphead"><div><small>${T("DIRECT BODY SELECTION","تحديد مباشر على الجسم")}</small><h3>${T("Tap the painful area","اضغط على منطقة الألم")}</h3></div><span>${sel.length} ${T("selected","محدد")}</span></div>${bodySvg()}<p>${T("Tap a point repeatedly to increase pain intensity.","اضغط على النقطة أكثر من مرة لزيادة شدة الألم.")}</p></section>
+  <section class="v56-side">
+    <div class="v56-selected"><div class="v56-section-title"><div><small>${T("CURRENT FINDINGS","النتائج الحالية")}</small><h3>${T("Selected Areas","المناطق المحددة")}</h3></div><b>${sel.length}</b></div>
+      <div class="v56-list">${sel.length?sel.map(([n,v])=>`<article><span style="background:${color(v)}"></span><div><b>${T(n,AREAS.find(x=>x[0]===n)?.[1]||n)}</b><small>${T("Pain intensity","شدة الألم")}</small></div><div class="v56-step"><button data-minus="${n}">−</button><strong>${v}</strong><button data-plus="${n}">+</button></div><button class="v56-remove" data-remove="${n}">×</button></article>`).join(""):`<div class="v56-empty">${T("No pain areas selected yet.","لم يتم تحديد مناطق الألم بعد.")}</div>`}</div>
+    </div>
+    <div class="v56-quick"><small>${T("QUICK AREA PICKER","اختيار سريع للمناطق")}</small><div>${AREAS.map(([e,a])=>`<button data-quick="${e}" class="${draft.areas[e]?"on":""}">${T(e,a)}</button>`).join("")}</div></div>
+    <div class="v56-note"><label>${T("Pain / Treatment Area Notes","ملاحظات مناطق الألم / العلاج")}<textarea id="v56-note" placeholder="${T("Optional clinical note...","ملاحظة سريرية اختيارية...")}">${draft.note||""}</textarea></label></div>
+  </section>
+ </main>
+ <footer><div><span class="v56-dot"></span>${T("Autosaved locally","حفظ تلقائي محلي")}</div><button data-cancel>${T("Back","رجوع")}</button><button class="v56-save" data-save>${T("Apply & Continue","تطبيق ومتابعة")}</button></footer>
+ </section>`;
+ bind();
+}
+function bind(){
+ const o=document.querySelector("#v56-pain");
+ o.querySelector("[data-close]").onclick=close;o.querySelector("[data-cancel]").onclick=close;
+ o.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>{draft.view=b.dataset.view;saveLocal();render()});
+ o.querySelector(".v56-global input").oninput=e=>{draft.globalPain=+e.target.value;saveLocal();render()};
+ o.querySelector("[data-clear]").onclick=()=>{draft.areas={};draft.globalPain=0;saveLocal();render()};
+ o.querySelectorAll("[data-area]").forEach(n=>n.onclick=()=>{let v=draft.areas[n.dataset.area]||0;v=v>=10?0:v+1;if(v)draft.areas[n.dataset.area]=v;else delete draft.areas[n.dataset.area];saveLocal();render()});
+ o.querySelectorAll("[data-quick]").forEach(b=>b.onclick=()=>{const n=b.dataset.quick;if(draft.areas[n])delete draft.areas[n];else draft.areas[n]=Math.max(1,draft.globalPain||1);saveLocal();render()});
+ o.querySelectorAll("[data-plus]").forEach(b=>b.onclick=()=>{draft.areas[b.dataset.plus]=Math.min(10,(draft.areas[b.dataset.plus]||0)+1);saveLocal();render()});
+ o.querySelectorAll("[data-minus]").forEach(b=>b.onclick=()=>{const n=b.dataset.minus,v=(draft.areas[n]||0)-1;if(v>0)draft.areas[n]=v;else delete draft.areas[n];saveLocal();render()});
+ o.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{delete draft.areas[b.dataset.remove];saveLocal();render()});
+ const ta=o.querySelector("#v56-note");ta.oninput=()=>{draft.note=ta.value;saveLocal()};
+ o.querySelector("[data-save]").onclick=commit;
+}
+function commit(){
+ const db=S(),{p,a}=ctx();
+ db.painAssessments=db.painAssessments||[];
+ const rec={id:"PA-"+Date.now(),patientId:p.id||"",appointmentId:a.id||"",date:a.date||new Date().toISOString().slice(0,10),view:draft.view,overallPain:draft.globalPain,areas:Object.entries(draft.areas).map(([area,intensity])=>({area,intensity})),note:draft.note||"",updatedAt:new Date().toISOString()};
+ const ix=db.painAssessments.findIndex(x=>String(x.appointmentId)===String(rec.appointmentId)&&rec.appointmentId);
+ if(ix>=0)db.painAssessments[ix]=rec;else db.painAssessments.push(rec);
+ try{if(window.saveState)window.saveState();else localStorage.setItem("myaims-demo-v2",JSON.stringify(db))}catch(e){}
+ saveLocal();close();
+}
+function close(){document.querySelector("#v56-pain")?.classList.remove("open");document.body.classList.remove("v56-lock")}
+
+window.openV56PainTreatment=open;
+
+/* Override only the V55 pain sub-workspace route via capture listener.
+   Other V55 buttons remain untouched. */
+document.addEventListener("click",function(e){
+ const b=e.target.closest('#v55-workspace [data-sub="pain"]');
+ if(!b)return;
+ e.preventDefault();e.stopImmediatePropagation();open();
+},true);
+
+const css=document.createElement("style");css.textContent=`
+#v56-pain{display:none;position:fixed;inset:0;z-index:520000;background:rgba(7,28,33,.86);backdrop-filter:blur(9px);padding:8px}#v56-pain.open{display:block}.v56-lock{overflow:hidden!important}#v56-pain>section{height:calc(100vh - 16px);background:#f4f7f7;border-radius:18px;display:grid;grid-template-rows:auto auto 1fr auto;overflow:hidden}#v56-pain header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:linear-gradient(120deg,#123f49,#246874);color:#fff}#v56-pain header small{color:#efc36c;font-size:9px;font-weight:900}#v56-pain header h2{font-size:26px!important;color:#fff!important;margin:2px 0!important}#v56-pain header p{font-size:10px!important;color:#dce9eb;margin:0}#v56-pain header button{width:42px;height:42px!important;border-radius:10px!important;background:rgba(255,255,255,.1)!important;border:1px solid rgba(255,255,255,.2)!important;color:#fff!important;font-size:23px!important}.v56-toolbar{display:flex;align-items:center;gap:12px;background:#fff;border-bottom:1px solid #dce7e8;padding:9px 18px}.v56-toggle{display:flex;background:#edf3f3;border-radius:9px;padding:3px}.v56-toggle button{height:34px!important;border:0!important;background:transparent!important;border-radius:7px!important;padding:0 16px!important;font-size:10px!important;font-weight:850!important}.v56-toggle button.active{background:#174f5b!important;color:#fff!important}.v56-global{display:flex;align-items:center;gap:9px;margin-inline-start:auto;font-size:10px;color:#52737a}.v56-global input{width:180px}.v56-global b{font-size:13px;color:#174f5b}.v56-toolbar>[data-clear]{height:34px!important;border:1px solid #e0c8c8!important;background:#fff7f7!important;color:#a84d51!important;border-radius:8px!important;font-size:10px!important}
+#v56-pain main{min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(430px,.95fr) minmax(460px,1.05fr);gap:12px;padding:12px}.v56-map,.v56-side>div{background:#fff;border:1px solid #dbe6e8;border-radius:14px}.v56-map{min-height:0;display:flex;flex-direction:column;align-items:center;padding:12px}.v56-maphead{width:100%;display:flex;justify-content:space-between;align-items:center}.v56-maphead small,.v56-section-title small,.v56-quick>small{color:#ad7b29;font-size:9px;font-weight:900}.v56-maphead h3,.v56-section-title h3{font-size:17px!important;color:#173f49!important;margin:2px 0!important}.v56-maphead>span{background:#eaf4f1;color:#347064;border-radius:99px;padding:6px 10px;font-size:9px;font-weight:850}.v56-svg{height:min(63vh,560px);width:auto;max-width:100%;margin:auto}.v56-points circle{cursor:pointer;transition:.12s}.v56-points circle:hover{stroke-width:5}.v56-map>p{font-size:9.5px!important;color:#7a9095;margin:2px 0}
+.v56-side{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-inline-end:2px}.v56-selected,.v56-quick,.v56-note{padding:13px}.v56-section-title{display:flex;justify-content:space-between}.v56-section-title>b{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#174f5b;color:#fff}.v56-list{display:grid;gap:6px;margin-top:9px}.v56-list article{display:grid;grid-template-columns:8px 1fr auto 25px;gap:9px;align-items:center;border:1px solid #e1e9ea;border-radius:10px;padding:8px}.v56-list article>span{width:8px;height:34px;border-radius:5px}.v56-list article b,.v56-list article small{display:block}.v56-list article b{font-size:11px;color:#31565e}.v56-list article small{font-size:8.5px;color:#82969a}.v56-step{display:flex;align-items:center;gap:6px}.v56-step button,.v56-remove{width:27px;height:27px!important;min-height:27px!important;border:1px solid #d8e4e5!important;background:#fff!important;border-radius:7px!important;padding:0!important}.v56-step strong{min-width:18px;text-align:center;color:#174f5b}.v56-remove{color:#b85458!important}.v56-empty{padding:22px;text-align:center;color:#82969a;font-size:10px}.v56-quick>div{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}.v56-quick button{height:31px!important;border:1px solid #d8e4e5!important;background:#f8fbfb!important;border-radius:99px!important;padding:0 10px!important;font-size:9px!important;color:#476b73!important}.v56-quick button.on{background:#174f5b!important;color:#fff!important;border-color:#174f5b!important}.v56-note label{font-size:10px;font-weight:850;color:#31565e}.v56-note textarea{display:block;width:100%;min-height:75px;margin-top:6px;border:1px solid #d4e1e3;border-radius:9px;padding:9px;font:inherit}
+#v56-pain footer{display:flex;align-items:center;gap:8px;background:#fff;border-top:1px solid #dbe6e8;padding:9px 16px}#v56-pain footer>div{margin-inline-end:auto;font-size:9px;color:#789095}.v56-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#55a38c;margin-inline-end:5px}#v56-pain footer button{height:38px!important;border-radius:8px!important;padding:0 15px!important;font-size:10px!important;font-weight:850!important}.v56-save{background:#174f5b!important;color:#fff!important;border:0!important}
+body.myaims-ar #v56-pain{direction:rtl;text-align:right}@media(max-width:900px){#v56-pain main{grid-template-columns:1fr;overflow:auto}.v56-svg{height:520px}.v56-toolbar{flex-wrap:wrap}.v56-global{margin-inline-start:0}}@media(max-width:600px){#v56-pain{padding:0}#v56-pain>section{height:100vh;border-radius:0}.v56-global input{width:120px}}
+`;document.head.appendChild(css);
+})();
