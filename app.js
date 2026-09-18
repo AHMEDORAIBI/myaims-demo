@@ -10625,3 +10625,263 @@ render();
   function init(){ensure();css();const o=new MutationObserver(()=>{clearTimeout(window.__v38);window.__v38=setTimeout(enhanceWorkspace,80)});o.observe(document.body,{childList:true,subtree:true});setTimeout(enhanceWorkspace,300)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V39 - CLINIC TODAY BOARD + READABILITY UPGRADE
+   - Daily clinic operations board
+   - Arrived / Waiting / In Session / Completed / No Show
+   - Quick patient-flow actions
+   - Outstanding balance indicator
+   - Appointment alerts
+   - Global typography/readability enlargement
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{try{if(typeof window.saveState==='function')window.saveState()}catch(e){}};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const iso=d=>d.toISOString().slice(0,10);
+
+  function patient(a){
+    return (S().patients||[]).find(p=>String(p.id)===String(a.patientId)) ||
+      (S().patients||[]).find(p=>(p.name||p.fullName||p.patientName)===a.patient);
+  }
+  function pname(a){const p=patient(a);return p?.name||p?.fullName||p?.patientName||a.patient||'Patient'}
+  function initials(n){return String(n||'P').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()}
+  function dayAppointments(date){
+    return (S().appointments||[]).filter(a=>String(a.date)===String(date))
+      .sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+  }
+  function outstanding(a){
+    try{
+      if(typeof window.patientFinancials==='function'){
+        const f=window.patientFinancials(pname(a)); return Number(f.outstanding||0);
+      }
+    }catch(e){}
+    const pid=a.patientId;
+    const inv=(S().invoices||[]).filter(x=>String(x.patientId)===String(pid)||x.patient===pname(a));
+    return inv.reduce((t,x)=>t+Number(x.patientShare??x.amount??x.total??0)-Number(x.paid||0),0);
+  }
+  function statusClass(s){return String(s||'Scheduled').toLowerCase().replace(/\s+/g,'-')}
+  function flowStatus(a){
+    const s=String(a.status||'Scheduled');
+    if(s==='Checked In') return 'Waiting';
+    return s;
+  }
+
+  window.openV39ClinicToday=function(date){
+    date=date||iso(new Date());
+    let root=document.getElementById('v39-today-board');
+    if(!root){root=document.createElement('div');root.id='v39-today-board';document.body.appendChild(root)}
+    root.className='open';root.dataset.date=date;
+    renderV39ClinicToday();
+  };
+  window.closeV39ClinicToday=function(){const x=document.getElementById('v39-today-board');if(x)x.className=''};
+
+  window.renderV39ClinicToday=function(){
+    const root=document.getElementById('v39-today-board');if(!root)return;
+    const date=root.dataset.date||iso(new Date()),aps=dayAppointments(date);
+    const counts={
+      total:aps.length,
+      waiting:aps.filter(a=>['Checked In','Waiting'].includes(flowStatus(a))).length,
+      active:aps.filter(a=>a.status==='In Session').length,
+      completed:aps.filter(a=>a.status==='Completed').length,
+      noShow:aps.filter(a=>a.status==='No Show').length
+    };
+    const prev=new Date(date+'T12:00:00');prev.setDate(prev.getDate()-1);
+    const next=new Date(date+'T12:00:00');next.setDate(next.getDate()+1);
+
+    root.innerHTML=`
+      <section class="v39-shell">
+        <header class="v39-header">
+          <div>
+            <button class="v39-back" onclick="closeV39ClinicToday()">←</button>
+            <div><small>DAILY CLINIC OPERATIONS</small><h2>Clinic Today Board</h2><p>${new Date(date+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p></div>
+          </div>
+          <div class="v39-date-nav">
+            <button onclick="document.getElementById('v39-today-board').dataset.date='${iso(prev)}';renderV39ClinicToday()">‹</button>
+            <input type="date" value="${date}" onchange="document.getElementById('v39-today-board').dataset.date=this.value;renderV39ClinicToday()">
+            <button onclick="document.getElementById('v39-today-board').dataset.date='${iso(next)}';renderV39ClinicToday()">›</button>
+            <button class="today" onclick="document.getElementById('v39-today-board').dataset.date='${iso(new Date())}';renderV39ClinicToday()">Today</button>
+          </div>
+        </header>
+
+        <div class="v39-kpis">
+          <div><small>APPOINTMENTS</small><b>${counts.total}</b><span>Scheduled today</span></div>
+          <div><small>WAITING</small><b>${counts.waiting}</b><span>Checked in</span></div>
+          <div><small>IN SESSION</small><b>${counts.active}</b><span>With therapist</span></div>
+          <div><small>COMPLETED</small><b>${counts.completed}</b><span>Finished visits</span></div>
+          <div><small>NO SHOW</small><b>${counts.noShow}</b><span>Missed visits</span></div>
+        </div>
+
+        <div class="v39-board">
+          ${['Scheduled','Waiting','In Session','Completed'].map(col=>{
+            const list=aps.filter(a=>{
+              const s=flowStatus(a);
+              if(col==='Scheduled')return ['Scheduled','Confirmed'].includes(s);
+              return s===col;
+            });
+            return `<section class="v39-column ${statusClass(col)}">
+              <header><div><small>${col==='Scheduled'?'UPCOMING':'PATIENT FLOW'}</small><h3>${col}</h3></div><b>${list.length}</b></header>
+              <div class="v39-cards">
+                ${list.length?list.map(a=>patientCard(a,col)).join(''):`<div class="v39-empty">No patients</div>`}
+              </div>
+            </section>`;
+          }).join('')}
+        </div>
+
+        ${aps.filter(a=>a.status==='No Show'||a.status==='Cancelled').length?`
+        <section class="v39-exceptions"><div><small>EXCEPTIONS</small><h3>No Show / Cancelled</h3></div>
+          <div>${aps.filter(a=>a.status==='No Show'||a.status==='Cancelled').map(a=>`<span><b>${esc(a.time||'')}</b> ${esc(pname(a))} · ${esc(a.status)}</span>`).join('')}</div>
+        </section>`:''}
+      </section>`;
+  };
+
+  function patientCard(a,col){
+    const p=patient(a)||{},bal=outstanding(a);
+    const reminder=a.reminderStatus||'Not Sent';
+    let action='';
+    if(col==='Scheduled')action=`<button class="primary" onclick="v39SetStatus('${a.id}','Checked In')">Check In</button>`;
+    if(col==='Waiting')action=`<button class="primary" onclick="v39StartSession('${a.id}')">Start Session</button>`;
+    if(col==='In Session')action=`<button class="primary" onclick="v39OpenClinical('${a.id}')">Open Session</button>`;
+    if(col==='Completed')action=`<button onclick="v39OpenPatient('${esc(a.patientId||'')}')">Patient File</button>`;
+    return `<article class="v39-patient-card">
+      <div class="v39-card-top"><span class="v39-avatar">${esc(initials(pname(a)))}</span><div><b>${esc(pname(a))}</b><small>${esc(a.time||'')} · ${Number(a.duration||60)} min</small></div><em>${esc(a.status||'Scheduled')}</em></div>
+      <div class="v39-details"><span><small>THERAPIST</small><b>${esc(a.therapist||'—')}</b></span><span><small>ROOM</small><b>${esc(a.room||'—')}</b></span></div>
+      <div class="v39-tags">${a.visitType||a.service?`<span>${esc(a.visitType||a.service)}</span>`:''}${reminder==='Confirmed'?'<span class="ok">Confirmed</span>':reminder==='Reminder Sent'?'<span class="info">Reminder Sent</span>':''}${bal>0?`<span class="balance">Balance BD ${bal.toFixed(3)}</span>`:''}</div>
+      <div class="v39-actions">${action}<button onclick="v39OpenPatient('${esc(a.patientId||'')}')">Profile</button>${col!=='Completed'?`<button class="dots" onclick="v39CycleStatus('${a.id}')">•••</button>`:''}</div>
+    </article>`;
+  }
+
+  window.v39SetStatus=function(id,status){
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(id));if(!a)return;
+    a.status=status;save();renderV39ClinicToday();
+    try{if(typeof window.logAudit==='function')window.logAudit('Appointment Status','Appointments',`${pname(a)} → ${status}`)}catch(e){}
+  };
+  window.v39StartSession=function(id){
+    v39SetStatus(id,'In Session');
+    setTimeout(()=>{if(typeof window.openV24ClinicalNote==='function')window.openV24ClinicalNote(id)},80);
+  };
+  window.v39OpenClinical=function(id){if(typeof window.openV24ClinicalNote==='function')window.openV24ClinicalNote(id)};
+  window.v39OpenPatient=function(pid){
+    closeV39ClinicToday();
+    if(pid&&typeof window.openV31PatientWorkspace==='function')window.openV31PatientWorkspace(pid,'overview');
+  };
+  window.v39CycleStatus=function(id){
+    const a=(S().appointments||[]).find(x=>String(x.id)===String(id));if(!a)return;
+    const opts=['Scheduled','Confirmed','Checked In','In Session','Completed','No Show','Cancelled'];
+    const choice=prompt('Status:\n'+opts.join('\n'),a.status||'Scheduled');
+    if(choice&&opts.includes(choice))v39SetStatus(id,choice);
+  };
+
+  function addEntryButtons(){
+    // Dashboard
+    const dash=document.getElementById('page-dashboard');
+    if(dash&&!dash.querySelector('[data-v39-today]')){
+      const b=document.createElement('button');b.dataset.v39Today='1';b.className='v39-entry';b.innerHTML='<b>Clinic Today</b><span>Daily patient flow →</span>';b.onclick=()=>openV39ClinicToday();dash.prepend(b);
+    }
+    // Appointment page
+    const app=document.getElementById('page-appointments');
+    if(app&&!app.querySelector('[data-v39-appt]')){
+      const host=app.querySelector('.v16-controls,.v22-controls,.v25-viewbar')||app;
+      const b=document.createElement('button');b.dataset.v39Appt='1';b.className='v39-appt-entry';b.textContent='Clinic Today';b.onclick=()=>openV39ClinicToday();host.prepend(b);
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v39-css'))return;
+    const s=document.createElement('style');s.id='v39-css';s.textContent=`
+      /* =====================================================
+         GLOBAL READABILITY SCALE
+         Enlarges the real application UI without browser zoom.
+         ===================================================== */
+      body{font-size:15px!important;line-height:1.55!important}
+      .page{font-size:15px!important}
+      .page h1{font-size:28px!important;line-height:1.25!important}
+      .page h2{font-size:23px!important;line-height:1.3!important}
+      .page h3{font-size:18px!important;line-height:1.35!important}
+      .page p,.page label,.page td,.page input,.page select,.page textarea{font-size:14px!important}
+      .page th{font-size:12px!important;letter-spacing:.2px!important}
+      .page button{font-size:13px!important;min-height:38px}
+      .page small{font-size:12px!important;line-height:1.4!important}
+      .page .muted,.page .sub,.page .subtitle{font-size:13px!important}
+      .card,.panel,.stat-card{line-height:1.5!important}
+      .modal,.dialog,[class*="-modal"] [class*="dialog"]{line-height:1.55!important}
+      input,select,textarea{font-size:14px!important}
+      textarea{line-height:1.6!important}
+      table{font-size:14px!important}
+      nav.sidebar,.sidebar{font-size:14px!important}
+      .sidebar .nav-item{font-size:13px!important;min-height:40px!important}
+
+      /* Appointment / Orbit readability */
+      #page-appointments{font-size:15px!important}
+      #page-appointments h2{font-size:24px!important}
+      #page-appointments h3{font-size:18px!important}
+      #page-appointments button{font-size:12px!important}
+      #page-appointments small{font-size:11px!important}
+      #page-appointments .v22-event b,#page-appointments [class*="appointment"] b{font-size:13px!important}
+      #page-appointments .v22-event small,#page-appointments [class*="appointment"] small{font-size:11px!important}
+
+      /* Patient Workspace readability */
+      #v31-workspace{font-size:16px!important}
+      #v31-workspace h2{font-size:28px!important}
+      #v31-workspace h3{font-size:20px!important}
+      #v31-workspace p{font-size:14px!important;line-height:1.65!important}
+      #v31-workspace small{font-size:12px!important}
+      #v31-workspace button{font-size:13px!important;min-height:40px!important}
+      #v31-workspace .v31-tabs button{font-size:14px!important;padding:11px 16px!important}
+      #v31-workspace table{font-size:14px!important}
+
+      /* Clinical workspace V24-V36 readability */
+      #v24-clinical-modal .v34-clinical-workspace{font-size:16px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-head h2{font-size:28px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-head p{font-size:14px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-head small{font-size:11px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-tabs button{font-size:14px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-section-title h3{font-size:20px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-section-title small{font-size:11px!important}
+      #v24-clinical-modal .v34-clinical-workspace label>span{font-size:13px!important}
+      #v24-clinical-modal .v34-clinical-workspace textarea,
+      #v24-clinical-modal .v34-clinical-workspace input,
+      #v24-clinical-modal .v34-clinical-workspace select{font-size:14px!important}
+      #v24-clinical-modal .v34-clinical-workspace .v24-footer button{font-size:13px!important}
+      .v34-patient h3{font-size:19px!important}.v34-patient p{font-size:13px!important}
+      .v34-session-facts b{font-size:14px!important}.v34-session-facts span{font-size:12px!important}
+      .v34-clinical-glance p{font-size:12px!important}
+      .v34-phrase-groups b{font-size:12px!important}.v34-phrase-groups button{font-size:11px!important}
+      .v35-flow-steps button{font-size:12px!important}.v35-checks span{font-size:10px!important}
+      .v35-compare-grid b{font-size:15px!important}.v35-compare-grid span,.v35-compare-grid p{font-size:12px!important}
+
+      /* HEP / Documents / Discharge readability */
+      .v36-dialog,.v37-dialog,.v37-add-dialog,.v38-dialog{font-size:15px!important}
+      .v36-dialog h2,.v37-dialog h2,.v38-dialog h2{font-size:25px!important}
+      .v36-dialog h3,.v37-dialog h3,.v38-dialog h3{font-size:19px!important}
+      .v36-dialog small,.v37-dialog small,.v38-dialog small{font-size:11px!important}
+      .v36-dialog input,.v36-dialog textarea,.v36-dialog button,
+      .v37-dialog input,.v37-dialog select,.v37-dialog button,
+      .v37-add-dialog input,.v37-add-dialog select,.v37-add-dialog textarea,.v37-add-dialog button,
+      .v38-dialog input,.v38-dialog select,.v38-dialog textarea,.v38-dialog button{font-size:13px!important}
+      .v37-doc-main b{font-size:14px!important}.v37-doc-main small,.v37-doc-main p{font-size:12px!important}
+      .v38-overview b{font-size:21px!important}.v38-overview span{font-size:11px!important}
+      .v38-side p{font-size:12px!important}.v38-goal b{font-size:13px!important}.v38-goal small{font-size:11px!important}
+
+      /* Clinic Today */
+      #v39-today-board{display:none}#v39-today-board.open{display:block;position:fixed;inset:0;z-index:101300;background:#edf3f4;overflow:auto}
+      .v39-shell{min-height:100vh;background:linear-gradient(180deg,#f5f9f9,#eaf1f2);color:#36575f;font-size:14px}
+      .v39-header{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:17px 22px;background:#fff;border-bottom:1px solid #dce6e8;position:sticky;top:0;z-index:10}.v39-header>div:first-child{display:flex;align-items:center;gap:12px}.v39-back{border:0;background:#edf3f4;color:#31565e;border-radius:10px;width:40px;height:40px;font-size:20px}.v39-header small{font-size:10px;color:#a57b31;font-weight:900;letter-spacing:1px}.v39-header h2{font-size:25px;margin:2px 0;color:#294f58}.v39-header p{font-size:13px;margin:0;color:#7d9095}.v39-date-nav{display:flex;gap:6px;align-items:center}.v39-date-nav button,.v39-date-nav input{height:40px;border:1px solid #d6e2e4;background:#fff;border-radius:9px;padding:0 10px;font-size:13px;color:#506d74}.v39-date-nav .today{background:#174f5b;color:#fff;border-color:#174f5b;font-weight:800}
+      .v39-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:13px 18px}.v39-kpis>div{background:#fff;border:1px solid #dce6e8;border-radius:12px;padding:12px}.v39-kpis small,.v39-kpis b,.v39-kpis span{display:block}.v39-kpis small{font-size:10px;color:#a47a31;font-weight:900}.v39-kpis b{font-size:24px;color:#31565e;margin:3px 0}.v39-kpis span{font-size:12px;color:#829398}
+      .v39-board{display:grid;grid-template-columns:repeat(4,minmax(245px,1fr));gap:9px;padding:0 18px 15px;overflow-x:auto}.v39-column{background:rgba(255,255,255,.55);border:1px solid #dce6e8;border-radius:14px;min-height:470px;overflow:hidden}.v39-column>header{display:flex;justify-content:space-between;align-items:center;padding:12px 13px;background:#fff;border-bottom:3px solid #dfe8e9}.v39-column.scheduled>header{border-color:#8db6dc}.v39-column.waiting>header{border-color:#d9b45e}.v39-column.in-session>header{border-color:#4ca2a4}.v39-column.completed>header{border-color:#78b496}.v39-column header small{font-size:9px;color:#9b7a3e;font-weight:900}.v39-column header h3{font-size:17px;margin:2px 0;color:#31565e}.v39-column header>b{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:#edf3f4;font-size:13px}.v39-cards{padding:8px;display:grid;gap:7px;align-content:start}.v39-patient-card{background:#fff;border:1px solid #dce6e8;border-radius:11px;padding:10px;box-shadow:0 4px 12px rgba(26,68,76,.035)}.v39-card-top{display:grid;grid-template-columns:38px 1fr auto;gap:8px;align-items:center}.v39-avatar{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;background:#e6f0f1;color:#174f5b;font-size:11px;font-weight:900}.v39-card-top b,.v39-card-top small{display:block}.v39-card-top b{font-size:14px;color:#31565e}.v39-card-top small{font-size:11px;color:#849599;margin-top:2px}.v39-card-top em{font-style:normal;font-size:9px;padding:4px 6px;border-radius:99px;background:#f0f5f5;color:#60777d}.v39-details{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:9px 0}.v39-details span{background:#f6f9f9;border-radius:7px;padding:6px}.v39-details small,.v39-details b{display:block}.v39-details small{font-size:9px;color:#9a7b43}.v39-details b{font-size:11px;margin-top:2px}.v39-tags{display:flex;flex-wrap:wrap;gap:4px}.v39-tags span{font-size:10px;background:#eef4f4;color:#5d757b;border-radius:99px;padding:4px 6px}.v39-tags .ok{background:#e8f5ee;color:#34745b}.v39-tags .info{background:#eaf2fa;color:#4d7192}.v39-tags .balance{background:#fff0e7;color:#a46740}.v39-actions{display:flex;gap:5px;margin-top:9px}.v39-actions button{border:1px solid #d7e3e5;background:#fff;color:#557178;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:800}.v39-actions .primary{background:#174f5b;color:#fff;border-color:#174f5b;flex:1}.v39-actions .dots{padding-left:8px;padding-right:8px}.v39-empty{text-align:center;padding:35px 8px;color:#91a0a3;font-size:12px}
+      .v39-exceptions{margin:0 18px 18px;background:#fff;border:1px solid #e2d9d9;border-radius:12px;padding:12px}.v39-exceptions small{font-size:9px;color:#a77b38;font-weight:900}.v39-exceptions h3{font-size:16px;margin:2px 0 8px}.v39-exceptions>div:last-child{display:flex;flex-wrap:wrap;gap:6px}.v39-exceptions span{font-size:11px;background:#fff1f1;color:#8e5d62;border-radius:8px;padding:6px 8px}
+      .v39-entry{display:flex;justify-content:space-between;align-items:center;width:100%;border:1px solid #d7e4e5;background:linear-gradient(135deg,#174f5b,#276b76);color:#fff;border-radius:12px;padding:12px 15px;margin-bottom:12px;text-align:left}.v39-entry b{font-size:15px}.v39-entry span{font-size:12px;color:#d9e8ea}.v39-appt-entry{background:#174f5b!important;color:#fff!important;border-color:#174f5b!important}
+      @media(max-width:950px){.v39-kpis{grid-template-columns:repeat(3,1fr)}.v39-board{grid-template-columns:repeat(4,270px)}}
+      @media(max-width:650px){.v39-header{align-items:flex-start;flex-direction:column}.v39-date-nav{width:100%;flex-wrap:wrap}.v39-kpis{grid-template-columns:1fr 1fr}.v39-board{padding-left:10px;padding-right:10px}.v39-kpis{padding-left:10px;padding-right:10px}}
+    `;document.head.appendChild(s);
+  }
+
+  function init(){
+    css();addEntryButtons();
+    const o=new MutationObserver(()=>{clearTimeout(window.__v39);window.__v39=setTimeout(addEntryButtons,100)});
+    o.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
