@@ -12359,3 +12359,149 @@ render();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V49 - CLINICAL COMMAND CENTER
+   Core UX change:
+   The doctor no longer searches/scrolls through one long clinical form.
+   Every major clinical area is a large launcher that opens its own
+   near-full-screen workspace.
+   ========================================================= */
+(function(){
+  const AR=()=>document.documentElement.dir==='rtl'||document.body.classList.contains('myaims-ar');
+  const T=(en,ar)=>AR()?ar:en;
+  const root=()=>document.querySelector('#v24-clinical-modal .v34-clinical-workspace')||document.querySelector('#v24-clinical-modal');
+
+  const modules=[
+    {id:'assessment',icon:'◉',en:'Assessment',ar:'التقييم',subEn:'Pain, body areas & clinical assessment',subAr:'الألم، مناطق الجسم والتقييم السريري'},
+    {id:'treatment',icon:'✚',en:'Treatment Plan',ar:'الخطة العلاجية',subEn:'Goals, plan comments & home advice',subAr:'الأهداف، ملاحظات الخطة والتعليمات المنزلية'},
+    {id:'note',icon:'▤',en:'Session Note',ar:'ملاحظة الجلسة',subEn:'Subjective, objective, response & next session',subAr:'التقييم الذاتي والموضوعي والاستجابة والجلسة القادمة'},
+    {id:'history',icon:'↺',en:'Patient History',ar:'سجل المريض',subEn:'Previous sessions and clinical history',subAr:'الجلسات السابقة والسجل السريري'},
+    {id:'goals',icon:'◎',en:'Goals & Progress',ar:'الأهداف والتقدم',subEn:'Goal tracking and progress review',subAr:'متابعة الأهداف ومراجعة التقدم'},
+    {id:'exercise',icon:'⌁',en:'Home Exercise',ar:'التمارين المنزلية',subEn:'Exercise program and patient instructions',subAr:'برنامج التمارين وتعليمات المريض'}
+  ];
+
+  function clickByText(r,regex){
+    const b=[...r.querySelectorAll('button')].find(x=>regex.test((x.textContent||'').trim()));
+    if(b){b.click();return true} return false;
+  }
+
+  function openModule(id){
+    const r=root(); if(!r)return;
+    if(id==='assessment'){
+      if(typeof window.openV47PainMap==='function'){window.openV47PainMap();return}
+    }
+    if(id==='treatment') clickByText(r,/^(Treatment Plan|الخطة العلاجية)$/i);
+    if(id==='note') clickByText(r,/^(Session Note|ملاحظة الجلسة)$/i);
+    if(id==='history') clickByText(r,/^(Patient History|سجل المريض)$/i);
+    if(id==='goals'){
+      if(typeof window.openV30ProgressReview==='function'){window.openV30ProgressReview();return}
+      clickByText(r,/Progress|التقدم/i);
+    }
+    if(id==='exercise'){
+      const b=[...r.querySelectorAll('button')].find(x=>/Home Exercise|Exercise Program|التمارين المنزلية/i.test(x.textContent||''));
+      if(b){b.click();return}
+    }
+    setTimeout(()=>openLargePanel(id),80);
+  }
+  window.openV49Module=openModule;
+
+  function targetFor(id,r){
+    if(id==='treatment') return r.querySelector('#v24-tab-plan,[data-v24-tab="plan"],.v24-plan-tab');
+    if(id==='note') return r.querySelector('#v24-tab-session,[data-v24-tab="session"],.v24-session-tab');
+    if(id==='history') return r.querySelector('#v24-tab-history,[data-v24-tab="history"],.v24-history-tab');
+    return null;
+  }
+
+  function openLargePanel(id){
+    const r=root(), target=targetFor(id,r); if(!r||!target)return;
+    let ov=document.getElementById('v49-module-overlay');
+    if(!ov){
+      ov=document.createElement('div');ov.id='v49-module-overlay';
+      ov.innerHTML=`<section class="v49-shell">
+        <header class="v49-head"><div><small data-v49-kicker></small><h2 data-v49-title></h2><p data-v49-sub></p></div><button data-v49-close>×</button></header>
+        <main class="v49-stage"></main>
+        <footer class="v49-foot"><span>${T('Clinical Session Workspace','مساحة عمل الجلسة السريرية')}</span><button data-v49-done>${T('Done · Return to Clinical Hub','تم · العودة للمركز السريري')}</button></footer>
+      </section>`;
+      document.body.appendChild(ov);
+      ov.querySelector('[data-v49-close]').onclick=closeLargePanel;
+      ov.querySelector('[data-v49-done]').onclick=closeLargePanel;
+    }
+    const m=modules.find(x=>x.id===id)||modules[0];
+    ov.querySelector('[data-v49-kicker]').textContent=T('CLINICAL WORKSPACE','مساحة العمل السريرية');
+    ov.querySelector('[data-v49-title]').textContent=T(m.en,m.ar);
+    ov.querySelector('[data-v49-sub]').textContent=T(m.subEn,m.subAr);
+    target.__v49Home=target.parentElement; target.__v49Next=target.nextSibling;
+    target.style.setProperty('display','block','important');
+    ov.querySelector('.v49-stage').replaceChildren(target);
+    ov.classList.add('open');document.body.classList.add('v49-open');
+  }
+
+  function closeLargePanel(){
+    const ov=document.getElementById('v49-module-overlay');if(!ov)return;
+    const moved=ov.querySelector('[id^="v24-tab-"],[data-v24-tab],.v24-plan-tab,.v24-session-tab,.v24-history-tab');
+    if(moved&&moved.__v49Home){
+      if(moved.__v49Next&&moved.__v49Next.parentNode===moved.__v49Home)moved.__v49Home.insertBefore(moved,moved.__v49Next);
+      else moved.__v49Home.appendChild(moved);
+    }
+    ov.classList.remove('open');document.body.classList.remove('v49-open');
+  }
+
+  function buildHub(){
+    const r=root();if(!r||r.querySelector('.v49-command-center'))return;
+    const anchor=r.querySelector('.v24-tabs')||r.querySelector('.v34-phrase-assistant');
+    if(!anchor)return;
+    const hub=document.createElement('section');hub.className='v49-command-center';
+    hub.innerHTML=`
+      <div class="v49-hub-head">
+        <div><small>${T('CLINICAL COMMAND CENTER','مركز التحكم السريري')}</small><h2>${T('What do you want to work on?','ماذا تريد أن تعمل عليه؟')}</h2><p>${T('Choose a section. It opens in a large dedicated workspace — no searching and no long scrolling.','اختر القسم، وسيفتح في شاشة كبيرة مستقلة — بدون بحث وبدون تمرير طويل.')}</p></div>
+        <div class="v49-session-chip"><span>●</span>${T('Session in progress','الجلسة قيد العمل')}</div>
+      </div>
+      <div class="v49-launchers">
+        ${modules.map((m,i)=>`<button data-v49-module="${m.id}" class="${i===0?'featured':''}">
+          <span class="v49-ico">${m.icon}</span><span class="v49-copy"><b>${T(m.en,m.ar)}</b><small>${T(m.subEn,m.subAr)}</small></span><span class="v49-arrow">›</span>
+        </button>`).join('')}
+      </div>`;
+    anchor.parentNode.insertBefore(hub,anchor);
+    hub.querySelectorAll('[data-v49-module]').forEach(b=>b.onclick=()=>openModule(b.dataset.v49Module));
+
+    // The old tab bar becomes secondary, not the doctor's main navigation.
+    anchor.classList.add('v49-secondary-tabs');
+  }
+
+  function css(){
+    if(document.getElementById('v49-css'))return;
+    const s=document.createElement('style');s.id='v49-css';s.textContent=`
+      .v49-command-center{background:#fff;border:1px solid #d9e6e8;border-radius:15px;padding:13px;margin:8px 0;box-shadow:0 7px 22px rgba(25,69,77,.05)}
+      .v49-hub-head{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:10px}
+      .v49-hub-head small{font-size:10px!important;color:#b27f2d;font-weight:900;letter-spacing:.55px}.v49-hub-head h2{font-size:22px!important;color:#173f49!important;margin:2px 0!important}.v49-hub-head p{font-size:12px!important;color:#71898f;margin:0}
+      .v49-session-chip{white-space:nowrap;background:#eaf4f2;color:#347066;border-radius:99px;padding:7px 11px;font-size:11px;font-weight:800}.v49-session-chip span{color:#49a888;margin-inline-end:5px}
+      .v49-launchers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+      .v49-launchers>button{min-height:82px!important;display:grid!important;grid-template-columns:42px 1fr 20px!important;align-items:center!important;text-align:start!important;gap:9px!important;border:1px solid #dbe6e8!important;background:#f7fafa!important;border-radius:12px!important;padding:10px 12px!important;color:#31565e!important;transition:.16s ease!important}
+      .v49-launchers>button:hover{transform:translateY(-2px)!important;border-color:#8eb4b7!important;background:#eef6f6!important;box-shadow:0 8px 18px rgba(25,69,77,.08)!important}
+      .v49-launchers>button.featured{background:linear-gradient(135deg,#174f5b,#246873)!important;color:#fff!important;border-color:#174f5b!important}
+      .v49-ico{width:40px;height:40px;display:grid;place-items:center;border-radius:11px;background:#e4efef;color:#1f606a;font-size:20px;font-weight:900}.featured .v49-ico{background:rgba(255,255,255,.14);color:#efc36d}
+      .v49-copy b,.v49-copy small{display:block}.v49-copy b{font-size:14px!important;margin-bottom:3px}.v49-copy small{font-size:10.5px!important;line-height:1.35;color:#789095}.featured .v49-copy small{color:#d9e7e9}.v49-arrow{font-size:25px;color:#8aa0a5}.featured .v49-arrow{color:#fff}
+      #v24-clinical-modal .v49-secondary-tabs{opacity:.78!important;padding:4px!important;margin-top:2px!important}
+      #v24-clinical-modal .v49-secondary-tabs button{min-height:34px!important;padding:7px 11px!important;font-size:11px!important}
+
+      #v49-module-overlay{display:none;position:fixed;inset:0;z-index:410000;background:rgba(10,31,36,.82);backdrop-filter:blur(8px);padding:8px}
+      #v49-module-overlay.open{display:block}body.v49-open{overflow:hidden!important}
+      .v49-shell{width:calc(100vw - 16px);height:calc(100vh - 16px);background:#f2f7f7;border-radius:18px;overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 40px 120px rgba(0,0,0,.4)}
+      .v49-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(125deg,#143f49,#205d68);color:#fff;padding:13px 19px}.v49-head small{font-size:10px!important;color:#e5bc6c!important;font-weight:900}.v49-head h2{font-size:27px!important;color:#fff!important;margin:2px 0!important}.v49-head p{font-size:12px!important;color:#d8e6e8;margin:0}.v49-head>button{width:41px;height:41px;min-height:41px!important;border:1px solid rgba(255,255,255,.2)!important;background:rgba(255,255,255,.1)!important;color:#fff!important;border-radius:10px!important;font-size:22px!important}
+      .v49-stage{min-height:0;overflow:auto;padding:13px 16px;background:#f5f9f9}.v49-stage>*{max-width:1450px;margin:0 auto!important;background:#fff!important;border-radius:14px!important;padding:14px!important;box-sizing:border-box!important;min-height:calc(100% - 2px)}
+      .v49-foot{display:flex;justify-content:space-between;align-items:center;background:#fff;border-top:1px solid #d9e5e6;padding:9px 15px}.v49-foot span{font-size:11px;color:#7b9095}.v49-foot button{height:40px!important;background:#174f5b!important;color:#fff!important;border:0!important;border-radius:9px!important;padding:0 17px!important;font-size:12px!important;font-weight:900!important}
+      body.myaims-ar .v49-command-center,body.myaims-ar .v49-shell{direction:rtl;text-align:right}body.myaims-ar .v49-arrow{transform:scaleX(-1)}
+      @media(max-width:1000px){.v49-launchers{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.v49-launchers{grid-template-columns:1fr}.v49-hub-head{align-items:flex-start;flex-direction:column}#v49-module-overlay{padding:0}.v49-shell{width:100vw;height:100vh;border-radius:0}}
+    `;document.head.appendChild(s);
+  }
+
+  function init(){
+    css();buildHub();
+    let n=0;const t=setInterval(()=>{buildHub();if(++n>40)clearInterval(t)},150);
+    const mo=new MutationObserver(()=>{clearTimeout(window.__v49);window.__v49=setTimeout(buildHub,70)});
+    mo.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
