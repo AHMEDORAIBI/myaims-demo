@@ -12997,3 +12997,156 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V71 ANATOMICAL SURFACE DETAIL";
 })();
+
+/* =========================================================
+   myAIMS V72 — HD ANATOMY ENGINE
+   Loads assets/myaims-anatomy-hd.glb first with DRACO support.
+   Falls back safely to assets/anatomy.glb.
+   Keeps the existing clinical UI and interaction layer.
+   ========================================================= */
+(function(){
+const HD="./assets/myaims-anatomy-hd.glb";
+const FALLBACK="./assets/anatomy.glb";
+const THREE_VER="0.166.1";
+const DRACO_PATH="https://www.gstatic.com/draco/versioned/decoders/1.5.7/";
+
+function root(){return document.getElementById("v61-real3d")}
+function status(msg,sub=""){
+ const r=root(); if(!r)return;
+ let e=r.querySelector("#v72-hd-status");
+ if(!e){
+   e=document.createElement("div");e.id="v72-hd-status";
+   (r.querySelector(".v61-stagewrap")||r).appendChild(e);
+ }
+ e.innerHTML=`<i></i><div><b>${msg}</b>${sub?`<span>${sub}</span>`:""}</div>`;
+}
+function normalizeMeshes(T,scene){
+ const meshes=[];
+ scene.updateMatrixWorld(true);
+ scene.traverse(o=>{
+   if(!o.isMesh||!o.geometry)return;
+   // Preserve original anatomical names/userData for search and reports.
+   o.userData.v72OriginalName=o.name||o.userData?.name||"Anatomical Structure";
+   o.name=o.name||o.userData?.name||o.parent?.name||"Anatomical Structure";
+   if(!o.geometry.attributes.normal)try{o.geometry.computeVertexNormals()}catch(e){}
+   o.frustumCulled=true;
+   meshes.push(o);
+ });
+ return meshes;
+}
+function frame(T,a,meshes){
+ const box=new T.Box3();
+ meshes.forEach(m=>box.expandByObject(m));
+ const size=box.getSize(new T.Vector3()),center=box.getCenter(new T.Vector3());
+ if(!isFinite(size.y)||size.y<=0)return;
+ // Center the imported HD model without modifying its internal mesh hierarchy.
+ const group=meshes[0]?.parent;
+ const targetRoot=(group&&group!==a.scene)?group:null;
+ if(targetRoot){
+   targetRoot.position.x-=center.x;targetRoot.position.y-=center.y;targetRoot.position.z-=center.z;
+   targetRoot.updateMatrixWorld(true);
+ }
+ const max=Math.max(size.x,size.y,size.z);
+ const dist=max/(2*Math.tan((a.camera.fov*Math.PI/180)/2))*1.12;
+ a.camera.position.set(0,size.y*.01,dist);
+ a.camera.near=Math.max(.01,dist/1000);a.camera.far=dist*12;a.camera.updateProjectionMatrix();
+ if(a.controls){a.controls.target.set(0,0,0);a.controls.minDistance=max*.35;a.controls.maxDistance=max*4;a.controls.update()}
+}
+async function loadHD(){
+ const a=(typeof app!=="undefined"?app:null),r=root();
+ if(!a?.THREE||!a?.scene||!a?.renderer||!r||a.__v72Loading||a.__v72HD)return;
+ a.__v72Loading=true; const T=a.THREE;
+ status("Loading HD Anatomy…","Preparing high-detail anatomical asset");
+
+ let GLTFLoader,DRACOLoader;
+ try{
+   [{GLTFLoader},{DRACOLoader}]=await Promise.all([
+     import(`https://esm.sh/three@${THREE_VER}/examples/jsm/loaders/GLTFLoader.js`),
+     import(`https://esm.sh/three@${THREE_VER}/examples/jsm/loaders/DRACOLoader.js`)
+   ]);
+ }catch(err){
+   status("HD loader unavailable","Using current anatomy model");
+   a.__v72Loading=false;return;
+ }
+ const loader=new GLTFLoader();
+ const draco=new DRACOLoader();
+ draco.setDecoderPath(DRACO_PATH);draco.setDecoderConfig({type:"js"});loader.setDRACOLoader(draco);
+
+ const attempt=url=>new Promise((resolve,reject)=>{
+   loader.load(url,g=>resolve(g),xhr=>{
+     if(xhr.total)status("Loading HD Anatomy…",`${Math.round(xhr.loaded/xhr.total*100)}% downloaded`);
+   },reject);
+ });
+
+ let gltf,used=HD;
+ try{gltf=await attempt(HD)}
+ catch(e){
+   used=FALLBACK;
+   try{gltf=await attempt(FALLBACK)}
+   catch(err){status("3D anatomy could not load","Check the assets folder");a.__v72Loading=false;return}
+ }
+ status("Building anatomical structures…","Optimizing model for clinical interaction");
+
+ // Remove the old anatomical meshes only after the replacement loaded successfully.
+ try{
+   const old=new Set(a.meshes||[]);
+   old.forEach(m=>{if(m.parent)m.parent.remove(m)});
+ }catch(e){}
+
+ const model=gltf.scene;
+ model.name="MYAIMS_HD_ANATOMY";
+ a.scene.add(model);
+ const meshes=normalizeMeshes(T,model);
+ a.meshes=meshes;
+ a.model=model;
+ a.__v72HD=used===HD;
+ a.__v72Asset=used;
+ a.__v72Loading=false;
+
+ // Raycaster and camera remain compatible with V61/V69.
+ if(!a.raycaster)a.raycaster=new T.Raycaster();
+ frame(T,a,meshes);
+
+ // Clinical material pass, preserving texture maps included in the new GLB.
+ meshes.forEach(m=>{
+   const tendon=/tendon|ligament|fascia|aponeuros|retinaculum|cartilage/i.test(m.name||"");
+   const old=m.material;
+   if(old){
+     old.side=T.DoubleSide;
+     if("roughness" in old)old.roughness=tendon?.58:.46;
+     if("metalness" in old)old.metalness=0;
+     old.needsUpdate=true;
+     m.userData.v72Base=old.clone?old.clone():old;
+   }
+ });
+ r.classList.add("v72-hd-active");
+ r.dataset.anatomyAsset=used;
+ status(a.__v72HD?"HD Anatomy Active":"Standard Anatomy Active",
+        `${meshes.length} anatomical structures · ${a.__v72HD?"DRACO HD asset":"fallback asset"}`);
+ setTimeout(()=>r.querySelector("#v72-hd-status")?.classList.add("compact"),1800);
+
+ // Refresh later UI layers that depend on app.meshes.
+ try{document.dispatchEvent(new CustomEvent("myaims:anatomy-ready",{detail:{asset:used,count:meshes.length,hd:a.__v72HD}}))}catch(e){}
+}
+function boot(){
+ const r=root();if(!r?.classList.contains("open"))return;
+ const t=setInterval(()=>{
+   const a=typeof app!=="undefined"?app:null;
+   if(a?.THREE&&a?.scene&&a?.renderer){clearInterval(t);loadHD()}
+ },100);
+ setTimeout(()=>clearInterval(t),16000);
+}
+document.addEventListener("click",e=>{
+ if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,260);
+},false);
+
+const st=document.createElement("style");st.textContent=`
+#v72-hd-status{position:absolute;z-index:40;left:50%;top:91px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;min-width:190px;padding:7px 11px;border:1px solid #d6e4e7;border-radius:10px;background:rgba(255,255,255,.95);box-shadow:0 8px 24px rgba(21,67,76,.09);backdrop-filter:blur(10px);transition:.25s}
+#v72-hd-status i{width:7px;height:7px;border-radius:50%;background:#1a9b79;box-shadow:0 0 0 4px rgba(26,155,121,.11)}
+#v72-hd-status b,#v72-hd-status span{display:block}#v72-hd-status b{font-size:6px;color:#24535e}#v72-hd-status span{font-size:4.8px;color:#82979b;margin-top:1px}
+#v72-hd-status.compact{min-width:0;opacity:.88;top:94px}
+#v61-real3d.v72-hd-active .v70-render-badge{display:none!important}
+#v61-real3d.v72-hd-active .v71-quality{bottom:84px}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V72 HD ANATOMY ENGINE";
+})();
