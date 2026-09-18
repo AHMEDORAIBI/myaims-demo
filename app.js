@@ -11853,138 +11853,195 @@ body.myaims-ar #v57-comments{direction:rtl;text-align:right}@media(max-width:100
 })();
 
 /* =========================================================
-   myAIMS V60 — CLINICAL PRO REBUILD
-   Premium clinical launcher + professional anatomical mapper.
-   Clean rebuild on V58. No dependency on V59.
+   myAIMS V61 — REAL 3D MUSCULAR ANATOMY
+   Real GLB muscle meshes + Three.js + OrbitControls + Raycaster
+   Built on V58 stable core (V59/V60 excluded).
+   Anatomical data: BodyParts3D + Z-Anatomy via BodyExplorer.
    ========================================================= */
 (function(){
+const THREE_VER="0.180.0";
+const MODEL_URL="https://cdn.jsdelivr.net/gh/JohanBellander/BodyExplorer@main/public/anatomy.glb";
+const THREE_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/build/three.module.js`;
+const LOADER_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/examples/jsm/loaders/GLTFLoader.js`;
+const ORBIT_URL=`https://cdn.jsdelivr.net/npm/three@${THREE_VER}/examples/jsm/controls/OrbitControls.js`;
 const AR=()=>document.documentElement.dir==="rtl"||document.documentElement.lang==="ar"||document.body.classList.contains("myaims-ar");
 const T=(e,a)=>AR()?a:e;
 const DB=()=>window.state||window.appState||{};
-const SVG={
- assessment:`<svg viewBox="0 0 24 24"><path d="M12 2.5a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2M8.6 8.8h6.8l2.5 5.6-2.1.9-1.6-3.5v9.7h-2.3v-6.1h-1.1v6.1H8.5v-9.7l-1.6 3.5-2.1-.9 2.5-5.6h1.3Z"/></svg>`,
- plan:`<svg viewBox="0 0 24 24"><path d="M8 3h8v2h3v16H5V5h3V3Zm2 2v2h4V5h-4Zm-1 6v2h6v-2H9Zm0 4v2h6v-2H9Z"/></svg>`,
- note:`<svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5V3Zm9 2.5V8h2.5L14 5.5ZM8 11h8v2H8v-2Zm0 4h8v2H8v-2Z"/></svg>`,
- progress:`<svg viewBox="0 0 24 24"><path d="M4 19h17v2H2V4h2v15Zm3.2-2.2-1.5-1.4 4.4-4.7 3.2 2.5 5.1-7.1L20 7.3l-6.3 8.8-3.4-2.6-3.1 3.3Z"/></svg>`,
- hep:`<svg viewBox="0 0 24 24"><path d="M3 9h3V6h2v12H6v-3H3V9Zm13-3h2v3h3v6h-3v3h-2V6ZM9 11h6v2H9v-2Z"/></svg>`,
- history:`<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 1-7.4 5H2l3.5-4L9 9H6.7A6 6 0 1 0 12 6v4.3l3.8 2.2-1 1.7-4.8-2.8V4h2Z"/></svg>`
-};
+let app=null, mode="pain", selected=new Map(), note="", symptoms=new Set();
 
 function context(){
- const s=document.querySelector("#v55-clinical-launcher"),d=DB(),pid=s?.dataset.patientId,aid=s?.dataset.appointmentId;
- return {p:(d.patients||[]).find(x=>String(x.id)===String(pid))||{},
- a:(d.appointments||[]).find(x=>String(x.id)===String(aid))||{}};
+ const s=document.querySelector("#v55-clinical-launcher"),d=DB();
+ return {
+  p:(d.patients||[]).find(x=>String(x.id)===String(s?.dataset.patientId))||{},
+  a:(d.appointments||[]).find(x=>String(x.id)===String(s?.dataset.appointmentId))||{}
+ };
 }
 function initials(n){return String(n||"P").split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase()}
 
-/* Premium launcher: replace V55 visual shell only; keep its entry data/context. */
-function rebuildLauncher(){
- const host=document.querySelector("#v55-clinical-launcher"); if(!host||!host.classList.contains("open"))return;
+async function modules(){
+ if(window.__V61_THREE)return window.__V61_THREE;
+ const [THREE,L,C]=await Promise.all([import(THREE_URL),import(LOADER_URL),import(ORBIT_URL)]);
+ return window.__V61_THREE={THREE,GLTFLoader:L.GLTFLoader,OrbitControls:C.OrbitControls};
+}
+function shell(){
+ let h=document.getElementById("v61-real3d");
+ if(!h){h=document.createElement("div");h.id="v61-real3d";document.body.appendChild(h)}
  const {p,a}=context();
- host.innerHTML=`<div class="v60-launch">
- <header><div class="v60-brand"><span>M</span><div><b>myAIMS</b><small>${T("Clinical Care Workspace","مساحة الرعاية السريرية")}</small></div></div>
- <div class="v60-crumb">${T("Patients","المرضى")} <i>›</i> ${p.name||T("Patient","المريض")} <i>›</i> <b>${T("Clinical Session","الجلسة السريرية")}</b></div>
- <div class="v60-headbtns"><button data-v60-draft>▣ ${T("Save Draft","حفظ مسودة")}</button><button data-v60-close>×</button></div></header>
- <section class="v60-patientbar">
-   <div class="v60-person"><span>${initials(p.name)}</span><div><small>${T("CURRENT PATIENT","المريض الحالي")}</small><h2>${p.name||""}</h2><p>${p.id||""}${p.phone?" · "+p.phone:""}</p></div></div>
-   <div class="v60-stat"><small>${T("VISIT","الزيارة")}</small><b>${a.service||T("Clinical Session","جلسة سريرية")}</b><span>${a.duration||60} min</span></div>
-   <div class="v60-stat"><small>${T("THERAPIST","المعالج")}</small><b>${a.therapist||"Dr. Eman"}</b><span>${a.room||"Treatment Room 1"}</span></div>
-   <div class="v60-stat"><small>${T("DATE & TIME","التاريخ والوقت")}</small><b>${a.date||""}</b><span>${a.time||""}</span></div>
-   <div class="v60-status"><i></i><div><small>${T("SESSION STATUS","حالة الجلسة")}</small><b>${T("In Progress","قيد العمل")}</b></div></div>
- </section>
- <main><div class="v60-title"><div><small>${T("CLINICAL WORKFLOW","مسار العمل السريري")}</small><h1>${T("Clinical Session","الجلسة السريرية")}</h1><p>${T("Everything the therapist needs — one focused workspace, no long forms.","كل ما يحتاجه المعالج في مساحة مركزة واحدة دون نماذج طويلة.")}</p></div><div class="v60-complete"><span>0%</span><div><b>${T("Session completion","اكتمال الجلسة")}</b><i><em></em></i></div></div></div>
- <div class="v60-grid">
- ${card("assessment",T("Assessment & Pain Map","التقييم وخريطة الألم"),T("Assess pain, function and treatment regions","تقييم الألم والوظيفة ومناطق العلاج"),"01",true)}
- ${card("plan",T("Treatment Plan","الخطة العلاجية"),T("Goals, planned sessions and clinical strategy","الأهداف والجلسات والخطة السريرية"),"02")}
- ${card("note",T("Session Documentation","توثيق الجلسة"),T("Clinical comments and interventions","الملاحظات السريرية والتدخلات"),"03")}
- ${card("progress",T("Progress Review","مراجعة التقدم"),T("Outcomes, goals and measurements","النتائج والأهداف والقياسات"),"04")}
- ${card("hep",T("Home Exercise Program","برنامج التمارين المنزلية"),T("Assign and monitor patient exercises","إسناد ومتابعة تمارين المريض"),"05")}
- ${card("history",T("Patient History","سجل المريض"),T("Previous sessions, notes and reports","الجلسات والملاحظات والتقارير السابقة"),"06")}
- </div></main>
- <footer><span>● ${T("Autosave enabled","الحفظ التلقائي مفعل")}</span><div>${T("Clinical session","الجلسة السريرية")} · ${a.date||""}</div><button data-v60-complete>✓ ${T("Complete Session","إكمال الجلسة")}</button></footer>
- </div>`;
- host.querySelector("[data-v60-close]").onclick=()=>{host.classList.remove("open");document.body.classList.remove("v55-lock")};
- host.querySelectorAll("[data-v60-card]").forEach(b=>b.onclick=()=>route(b.dataset.v60Card));
+ h.innerHTML=`<section class="v61-shell">
+ <header class="v61-top">
+   <button class="v61-back" data-close>←</button>
+   <div class="v61-brand"><span>MY</span><div><small>myAIMS · ${T("CLINICAL ASSESSMENT","التقييم السريري")}</small><h2>${T("3D Pain & Treatment Mapping","خريطة الألم والعلاج ثلاثية الأبعاد")}</h2></div></div>
+   <div class="v61-patient"><i>${initials(p.name)}</i><div><b>${p.name||""}</b><small>${a.date||""} · ${a.time||""} · ${a.therapist||"Dr. Eman"}</small></div></div>
+   <button class="v61-save" data-save>▣ ${T("Save Draft","حفظ مسودة")}</button>
+   <button class="v61-x" data-close>×</button>
+ </header>
+ <div class="v61-modebar">
+   <div class="v61-seg"><button data-mode="pain" class="on"><i class="red"></i>${T("Pain","ألم")}</button><button data-mode="treatment"><i class="blue"></i>${T("Treatment","علاج")}</button><button data-mode="both"><i class="purple"></i>${T("Both","كلاهما")}</button></div>
+   <div class="v61-help">◉ ${T("Click a muscle to select it · Drag to rotate · Scroll to zoom","اضغط على العضلة لتحديدها · اسحب للدوران · استخدم العجلة للتقريب")}</div>
+ </div>
+ <main>
+  <aside class="v61-left">
+   <small class="eyebrow">${T("ANATOMICAL NAVIGATION","التنقل التشريحي")}</small><h3>${T("Muscular System","الجهاز العضلي")}</h3>
+   <div class="v61-views"><button data-view="front" class="on">♙<span>${T("Front","أمامي")}</span></button><button data-view="back">♙<span>${T("Back","خلفي")}</span></button><button data-view="left">♙<span>${T("Left","يسار")}</span></button><button data-view="right">♙<span>${T("Right","يمين")}</span></button></div>
+   <div class="v61-divider"></div><small class="eyebrow">${T("QUICK REGIONS","مناطق سريعة")}</small>
+   <div class="v61-regions">${["Neck","Shoulder","Chest","Upper Back","Lower Back","Upper Arm","Forearm","Hip","Thigh","Knee","Calf"].map(x=>`<button data-region="${x}"><span>${regionIcon(x)}</span><b>${T(x,arRegion(x))}</b><em>›</em></button>`).join("")}</div>
+   <button class="v61-reset" data-reset>↻ ${T("Reset 3D View","إعادة ضبط العرض")}</button>
+  </aside>
+  <section class="v61-stagewrap">
+   <div class="v61-stagehead"><div><small class="eyebrow">${T("REAL-TIME 3D ANATOMY","تشريح ثلاثي الأبعاد مباشر")}</small><h3>${T("Select the exact muscle or treatment region","حدد العضلة أو منطقة العلاج بدقة")}</h3></div><div class="v61-modelstatus"><i></i><span>${T("Anatomical model","النموذج التشريحي")}</span><b data-status>${T("Loading…","جاري التحميل…")}</b></div></div>
+   <div id="v61-canvas"></div>
+   <div class="v61-loading" data-loading><div class="v61-spinner"></div><b>${T("Loading real anatomical model","جاري تحميل النموذج التشريحي الحقيقي")}</b><span data-progress>0%</span><small>${T("First load may take a few seconds","قد يستغرق التحميل الأول بضع ثوانٍ")}</small></div>
+   <div class="v61-tools"><button data-view="front">F</button><button data-view="back">B</button><button data-zoom="in">＋</button><button data-zoom="out">−</button><button data-reset>↻</button></div>
+   <div class="v61-badge"><b>3D</b><span>${T("467 anatomical meshes","467 بنية تشريحية")}</span></div>
+   <div class="v61-legend"><span><i class="red"></i>${T("Pain","ألم")}</span><span><i class="blue"></i>${T("Treatment","علاج")}</span><span><i class="purple"></i>${T("Both","كلاهما")}</span><span>↻ 360°</span></div>
+  </section>
+  <aside class="v61-right">
+   <div class="v61-rtitle"><div><small class="eyebrow">${T("CLINICAL FINDINGS","النتائج السريرية")}</small><h3><span data-count>0</span> ${T("Selected Structures","مناطق محددة")}</h3></div><button data-clear>${T("Clear","مسح")}</button></div>
+   <div class="v61-selected" data-selected><div class="v61-empty"><span>◎</span><b>${T("No structures selected","لا توجد مناطق محددة")}</b><p>${T("Click directly on a muscle in the 3D model.","اضغط مباشرة على عضلة في النموذج ثلاثي الأبعاد.")}</p></div></div>
+   <div class="v61-score"><small class="eyebrow">${T("OVERALL PAIN SCORE","مستوى الألم العام")}</small><div><b data-overall>0/10</b><span><i data-scorebar></i></span></div></div>
+   <div class="v61-symptoms"><small class="eyebrow">${T("SYMPTOM QUALITY","طبيعة الأعراض")}</small><div>${["Aching","Sharp","Stiffness","Burning","Numbness","Tingling"].map(x=>`<button data-symptom="${x}">${T(x,arSymptom(x))}</button>`).join("")}</div></div>
+   <label class="v61-note">${T("Clinical Notes","ملاحظات سريرية")}<textarea data-note placeholder="${T("Add triggers, pattern, movement response or therapist observation…","أضف المحفزات أو النمط أو استجابة الحركة أو ملاحظة المعالج…")}"></textarea></label>
+   <div class="v61-credit">${T("3D anatomy: BodyParts3D + Z-Anatomy · CC BY-SA","التشريح ثلاثي الأبعاد: BodyParts3D + Z-Anatomy · CC BY-SA")}</div>
+  </aside>
+ </main>
+ <footer><span>● ${T("Autosave ready","الحفظ التلقائي جاهز")}</span><div class="v61-steps"><b class="on">1</b>${T("Assessment","التقييم")}<i></i><b>2</b>${T("Plan","الخطة")}<i></i><b>3</b>${T("Documentation","التوثيق")}<i></i><b>4</b>${T("Review","المراجعة")}</div><button data-save class="primary">${T("Save & Continue","حفظ ومتابعة")} →</button></footer>
+ </section>`;
+ bindUI(h); return h;
 }
-function card(k,title,desc,n,featured=false){return `<button class="v60-card ${featured?"featured":""}" data-v60-card="${k}"><div class="v60-num">${n}</div><div class="v60-ico">${SVG[k]}</div><div class="v60-cardcopy"><b>${title}</b><p>${desc}</p></div><span>→</span></button>`}
+function regionIcon(x){return ({Neck:"♙",Shoulder:"⌁",Chest:"♢","Upper Back":"♧","Lower Back":"⌇","Upper Arm":"⌞",Forearm:"╱",Hip:"◇",Thigh:"◫",Knee:"◉",Calf:"⌟"})[x]||"◎"}
+function arRegion(x){return ({Neck:"الرقبة",Shoulder:"الكتف",Chest:"الصدر","Upper Back":"أعلى الظهر","Lower Back":"أسفل الظهر","Upper Arm":"العضد",Forearm:"الساعد",Hip:"الورك",Thigh:"الفخذ",Knee:"الركبة",Calf:"الساق"})[x]||x}
+function arSymptom(x){return ({Aching:"مؤلم",Sharp:"حاد",Stiffness:"تيبس",Burning:"حارق",Numbness:"خدر",Tingling:"وخز"})[x]||x}
 
-function route(k){
- if(k==="assessment"){openAnatomy();return}
- const v55=document.querySelector("#v55-clinical-launcher");
- // use clean V55 workspace routing for remaining functional modules
- const ghost=document.createElement("button");ghost.dataset.v55=k;ghost.style.display="none";v55.appendChild(ghost);ghost.click();ghost.remove();
+async function open(){
+ const h=shell();h.classList.add("open");document.body.classList.add("v61-lock");
+ try{await init3D(h)}catch(err){
+  console.error("V61 3D:",err);
+  h.querySelector("[data-loading]").innerHTML=`<b>${T("3D model could not load","تعذر تحميل النموذج ثلاثي الأبعاد")}</b><small>${T("Check the internet connection and reload the page.","تحقق من اتصال الإنترنت ثم أعد تحميل الصفحة.")}</small>`;
+ }
 }
-
-/* observe only opening state, not DOM mutations */
-const oldOpen=window.openV55ClinicalLauncher;
-if(typeof oldOpen==="function")window.openV55ClinicalLauncher=function(){oldOpen.apply(this,arguments);setTimeout(rebuildLauncher,0)};
-
-/* Anatomical mapper */
-let anat={view:"front",layer:"muscle",mode:"pain",areas:{}};
-const zones=[
- ["neck",50,17,T("Neck","الرقبة")],["lshoulder",35,25,T("Left Shoulder","الكتف الأيسر")],["rshoulder",65,25,T("Right Shoulder","الكتف الأيمن")],
- ["upperback",50,34,T("Upper Back","أعلى الظهر")],["lowerback",50,49,T("Lower Back","أسفل الظهر")],
- ["lelbow",27,44,T("Left Elbow","المرفق الأيسر")],["relbow",73,44,T("Right Elbow","المرفق الأيمن")],
- ["lwrist",22,58,T("Left Wrist","الرسغ الأيسر")],["rwrist",78,58,T("Right Wrist","الرسغ الأيمن")],
- ["lhip",42,58,T("Left Hip","الورك الأيسر")],["rhip",58,58,T("Right Hip","الورك الأيمن")],
- ["lknee",42,76,T("Left Knee","الركبة اليسرى")],["rknee",58,76,T("Right Knee","الركبة اليمنى")],
- ["lankle",42,93,T("Left Ankle","الكاحل الأيسر")],["rankle",58,93,T("Right Ankle","الكاحل الأيمن")]
-];
-function openAnatomy(){let h=document.getElementById("v60-anatomy");if(!h){h=document.createElement("div");h.id="v60-anatomy";document.body.appendChild(h)}renderAnatomy();h.classList.add("open")}
-function anatomyFigure(side){
- return `<div class="v60-figure ${side} ${anat.layer}">
- <div class="head"><i></i><b></b></div><div class="neck"></div>
- <div class="torso"><i class="pec l"></i><i class="pec r"></i><i class="abs a1"></i><i class="abs a2"></i><i class="abs a3"></i><i class="abs a4"></i></div>
- <div class="arm left"><i></i><b></b><em></em></div><div class="arm right"><i></i><b></b><em></em></div>
- <div class="pelvis"></div><div class="leg left"><i></i><b></b><em></em></div><div class="leg right"><i></i><b></b><em></em></div>
- ${zones.map(([id,x,y,label])=>`<button class="v60-zone ${anat.areas[id]?"selected":""}" data-zone="${id}" title="${label}" style="left:${x}%;top:${y}%"><span>${anat.areas[id]?.pain||"+"}</span></button>`).join("")}
- </div>`;
+async function init3D(h){
+ if(app&&app.renderer){try{app.renderer.dispose()}catch(e){} app=null}
+ const {THREE,GLTFLoader,OrbitControls}=await modules(), mount=h.querySelector("#v61-canvas");
+ const scene=new THREE.Scene();scene.background=new THREE.Color(0xf3f7f8);
+ const camera=new THREE.PerspectiveCamera(31,mount.clientWidth/mount.clientHeight,.01,100);
+ camera.position.set(0,0.1,4.6);
+ const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:"high-performance"});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(mount.clientWidth,mount.clientHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;mount.appendChild(renderer.domElement);
+ scene.add(new THREE.HemisphereLight(0xffffff,0x8ba0a4,2.5));
+ const key=new THREE.DirectionalLight(0xffffff,3.2);key.position.set(3,5,4);scene.add(key);
+ const fill=new THREE.DirectionalLight(0xd9f4f2,1.8);fill.position.set(-4,2,3);scene.add(fill);
+ const rim=new THREE.DirectionalLight(0xffd6c6,1.4);rim.position.set(0,3,-4);scene.add(rim);
+ const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;controls.minDistance=2.1;controls.maxDistance=7;controls.target.set(0,0,0);
+ const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2(),meshes=[],original=new Map();
+ app={THREE,scene,camera,renderer,controls,raycaster,mouse,meshes,original,model:null,mount,raf:0};
+ const loader=new GLTFLoader();
+ const gltf=await new Promise((resolve,reject)=>loader.load(MODEL_URL,resolve,e=>{
+   if(e.total){const n=Math.round(e.loaded/e.total*100);h.querySelector("[data-progress]").textContent=n+"%"}
+ },reject));
+ const model=gltf.scene;app.model=model;scene.add(model);
+ const box=new THREE.Box3().setFromObject(model),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+ model.position.sub(center);const scale=3.35/Math.max(size.x,size.y,size.z);model.scale.setScalar(scale);
+ const box2=new THREE.Box3().setFromObject(model),c2=box2.getCenter(new THREE.Vector3());model.position.y-=c2.y;
+ model.traverse(o=>{if(o.isMesh){meshes.push(o);original.set(o.uuid,{material:o.material,emissive:o.material?.emissive?.clone?.()});o.castShadow=false;o.receiveShadow=false}});
+ h.querySelector("[data-loading]").style.display="none";h.querySelector("[data-status]").textContent=T("Ready","جاهز");h.querySelector(".v61-modelstatus i").classList.add("ready");
+ fit("front");
+ renderer.domElement.addEventListener("pointerup",pick);
+ renderer.domElement.addEventListener("pointermove",hover);
+ const resize=()=>{if(!app)return;camera.aspect=mount.clientWidth/mount.clientHeight;camera.updateProjectionMatrix();renderer.setSize(mount.clientWidth,mount.clientHeight)};window.addEventListener("resize",resize,{passive:true});app.resize=resize;
+ const loop=()=>{if(!app)return;app.raf=requestAnimationFrame(loop);controls.update();renderer.render(scene,camera)};loop();
 }
-function renderAnatomy(){
- const h=document.getElementById("v60-anatomy"),{p,a}=context(),entries=Object.entries(anat.areas);if(!h)return;
- h.innerHTML=`<section><header><button data-a-back>←</button><div><small>${T("ASSESSMENT · ANATOMICAL MAPPING","التقييم · الخريطة التشريحية")}</small><h2>${T("Pain & Treatment Mapping","تحديد مناطق الألم والعلاج")}</h2><p>${p.name||""} · ${a.date||""} ${a.time||""}</p></div><div class="v60-a-actions"><button data-a-save>▣ ${T("Save Draft","حفظ مسودة")}</button><button data-a-close>×</button></div></header>
- <div class="v60-a-toolbar"><div class="v60-seg"><button data-mode="pain" class="${anat.mode==="pain"?"on":""}">● ${T("Pain","ألم")}</button><button data-mode="treatment" class="${anat.mode==="treatment"?"on":""}">● ${T("Treatment","علاج")}</button><button data-mode="both" class="${anat.mode==="both"?"on":""}">● ${T("Both","كلاهما")}</button></div><div class="v60-seg"><button data-layer="muscle" class="${anat.layer==="muscle"?"on":""}">${T("Muscular","عضلي")}</button><button data-layer="surface" class="${anat.layer==="surface"?"on":""}">${T("Surface","سطحي")}</button></div></div>
- <main><aside class="v60-area-list"><small>${T("QUICK SELECTION","اختيار سريع")}</small><h3>${T("Body Regions","مناطق الجسم")}</h3>${["Neck","Shoulder","Upper Back","Lower Back","Elbow","Wrist","Hip","Knee","Ankle"].map(x=>`<button data-quick="${x.toLowerCase().replace(" ","")}"><i>${miniIcon(x)}</i><span>${x}</span><em>›</em></button>`).join("")}<button class="clear" data-a-clear>⌫ ${T("Clear selection","مسح التحديد")}</button></aside>
- <section class="v60-anat-view"><div class="v60-view-head"><div><small>${T("INTERACTIVE ANATOMICAL VIEW","عرض تشريحي تفاعلي")}</small><h3>${T("Select the exact treatment region","حدد منطقة العلاج بدقة")}</h3></div><div class="v60-view-switch"><button data-view="front" class="${anat.view==="front"?"on":""}">${T("Front","أمامي")}</button><button data-view="back" class="${anat.view==="back"?"on":""}">${T("Back","خلفي")}</button></div></div><div class="v60-figures">${anatomyFigure(anat.view)}<div class="v60-orbit"><span>3D</span><small>${T("Anatomical model","نموذج تشريحي")}</small></div></div><div class="v60-anat-legend"><span><i class="red"></i>${T("Pain region","منطقة الألم")}</span><span><i class="blue"></i>${T("Treatment region","منطقة العلاج")}</span><span>↻ ${T("Switch front / back","تبديل أمامي / خلفي")}</span></div></section>
- <aside class="v60-findings"><div class="v60-find-title"><div><small>${T("CLINICAL FINDINGS","النتائج السريرية")}</small><h3>${entries.length} ${T("Selected Areas","مناطق محددة")}</h3></div><button data-a-clear>${T("Clear","مسح")}</button></div><div class="v60-find-list">${entries.length?entries.map(([id,v])=>finding(id,v)).join(""):`<div class="v60-empty"><b>◎</b><p>${T("No areas selected","لا توجد مناطق محددة")}</p><span>${T("Tap the anatomical model or choose a region.","اضغط على النموذج التشريحي أو اختر منطقة.")}</span></div>`}</div>
- <section class="v60-pain-score"><small>${T("OVERALL PAIN SCORE","مستوى الألم العام")}</small><div><b>${overall()}/10</b><span><i style="width:${overall()*10}%"></i></span></div></section>
- <section class="v60-symptoms"><small>${T("SYMPTOM QUALITY","طبيعة الأعراض")}</small><div>${["Aching","Sharp","Stiffness","Burning","Numbness","Tingling"].map(x=>`<button>${x}</button>`).join("")}</div></section><label class="v60-note">${T("Clinical note","ملاحظة سريرية")}<textarea placeholder="${T("Add location, triggers, pattern or therapist observation...","أضف الموقع أو المحفزات أو النمط أو ملاحظة المعالج...")}"></textarea></label></aside></main>
- <footer><span>● ${T("Changes saved automatically","يتم حفظ التغييرات تلقائيًا")}</span><div><b>1</b>${T("Assessment","التقييم")}<i></i><b>2</b>${T("Plan","الخطة")}<i></i><b>3</b>${T("Documentation","التوثيق")}<i></i><b>4</b>${T("Review","المراجعة")}</div><button data-a-save class="primary">${T("Save & Continue","حفظ ومتابعة")} →</button></footer></section>`;
- bindAnatomy();
+function hit(e){
+ if(!app)return null;const r=app.renderer.domElement.getBoundingClientRect();app.mouse.x=((e.clientX-r.left)/r.width)*2-1;app.mouse.y=-((e.clientY-r.top)/r.height)*2+1;app.raycaster.setFromCamera(app.mouse,app.camera);return app.raycaster.intersectObjects(app.meshes,false)[0]?.object||null;
 }
-function miniIcon(x){return ({Neck:"♙",Shoulder:"⌁","Upper Back":"♢","Lower Back":"♧",Elbow:"⌞",Wrist:"✋",Hip:"◇",Knee:"◉",Ankle:"⌟"})[x]||"◎"}
-function zoneLabel(id){return zones.find(z=>z[0]===id)?.[3]||id}
-function finding(id,v){return `<article><i class="${v.mode}"></i><div><b>${zoneLabel(id)}</b><small>${T("Pain intensity","شدة الألم")}</small><input data-pain="${id}" type="range" min="1" max="10" value="${v.pain}"></div><strong>${v.pain}/10</strong><button data-del="${id}">×</button></article>`}
-function overall(){const x=Object.values(anat.areas);return x.length?Math.round(x.reduce((s,v)=>s+v.pain,0)/x.length):0}
-function choose(id){if(anat.areas[id])anat.areas[id].pain=Math.min(10,anat.areas[id].pain+1);else anat.areas[id]={pain:Math.max(overall(),4),mode:anat.mode};renderAnatomy()}
-function bindAnatomy(){
- const h=document.getElementById("v60-anatomy");
- h.querySelector("[data-a-close]").onclick=h.querySelector("[data-a-back]").onclick=()=>h.classList.remove("open");
- h.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{anat.mode=b.dataset.mode;renderAnatomy()});
- h.querySelectorAll("[data-layer]").forEach(b=>b.onclick=()=>{anat.layer=b.dataset.layer;renderAnatomy()});
- h.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>{anat.view=b.dataset.view;renderAnatomy()});
- h.querySelectorAll("[data-zone]").forEach(b=>b.onclick=()=>choose(b.dataset.zone));
- h.querySelectorAll("[data-quick]").forEach(b=>b.onclick=()=>{let q=b.dataset.quick;let z=zones.find(x=>x[0].replace(/^l|^r/,"").replace(/\s/g,"").includes(q)||x[3].toLowerCase().replace(/\s/g,"").includes(q));if(z)choose(z[0])});
- h.querySelectorAll("[data-a-clear]").forEach(b=>b.onclick=()=>{anat.areas={};renderAnatomy()});
- h.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{delete anat.areas[b.dataset.del];renderAnatomy()});
- h.querySelectorAll("[data-pain]").forEach(r=>r.oninput=()=>{anat.areas[r.dataset.pain].pain=+r.value;renderAnatomy()});
- h.querySelectorAll("[data-a-save]").forEach(b=>b.onclick=save);
+function pick(e){if(e.button!==0)return;const o=hit(e);if(!o)return;toggleMesh(o)}
+function hover(e){const o=hit(e);app.renderer.domElement.style.cursor=o?"pointer":"grab"}
+function displayName(o){return String(o.name||o.parent?.name||"Anatomical structure").replace(/[_-]+/g," ").replace(/\.\d+$/,"").trim()}
+function toggleMesh(o){
+ const id=o.uuid;
+ if(selected.has(id)){selected.delete(id);restore(o)}else{selected.set(id,{object:o,name:displayName(o),pain:4,mode});highlight(o,mode)}
+ renderSelected();
+}
+function highlight(o,m){
+ if(!app)return;const THREE=app.THREE,c=m==="pain"?0xef4650:m==="treatment"?0x2587e8:0x8c52d8;
+ o.material=o.material.clone();o.material.color?.set(c);if(o.material.emissive){o.material.emissive.set(c);o.material.emissiveIntensity=.22}o.material.roughness=.48;
+}
+function restore(o){const x=app?.original.get(o.uuid);if(x)o.material=x.material}
+function recolor(o,m){restore(o);highlight(o,m)}
+function renderSelected(){
+ const h=document.getElementById("v61-real3d"),box=h.querySelector("[data-selected]"),arr=[...selected.values()];
+ h.querySelector("[data-count]").textContent=arr.length;
+ if(!arr.length)box.innerHTML=`<div class="v61-empty"><span>◎</span><b>${T("No structures selected","لا توجد مناطق محددة")}</b><p>${T("Click directly on a muscle in the 3D model.","اضغط مباشرة على عضلة في النموذج ثلاثي الأبعاد.")}</p></div>`;
+ else box.innerHTML=arr.map((v,i)=>`<article><i class="${v.mode}"></i><div><b title="${v.name}">${v.name}</b><small>${T("Pain intensity","شدة الألم")}</small><input data-range="${v.object.uuid}" type="range" min="0" max="10" value="${v.pain}"></div><strong>${v.pain}/10</strong><button data-del="${v.object.uuid}">×</button></article>`).join("");
+ const ov=arr.length?Math.round(arr.reduce((s,v)=>s+v.pain,0)/arr.length):0;h.querySelector("[data-overall]").textContent=ov+"/10";h.querySelector("[data-scorebar]").style.width=(ov*10)+"%";
+ box.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const v=selected.get(b.dataset.del);if(v)restore(v.object);selected.delete(b.dataset.del);renderSelected()});
+ box.querySelectorAll("[data-range]").forEach(r=>r.oninput=()=>{selected.get(r.dataset.range).pain=+r.value;renderSelected()});
+}
+function fit(v){
+ if(!app)return;const p={front:[0,0.05,4.4],back:[0,0.05,-4.4],left:[-4.4,.05,0],right:[4.4,.05,0]}[v]||[0,.05,4.4];
+ app.camera.position.set(...p);app.controls.target.set(0,0,0);app.controls.update();
+ document.querySelectorAll("#v61-real3d [data-view]").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
+}
+function quickRegion(q){
+ if(!app)return;const terms={
+  Neck:["neck","sternocleid","trapezius"],Shoulder:["deltoid","shoulder"],Chest:["pectoral","chest"],
+  "Upper Back":["trapezius","rhomboid","latissimus"],"Lower Back":["erector","lumbar","multifidus"],
+  "Upper Arm":["biceps","triceps","brachialis"],Forearm:["forearm","flexor","extensor"],Hip:["glute","hip"],
+  Thigh:["quadriceps","hamstring","adductor"],Knee:["patella","knee"],Calf:["gastrocnemius","soleus","calf"]
+ }[q]||[];
+ const o=app.meshes.find(m=>terms.some(t=>displayName(m).toLowerCase().includes(t)));
+ if(o){if(!selected.has(o.uuid)){selected.set(o.uuid,{object:o,name:displayName(o),pain:4,mode});highlight(o,mode)}renderSelected()}
+}
+function clearAll(){selected.forEach(v=>restore(v.object));selected.clear();renderSelected()}
+function bindUI(h){
+ h.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{h.classList.remove("open");document.body.classList.remove("v61-lock");if(app){cancelAnimationFrame(app.raf);try{app.renderer.dispose()}catch(e){}app=null}});
+ h.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{mode=b.dataset.mode;h.querySelectorAll("[data-mode]").forEach(x=>x.classList.toggle("on",x===b))});
+ h.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>fit(b.dataset.view));
+ h.querySelectorAll("[data-reset]").forEach(b=>b.onclick=()=>fit("front"));
+ h.querySelectorAll("[data-region]").forEach(b=>b.onclick=()=>quickRegion(b.dataset.region));
+ h.querySelectorAll("[data-clear]").forEach(b=>b.onclick=clearAll);
+ h.querySelectorAll("[data-zoom]").forEach(b=>b.onclick=()=>{if(!app)return;const dir=b.dataset.zoom==="in"?.86:1.16;app.camera.position.multiplyScalar(dir);app.controls.update()});
+ h.querySelectorAll("[data-save]").forEach(b=>b.onclick=save);
+ h.querySelectorAll("[data-symptom]").forEach(b=>b.onclick=()=>{const s=b.dataset.symptom;symptoms.has(s)?symptoms.delete(s):symptoms.add(s);b.classList.toggle("on",symptoms.has(s))});
+ h.querySelector("[data-note]").oninput=e=>note=e.target.value;
 }
 function save(){
  const d=DB(),{p,a}=context();d.painAssessments=d.painAssessments||[];
- const rec={id:"PA-"+Date.now(),patientId:p.id||"",appointmentId:a.id||"",date:a.date||new Date().toISOString().slice(0,10),view:anat.view,layer:anat.layer,overallPain:overall(),areas:Object.entries(anat.areas).map(([id,v])=>({area:zoneLabel(id),intensity:v.pain,mode:v.mode})),updatedAt:new Date().toISOString()};
+ const arr=[...selected.values()],rec={id:"PA-"+Date.now(),patientId:p.id||"",appointmentId:a.id||"",date:a.date||new Date().toISOString().slice(0,10),engine:"V61-real-3d",overallPain:arr.length?Math.round(arr.reduce((s,v)=>s+v.pain,0)/arr.length):0,symptoms:[...symptoms],note,areas:arr.map(v=>({mesh:v.name,intensity:v.pain,mode:v.mode})),updatedAt:new Date().toISOString()};
  const ix=d.painAssessments.findIndex(x=>a.id&&String(x.appointmentId)===String(a.id));if(ix>=0)d.painAssessments[ix]=rec;else d.painAssessments.push(rec);try{window.saveState&&window.saveState()}catch(e){}
 }
+
+/* Actual Assessment card -> real 3D */
+document.addEventListener("click",e=>{
+ const b=e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]');
+ if(!b)return;e.preventDefault();e.stopImmediatePropagation();open();
+},true);
+
 const css=document.createElement("style");css.textContent=`
-#v55-clinical-launcher.open{padding:0!important;background:#edf3f4!important;backdrop-filter:none!important}.v60-launch{height:100vh;display:grid;grid-template-rows:58px auto 1fr 52px;background:#f4f7f8;color:#173f49;overflow:hidden}.v60-launch>header{display:flex;align-items:center;gap:28px;padding:0 24px;background:#fff;border-bottom:1px solid #dbe5e7}.v60-brand{display:flex;align-items:center;gap:9px}.v60-brand>span{width:35px;height:35px;border-radius:10px;background:linear-gradient(145deg,#123f49,#267582);color:#fff;display:grid;place-items:center;font-size:18px;font-weight:900}.v60-brand b,.v60-brand small{display:block}.v60-brand b{font-size:17px}.v60-brand small{font-size:7px;color:#879a9e}.v60-crumb{font-size:9px;color:#7b9095}.v60-crumb i{margin:0 7px;color:#b6c4c6}.v60-headbtns{margin-inline-start:auto;display:flex;gap:7px}.v60-headbtns button{height:34px!important;border:1px solid #d6e2e4!important;background:#fff!important;border-radius:8px!important;padding:0 11px!important;font-size:8.5px!important;color:#31565e!important}.v60-headbtns [data-v60-close]{width:34px;padding:0!important;font-size:19px!important}
-.v60-patientbar{margin:12px 24px 0;display:grid;grid-template-columns:1.4fr repeat(3,.75fr) .75fr;background:#fff;border:1px solid #dbe5e7;border-radius:13px;box-shadow:0 5px 20px rgba(28,69,75,.04)}.v60-person,.v60-stat,.v60-status{display:flex;align-items:center;padding:12px 16px;border-inline-end:1px solid #e6edef}.v60-person>span{width:48px;height:48px;border-radius:14px;background:linear-gradient(145deg,#174d58,#277581);color:#fff;display:grid;place-items:center;font-size:15px;font-weight:900;margin-inline-end:11px}.v60-person small,.v60-stat small,.v60-status small{display:block;font-size:7px;font-weight:900;color:#b17c2b;letter-spacing:.08em}.v60-person h2{font-size:18px!important;margin:2px 0!important;color:#173f49!important}.v60-person p,.v60-stat span{margin:0;font-size:8px;color:#83979b}.v60-stat{display:block}.v60-stat b{display:block;font-size:10px;margin:4px 0;color:#31565e}.v60-status{border:0}.v60-status>i{width:9px;height:9px;border-radius:50%;background:#42a887;box-shadow:0 0 0 6px #eaf6f2;margin-inline-end:12px}.v60-status b{font-size:10px;color:#347864}
-.v60-launch>main{min-height:0;padding:18px 24px;overflow:auto}.v60-title{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:15px}.v60-title small{font-size:8px;font-weight:900;color:#b17c2b}.v60-title h1{font-size:29px!important;margin:2px 0!important;color:#173f49!important}.v60-title p{font-size:10px!important;color:#789095;margin:0}.v60-complete{display:flex;align-items:center;gap:10px}.v60-complete>span{width:45px;height:45px;border-radius:50%;border:4px solid #e2ebec;display:grid;place-items:center;font-size:10px;font-weight:900}.v60-complete b{font-size:8px}.v60-complete i{display:block;width:130px;height:5px;background:#e5eded;border-radius:5px;margin-top:5px}.v60-complete em{display:block;height:100%;background:#c89a43}.v60-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.v60-card{position:relative!important;min-height:190px!important;display:grid!important;grid-template-columns:65px 1fr 30px!important;align-items:center!important;text-align:start!important;gap:15px!important;background:#fff!important;border:1px solid #dbe5e7!important;border-radius:15px!important;padding:20px!important;box-shadow:0 8px 24px rgba(27,68,75,.04)!important;transition:.2s!important}.v60-card:hover{transform:translateY(-3px)!important;box-shadow:0 16px 34px rgba(27,68,75,.09)!important;border-color:#b8d0d3!important}.v60-card.featured{background:linear-gradient(145deg,#123f49,#1f6671)!important;border-color:#174f5b!important}.v60-num{position:absolute;top:13px;right:14px;font-size:8px;font-weight:900;color:#c0ccce}.v60-ico{width:62px;height:62px;border-radius:16px;background:#eaf2f3;color:#236571;display:grid;place-items:center}.v60-ico svg{width:31px;height:31px;fill:currentColor}.v60-cardcopy b{font-size:16px!important;color:#173f49}.v60-cardcopy p{font-size:9.5px!important;line-height:1.5;color:#789095;margin:6px 0 0}.v60-card>span{font-size:22px;color:#b17c2b}.v60-card.featured .v60-ico{background:rgba(255,255,255,.11);color:#e8c16d}.v60-card.featured .v60-cardcopy b{color:#fff}.v60-card.featured .v60-cardcopy p{color:#cfe0e2}.v60-card.featured>span{color:#e8c16d}.v60-card.featured .v60-num{color:rgba(255,255,255,.35)}.v60-launch>footer{display:flex;align-items:center;padding:0 24px;background:#fff;border-top:1px solid #dbe5e7;font-size:8px;color:#7c9195}.v60-launch>footer>div{margin:auto}.v60-launch>footer>button{height:35px!important;background:#174f5b!important;color:#fff!important;border:0!important;border-radius:8px!important;padding:0 14px!important;font-size:8.5px!important;font-weight:900!important}
-#v60-anatomy{display:none;position:fixed;inset:0;z-index:700000;background:#f3f7f8}#v60-anatomy.open{display:block}#v60-anatomy>section{height:100vh;display:grid;grid-template-rows:60px 47px 1fr 50px;overflow:hidden}#v60-anatomy header{display:flex;align-items:center;padding:0 20px;background:#fff;border-bottom:1px solid #dbe5e7}#v60-anatomy header>[data-a-back]{width:34px;height:34px!important;border:1px solid #dbe5e7!important;background:#fff!important;border-radius:8px!important;margin-inline-end:12px}#v60-anatomy header>div:nth-child(2){flex:1}#v60-anatomy header small,.v60-area-list>small,.v60-view-head small,.v60-find-title small,.v60-pain-score small,.v60-symptoms small{font-size:7px;color:#b17c2b;font-weight:900;letter-spacing:.08em}#v60-anatomy header h2{font-size:19px!important;color:#173f49!important;margin:1px 0!important}#v60-anatomy header p{font-size:7.5px!important;color:#84979b;margin:0}.v60-a-actions{display:flex;gap:7px}.v60-a-actions button{height:33px!important;border:1px solid #d7e3e4!important;background:#fff!important;border-radius:8px!important;padding:0 10px!important;font-size:8px!important}.v60-a-actions [data-a-close]{width:33px;padding:0!important;font-size:18px!important}.v60-a-toolbar{display:flex;justify-content:center;gap:18px;align-items:center;background:#fff;border-bottom:1px solid #dbe5e7}.v60-seg{display:flex;background:#eef3f4;border-radius:8px;padding:3px}.v60-seg button{height:28px!important;border:0!important;background:transparent!important;border-radius:6px!important;padding:0 11px!important;font-size:7.5px!important}.v60-seg button.on{background:#fff!important;color:#17606a!important;box-shadow:0 1px 5px rgba(0,0,0,.08)!important;font-weight:900!important}
-#v60-anatomy main{min-height:0;display:grid;grid-template-columns:210px minmax(430px,1fr) 310px;gap:10px;padding:10px 16px;overflow:hidden}.v60-area-list,.v60-anat-view,.v60-findings{background:#fff;border:1px solid #dbe5e7;border-radius:13px;min-height:0}.v60-area-list{padding:12px;overflow:auto}.v60-area-list h3,.v60-view-head h3,.v60-find-title h3{font-size:14px!important;color:#173f49!important;margin:2px 0 10px!important}.v60-area-list>button:not(.clear){width:100%;height:43px!important;display:grid!important;grid-template-columns:29px 1fr 15px!important;align-items:center!important;text-align:start!important;border:0!important;border-bottom:1px solid #edf1f2!important;background:#fff!important;padding:0 5px!important;font-size:8.5px!important;color:#466970!important}.v60-area-list>button i{width:27px;height:27px;border-radius:7px;background:#edf4f4;color:#286b77;display:grid;place-items:center;font-style:normal;font-size:13px}.v60-area-list>button em{font-style:normal;color:#a3b2b5}.v60-area-list .clear{width:100%;height:34px!important;margin-top:9px;border:1px solid #e3d7d7!important;background:#fffafa!important;color:#a65357!important;border-radius:8px!important;font-size:8px!important}
-.v60-anat-view{display:grid;grid-template-rows:auto 1fr auto;background:radial-gradient(circle at 50% 42%,#fff,#eef4f5 65%,#e7eff0);overflow:hidden}.v60-view-head{display:flex;justify-content:space-between;padding:10px 12px;background:rgba(255,255,255,.9);border-bottom:1px solid #dbe5e7}.v60-view-switch{display:flex}.v60-view-switch button{height:29px!important;border:1px solid #dbe5e7!important;background:#fff!important;padding:0 12px!important;font-size:7.5px!important}.v60-view-switch button:first-child{border-radius:7px 0 0 7px!important}.v60-view-switch button:last-child{border-radius:0 7px 7px 0!important}.v60-view-switch button.on{background:#174f5b!important;color:#fff!important}.v60-figures{position:relative;min-height:0;perspective:1000px}.v60-figure{position:absolute;left:50%;top:50%;width:200px;height:450px;transform:translate(-50%,-50%) rotateY(-7deg);filter:drop-shadow(0 18px 18px rgba(28,65,71,.18));transition:.3s}.v60-figure.back{transform:translate(-50%,-50%) rotateY(187deg)}.v60-figure .head{position:absolute;left:78px;top:2px;width:44px;height:53px;border-radius:48%;background:linear-gradient(90deg,#a85c4c,#e3a087 50%,#9d5044);box-shadow:inset 8px 0 8px rgba(70,24,20,.18)}.v60-figure .head i{position:absolute;left:10px;right:10px;top:20px;height:1px;background:rgba(85,35,29,.25)}.v60-figure .neck{position:absolute;left:87px;top:49px;width:27px;height:31px;background:linear-gradient(90deg,#a55647,#dc9277,#9f5043)}.v60-figure .torso{position:absolute;left:46px;top:73px;width:108px;height:165px;clip-path:polygon(20% 0,80% 0,100% 32%,78% 100%,22% 100%,0 32%);background:linear-gradient(90deg,#8e453c,#ca725f 15%,#eda68a 48%,#c86b59 80%,#8d433b);box-shadow:inset 13px 0 14px rgba(70,22,18,.2),inset -9px 0 12px rgba(255,218,196,.2)}.v60-figure .pec{position:absolute;top:24px;width:42px;height:43px;border:1px solid rgba(96,38,30,.38);border-radius:48%}.v60-figure .pec.l{left:10px}.v60-figure .pec.r{right:10px}.v60-figure .abs{position:absolute;width:23px;height:33px;border:1px solid rgba(96,38,30,.35);border-radius:40%}.a1{left:30px;top:72px}.a2{right:30px;top:72px}.a3{left:30px;top:106px}.a4{right:30px;top:106px}.v60-figure .pelvis{position:absolute;left:64px;top:225px;width:72px;height:50px;border-radius:15px 15px 27px 27px;background:linear-gradient(90deg,#91483e,#d9826b,#94483e)}.v60-figure .arm{position:absolute;top:84px;width:32px;height:188px}.v60-figure .arm.left{left:27px;transform:rotate(7deg)}.v60-figure .arm.right{right:27px;transform:rotate(-7deg)}.v60-figure .arm i,.v60-figure .arm b,.v60-figure .arm em,.v60-figure .leg i,.v60-figure .leg b,.v60-figure .leg em{display:block;background:linear-gradient(90deg,#91483e,#dc8b72,#9a4c41);border:1px solid rgba(87,33,28,.2);border-radius:45%}.v60-figure .arm i{height:82px}.v60-figure .arm b{height:76px;width:27px;margin:auto}.v60-figure .arm em{height:30px;width:23px;margin:auto}.v60-figure .leg{position:absolute;top:262px;width:45px;height:185px}.v60-figure .leg.left{left:56px}.v60-figure .leg.right{right:56px}.v60-figure .leg i{height:87px}.v60-figure .leg b{height:82px;width:34px;margin:auto}.v60-figure .leg em{height:19px;width:37px;margin:auto}.v60-figure.surface .head,.v60-figure.surface .neck,.v60-figure.surface .torso,.v60-figure.surface .pelvis,.v60-figure.surface .arm>* ,.v60-figure.surface .leg>*{filter:saturate(.45) brightness(1.15)}.v60-zone{position:absolute!important;z-index:10;width:23px!important;height:23px!important;min-height:23px!important;border-radius:50%!important;border:2px solid #fff!important;background:#fff!important;color:#17606a!important;padding:0!important;transform:translate(-50%,-50%);font-size:7px!important;box-shadow:0 2px 9px rgba(0,0,0,.25)}.v60-zone:after{content:"";position:absolute;inset:-5px;border:1px solid rgba(23,96,106,.3);border-radius:50%}.v60-zone.selected{background:#ed4b53!important;color:#fff!important}.v60-zone.selected:after{border-color:rgba(237,75,83,.5)}.v60-orbit{position:absolute;right:14px;bottom:12px;text-align:center}.v60-orbit span{width:38px;height:38px;border-radius:50%;background:#174f5b;color:#fff;display:grid;place-items:center;font-size:9px;font-weight:900}.v60-orbit small{display:block;font-size:6px;color:#819498;margin-top:3px}.v60-anat-legend{display:flex;justify-content:center;gap:14px;padding:7px;background:rgba(255,255,255,.8);font-size:7px;color:#6f878c}.v60-anat-legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-inline-end:4px}.v60-anat-legend .red{background:#ed4b53}.v60-anat-legend .blue{background:#3187db}
-.v60-findings{padding:12px;overflow:auto}.v60-find-title{display:flex;justify-content:space-between}.v60-find-title button{border:0!important;background:none!important;color:#bd5055!important;font-size:7px!important}.v60-find-list{display:grid;gap:6px}.v60-find-list article{display:grid;grid-template-columns:7px 1fr 38px 20px;gap:7px;align-items:center;border:1px solid #e0e8e9;border-radius:9px;padding:8px}.v60-find-list article>i{height:38px;border-radius:5px;background:#ed4b53}.v60-find-list article>i.treatment{background:#3187db}.v60-find-list b,.v60-find-list small{display:block}.v60-find-list b{font-size:8.5px;color:#31565e}.v60-find-list small{font-size:6.5px;color:#84979b}.v60-find-list input{width:100%;height:3px}.v60-find-list strong{font-size:8px}.v60-find-list article>button{border:0!important;background:none!important;color:#c45156!important;padding:0!important}.v60-empty{text-align:center;padding:30px 10px;color:#84979b}.v60-empty>b{font-size:30px;color:#b8c8ca}.v60-empty p{font-size:9px;font-weight:900}.v60-empty span{font-size:7px}.v60-pain-score,.v60-symptoms{margin-top:10px;border-top:1px solid #e4ebec;padding-top:9px}.v60-pain-score>div{display:flex;align-items:center;gap:9px;margin-top:5px}.v60-pain-score b{font-size:19px}.v60-pain-score span{height:5px;flex:1;background:#e8eeee;border-radius:5px;overflow:hidden}.v60-pain-score i{display:block;height:100%;background:#ed4b53}.v60-symptoms>div{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px}.v60-symptoms button{height:28px!important;border:1px solid #dce5e7!important;background:#f8fbfb!important;border-radius:6px!important;font-size:6.5px!important}.v60-note{display:block;margin-top:9px;font-size:7px;font-weight:900;color:#31565e}.v60-note textarea{display:block;width:100%;min-height:62px;margin-top:4px;border:1px solid #d8e3e5;border-radius:7px;padding:7px;font:inherit}
-#v60-anatomy footer{display:flex;align-items:center;padding:0 18px;background:#fff;border-top:1px solid #dbe5e7;font-size:7px;color:#7c9195}#v60-anatomy footer>div{margin:auto;display:flex;align-items:center;gap:6px}#v60-anatomy footer>div b{width:21px;height:21px;border-radius:50%;background:#e8eeee;display:grid;place-items:center}#v60-anatomy footer>div b:first-child{background:#174f5b;color:#fff}#v60-anatomy footer>div i{width:28px;height:1px;background:#d7e3e4}#v60-anatomy footer .primary{height:34px!important;background:#174f5b!important;color:#fff!important;border:0!important;border-radius:7px!important;padding:0 12px!important;font-size:7.5px!important;font-weight:900!important}
-body.myaims-ar .v60-launch,body.myaims-ar #v60-anatomy{direction:rtl;text-align:right}
-@media(max-width:1000px){.v60-grid{grid-template-columns:repeat(2,1fr)}#v60-anatomy main{grid-template-columns:170px 1fr 260px}.v60-patientbar{grid-template-columns:1.4fr 1fr 1fr}.v60-status,.v60-stat:nth-of-type(3){display:none}}@media(max-width:720px){.v60-grid{grid-template-columns:1fr}.v60-patientbar{grid-template-columns:1fr}.v60-stat,.v60-status{display:none}#v60-anatomy main{overflow:auto;grid-template-columns:1fr}.v60-anat-view{min-height:590px}.v60-findings{overflow:visible}.v60-crumb{display:none}}
+body.v61-lock{overflow:hidden!important}#v61-real3d{display:none;position:fixed;inset:0;z-index:900000;background:#edf3f4;color:#173f49}#v61-real3d.open{display:block}.v61-shell{height:100vh;display:grid;grid-template-rows:58px 45px 1fr 49px;overflow:hidden}.v61-top{display:flex;align-items:center;padding:0 18px;background:#fff;border-bottom:1px solid #dbe5e7;gap:11px}.v61-back,.v61-x{width:34px!important;height:34px!important;border:1px solid #d9e4e6!important;background:#fff!important;border-radius:8px!important;padding:0!important}.v61-brand{display:flex;align-items:center;gap:9px}.v61-brand>span{width:34px;height:34px;border-radius:9px;background:#174f5b;color:#fff;display:grid;place-items:center;font-size:9px;font-weight:900}.v61-brand small,.eyebrow{font-size:6.5px!important;letter-spacing:.09em;color:#b08032;font-weight:900}.v61-brand h2{font-size:16px!important;margin:1px 0!important;color:#173f49!important}.v61-patient{margin-inline-start:auto;display:flex;align-items:center;gap:8px;border-inline-end:1px solid #e2eaeb;padding-inline-end:14px}.v61-patient>i{width:32px;height:32px;border-radius:50%;background:#e8f1f2;color:#17606a;display:grid;place-items:center;font-style:normal;font-size:9px;font-weight:900}.v61-patient b,.v61-patient small{display:block}.v61-patient b{font-size:8.5px}.v61-patient small{font-size:6.5px;color:#87999d}.v61-save{height:34px!important;border:1px solid #d7e3e5!important;background:#fff!important;border-radius:8px!important;padding:0 11px!important;font-size:7.5px!important}.v61-x{font-size:18px!important}.v61-modebar{display:flex;align-items:center;justify-content:center;background:#fff;border-bottom:1px solid #dbe5e7;gap:18px}.v61-seg{display:flex;background:#eef3f4;border-radius:8px;padding:3px}.v61-seg button{height:29px!important;border:0!important;background:transparent!important;border-radius:6px!important;padding:0 13px!important;font-size:7.5px!important}.v61-seg button.on{background:#fff!important;box-shadow:0 1px 5px rgba(0,0,0,.08)!important;font-weight:900!important}.v61-seg i,.v61-legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-inline-end:5px}.red{background:#ed4851!important}.blue{background:#2886df!important}.purple{background:#8b55d5!important}.v61-help{font-size:7px;color:#82969a}
+#v61-real3d main{min-height:0;display:grid;grid-template-columns:205px minmax(500px,1fr) 305px;gap:9px;padding:9px 14px;overflow:hidden}.v61-left,.v61-stagewrap,.v61-right{min-height:0;background:#fff;border:1px solid #dbe5e7;border-radius:12px}.v61-left{padding:11px;overflow:auto}.v61-left h3,.v61-stagehead h3,.v61-rtitle h3{font-size:13px!important;margin:2px 0 9px!important;color:#173f49!important}.v61-views{display:grid;grid-template-columns:1fr 1fr;gap:5px}.v61-views button{height:48px!important;border:1px solid #dce6e8!important;background:#f8fbfb!important;border-radius:8px!important;font-size:13px!important;color:#315f68!important}.v61-views button span{display:block;font-size:6.5px;margin-top:2px}.v61-views button.on{border-color:#17606a!important;background:#edf7f7!important;color:#17606a!important}.v61-divider{height:1px;background:#e6edef;margin:10px 0}.v61-regions{margin-top:5px}.v61-regions button{width:100%;height:37px!important;display:grid!important;grid-template-columns:27px 1fr 12px!important;align-items:center!important;text-align:start!important;border:0!important;border-bottom:1px solid #edf1f2!important;background:#fff!important;padding:0 3px!important;color:#486b72!important}.v61-regions button>span{width:25px;height:25px;border-radius:6px;background:#eef4f5;display:grid;place-items:center;font-size:11px;color:#276a75}.v61-regions b{font-size:7.5px}.v61-regions em{font-style:normal;color:#a5b4b7}.v61-reset{width:100%;height:32px!important;margin-top:8px;border:1px solid #dbe5e7!important;background:#fff!important;border-radius:7px!important;font-size:7px!important}
+.v61-stagewrap{position:relative;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden;background:#f3f7f8}.v61-stagehead{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(255,255,255,.94);border-bottom:1px solid #dbe5e7;z-index:4}.v61-modelstatus{display:grid;grid-template-columns:8px auto;gap:0 6px;align-items:center}.v61-modelstatus i{grid-row:1/3;width:8px;height:8px;border-radius:50%;background:#d7a343}.v61-modelstatus i.ready{background:#39a681}.v61-modelstatus span,.v61-modelstatus b{display:block;font-size:6px}.v61-modelstatus b{color:#789095}#v61-canvas{min-height:0;position:relative}#v61-canvas canvas{display:block;width:100%!important;height:100%!important;outline:none}.v61-loading{position:absolute;inset:55px 0 28px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f3f7f8;z-index:3;color:#31565e}.v61-spinner{width:34px;height:34px;border:3px solid #dce7e8;border-top-color:#17606a;border-radius:50%;animation:v61spin .8s linear infinite;margin-bottom:10px}.v61-loading b{font-size:9px}.v61-loading span{font-size:18px;font-weight:900;color:#17606a;margin:5px}.v61-loading small{font-size:6.5px;color:#84979b}@keyframes v61spin{to{transform:rotate(360deg)}}.v61-tools{position:absolute;left:10px;top:75px;display:grid;gap:4px;z-index:5}.v61-tools button{width:31px!important;height:31px!important;min-height:31px!important;border:1px solid #d7e3e5!important;background:rgba(255,255,255,.94)!important;border-radius:7px!important;padding:0!important;font-size:8px!important;box-shadow:0 2px 8px rgba(32,70,76,.06)}.v61-badge{position:absolute;right:10px;bottom:35px;z-index:4;text-align:center}.v61-badge b{width:36px;height:36px;border-radius:50%;background:#174f5b;color:#fff;display:grid;place-items:center;font-size:8px}.v61-badge span{display:block;font-size:5.5px;color:#82969a;margin-top:2px}.v61-legend{display:flex;justify-content:center;gap:14px;padding:6px;background:#fff;border-top:1px solid #e0e8e9;font-size:6.5px;color:#71888d;z-index:4}
+.v61-right{padding:11px;overflow:auto}.v61-rtitle{display:flex;justify-content:space-between}.v61-rtitle button{border:0!important;background:none!important;color:#bd4f55!important;font-size:6.5px!important}.v61-selected{display:grid;gap:5px}.v61-selected article{display:grid;grid-template-columns:6px 1fr 34px 18px;gap:6px;align-items:center;border:1px solid #e0e8e9;border-radius:8px;padding:7px}.v61-selected article>i{height:37px;border-radius:4px;background:#ed4851}.v61-selected article>i.treatment{background:#2886df}.v61-selected article>i.both{background:#8b55d5}.v61-selected b,.v61-selected small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v61-selected b{font-size:7.5px;color:#31565e}.v61-selected small{font-size:6px;color:#8a9ca0}.v61-selected input{width:100%;height:3px}.v61-selected strong{font-size:7px}.v61-selected article>button{border:0!important;background:none!important;color:#c55257!important;padding:0!important}.v61-empty{text-align:center;padding:25px 8px;color:#84979b}.v61-empty>span{font-size:27px;color:#b8c7ca}.v61-empty b{display:block;font-size:8px;margin:4px}.v61-empty p{font-size:6.5px;line-height:1.5}.v61-score,.v61-symptoms{border-top:1px solid #e5ebec;margin-top:9px;padding-top:9px}.v61-score>div{display:flex;align-items:center;gap:8px;margin-top:5px}.v61-score b{font-size:17px}.v61-score span{height:5px;flex:1;background:#e7eeee;border-radius:5px;overflow:hidden}.v61-score i{display:block;height:100%;background:#ed4851}.v61-symptoms>div{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:5px}.v61-symptoms button{height:27px!important;border:1px solid #dce5e7!important;background:#f8fbfb!important;border-radius:6px!important;font-size:6px!important}.v61-symptoms button.on{border-color:#17606a!important;background:#eaf5f5!important;color:#17606a!important;font-weight:900!important}.v61-note{display:block;margin-top:9px;font-size:7px;font-weight:900;color:#31565e}.v61-note textarea{display:block;width:100%;min-height:62px;margin-top:4px;border:1px solid #d8e3e5;border-radius:7px;padding:7px;font:inherit}.v61-credit{font-size:5.5px;color:#9aa9ac;margin-top:7px;line-height:1.4}
+#v61-real3d footer{display:flex;align-items:center;padding:0 17px;background:#fff;border-top:1px solid #dbe5e7;font-size:6.5px;color:#7b9095}.v61-steps{margin:auto;display:flex;align-items:center;gap:6px}.v61-steps b{width:20px;height:20px;border-radius:50%;background:#e7eeee;display:grid;place-items:center}.v61-steps b.on{background:#174f5b;color:#fff}.v61-steps i{width:27px;height:1px;background:#d7e2e4}#v61-real3d footer .primary{height:32px!important;border:0!important;background:#174f5b!important;color:#fff!important;border-radius:7px!important;padding:0 11px!important;font-size:7px!important;font-weight:900!important}
+body.myaims-ar #v61-real3d{direction:rtl;text-align:right}@media(max-width:1000px){#v61-real3d main{grid-template-columns:165px 1fr 250px}}@media(max-width:720px){#v61-real3d main{overflow:auto;grid-template-columns:1fr}.v61-stagewrap{min-height:600px}.v61-patient,.v61-help{display:none}.v61-right,.v61-left{overflow:visible}.v61-steps{display:none}}
 `;document.head.appendChild(css);
 })();
