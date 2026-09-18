@@ -10434,3 +10434,194 @@ render();
   function init(){ensure();css();const o=new MutationObserver(()=>{clearTimeout(window.__v37);window.__v37=setTimeout(enhanceWorkspace,80)});o.observe(document.body,{childList:true,subtree:true});setTimeout(enhanceWorkspace,300)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V38 - DISCHARGE & FINAL ASSESSMENT
+   - Initial vs Final clinical comparison
+   - Sessions / pain / progress / goals summary
+   - Discharge reason & functional outcome
+   - Goals achieved / partially achieved / not achieved
+   - Recommendations & home program
+   - Save discharge record
+   - Professional printable Discharge Summary
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const save=()=>{try{if(typeof window.saveState==='function')window.saveState()}catch(e){}};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function ensure(){if(!Array.isArray(S().dischargeAssessments))S().dischargeAssessments=[];save()}
+  function patient(pid){return (S().patients||[]).find(p=>String(p.id)===String(pid))}
+  function pname(pid){const p=patient(pid);return p?.name||p?.fullName||p?.patientName||'Patient'}
+  function notes(pid){return (S().sessionNotes||[]).filter(n=>String(n.patientId)===String(pid)).sort((a,b)=>String(a.date||a.createdAt||'').localeCompare(String(b.date||b.createdAt||'')))}
+  function appointments(pid){return (S().appointments||[]).filter(a=>String(a.patientId)===String(pid))}
+  function plan(pid){return (S().treatmentPlans||[]).filter(x=>String(x.patientId)===String(pid)).sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0]||null}
+  function goals(pid){return (S().treatmentGoals||[]).filter(g=>String(g.patientId)===String(pid))}
+  function hep(pid){return (S().homeExercisePrograms||[]).filter(x=>String(x.patientId)===String(pid)).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0]||null}
+  function latestDischarge(pid){return (S().dischargeAssessments||[]).filter(x=>String(x.patientId)===String(pid)).sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0]||null}
+
+  function comparison(pid){
+    const ns=notes(pid),first=ns[0]||{},last=ns[ns.length-1]||{};
+    const initialPain=Number(first.painScore||0),finalPain=Number(last.painScore||0);
+    const initialProgress=Number(first.progressScore||0),finalProgress=Number(last.progressScore||0);
+    return {ns,first,last,initialPain,finalPain,initialProgress,finalProgress,
+      painChange:initialPain-finalPain,progressChange:finalProgress-initialProgress};
+  }
+
+  function goalRows(pid,old){
+    const gs=goals(pid),saved=old?.goalOutcomes||{};
+    return gs.length?gs.map(g=>`
+      <article class="v38-goal">
+        <div><b>${esc(g.title||'Treatment Goal')}</b><small>Current progress ${Number(g.progress||0)}%</small></div>
+        <select data-v38-goal="${esc(g.id)}">
+          ${['Achieved','Partially Achieved','Not Achieved','Not Assessed'].map(x=>`<option ${saved[g.id]===x?'selected':''}>${x}</option>`).join('')}
+        </select>
+      </article>`).join(''):`<div class="v38-empty">No treatment goals recorded for this patient.</div>`;
+  }
+
+  window.openV38Discharge=function(pid){
+    ensure();
+    const p=patient(pid);if(!p)return;
+    const c=comparison(pid),pl=plan(pid),old=latestDischarge(pid),aps=appointments(pid),completed=aps.filter(a=>a.status==='Completed').length;
+    let root=document.getElementById('v38-discharge-modal');
+    if(!root){root=document.createElement('div');root.id='v38-discharge-modal';document.body.appendChild(root)}
+    root.className='open';root.dataset.pid=pid;
+    root.innerHTML=`
+      <div class="v38-backdrop" onclick="closeV38Discharge()"></div>
+      <section class="v38-dialog">
+        <header>
+          <div><small>DISCHARGE & FINAL ASSESSMENT</small><h2>${esc(pname(pid))}</h2><p>${esc(p.id||'')} · ${esc(p.phone||p.mobile||'')}</p></div>
+          <button onclick="closeV38Discharge()">×</button>
+        </header>
+
+        <div class="v38-body">
+          <section class="v38-overview">
+            <div><small>DOCUMENTED SESSIONS</small><b>${c.ns.length}</b><span>${completed} appointments completed</span></div>
+            <div><small>INITIAL PAIN</small><b>${c.ns.length?c.initialPain+'/10':'—'}</b><span>${esc(c.first.date||'No baseline')}</span></div>
+            <div><small>FINAL PAIN</small><b>${c.ns.length?c.finalPain+'/10':'—'}</b><span>${c.painChange>0?c.painChange+' point reduction':c.painChange<0?Math.abs(c.painChange)+' point increase':'No change'}</span></div>
+            <div><small>FINAL PROGRESS</small><b>${c.ns.length?c.finalProgress+'%':'—'}</b><span>${c.progressChange>=0?'+'+c.progressChange:c.progressChange}% from first note</span></div>
+          </section>
+
+          <section class="v38-card">
+            <div class="v38-title"><div><small>OUTCOME COMPARISON</small><h3>Initial vs Final Assessment</h3></div></div>
+            <div class="v38-compare">
+              <div class="v38-side initial"><small>INITIAL SESSION</small><b>${esc(c.first.date||'Not documented')}</b><p>${esc(c.first.subjective||c.first.objective||'No initial clinical note available.')}</p><div><span>Pain <strong>${c.ns.length?c.initialPain+'/10':'—'}</strong></span><span>Progress <strong>${c.ns.length?c.initialProgress+'%':'—'}</strong></span></div></div>
+              <div class="v38-arrow">→</div>
+              <div class="v38-side final"><small>FINAL / LATEST SESSION</small><b>${esc(c.last.date||'Not documented')}</b><p>${esc(c.last.response||c.last.objective||'No final clinical note available.')}</p><div><span>Pain <strong>${c.ns.length?c.finalPain+'/10':'—'}</strong></span><span>Progress <strong>${c.ns.length?c.finalProgress+'%':'—'}</strong></span></div></div>
+            </div>
+          </section>
+
+          <section class="v38-card">
+            <div class="v38-title"><div><small>TREATMENT COURSE</small><h3>Discharge Assessment</h3></div><span>${esc(pl?.title||'No treatment plan')}</span></div>
+            <div class="v38-form-grid">
+              <label><span>Discharge Date</span><input id="v38-date" type="date" value="${esc(old?.date||new Date().toISOString().slice(0,10))}"></label>
+              <label><span>Discharge Reason</span><select id="v38-reason">${['Treatment Goals Achieved','Maximum Benefit Reached','Patient Request','Return to Medical Practitioner','Transferred / Referred','Non-attendance','Insurance / Authorization Ended','Other'].map(x=>`<option ${old?.reason===x?'selected':''}>${x}</option>`).join('')}</select></label>
+              <label><span>Overall Outcome</span><select id="v38-outcome">${['Excellent Improvement','Good Improvement','Moderate Improvement','Minimal Improvement','No Significant Change','Deterioration'].map(x=>`<option ${old?.outcome===x?'selected':''}>${x}</option>`).join('')}</select></label>
+              <label><span>Follow-up Required</span><select id="v38-followup"><option ${old?.followup==='No'?'selected':''}>No</option><option ${old?.followup==='Yes'?'selected':''}>Yes</option><option ${old?.followup==='PRN'?'selected':''}>PRN</option></select></label>
+              <label class="wide"><span>Final Functional Assessment</span><textarea id="v38-functional" rows="4" placeholder="Functional status at discharge, mobility, strength, activity tolerance...">${esc(old?.functional||'')}</textarea></label>
+              <label class="wide"><span>Clinical Outcome Summary</span><textarea id="v38-summary" rows="4" placeholder="Summarize response to treatment and overall clinical outcome...">${esc(old?.summary||'')}</textarea></label>
+            </div>
+          </section>
+
+          <section class="v38-card">
+            <div class="v38-title"><div><small>GOAL REVIEW</small><h3>Treatment Goals at Discharge</h3></div></div>
+            <div class="v38-goals">${goalRows(pid,old)}</div>
+          </section>
+
+          <section class="v38-card">
+            <div class="v38-title"><div><small>AFTERCARE</small><h3>Recommendations & Home Program</h3></div></div>
+            <div class="v38-form-grid">
+              <label class="wide"><span>Discharge Recommendations</span><textarea id="v38-recommend" rows="4" placeholder="Activity advice, precautions, medical review, self-management...">${esc(old?.recommendations||'')}</textarea></label>
+              <label class="wide"><span>Home Exercise / Self-management Plan</span><textarea id="v38-home" rows="4" placeholder="Home exercise continuation and self-management instructions...">${esc(old?.homePlan||hep(pid)?.advice||'')}</textarea></label>
+              <label><span>Review / Follow-up Date</span><input id="v38-review-date" type="date" value="${esc(old?.reviewDate||'')}"></label>
+              <label><span>Therapist</span><input id="v38-therapist" value="${esc(old?.therapist||c.last.therapist||'')}"></label>
+            </div>
+          </section>
+        </div>
+
+        <footer>
+          <div><span>Final assessment becomes part of the patient's clinical record.</span></div>
+          <div><button onclick="closeV38Discharge()">Cancel</button><button onclick="saveV38Discharge(false)">Save Draft</button><button class="primary" onclick="saveV38Discharge(true)">Complete Discharge</button></div>
+        </footer>
+      </section>`;
+  };
+
+  window.closeV38Discharge=function(){const x=document.getElementById('v38-discharge-modal');if(x)x.className=''};
+
+  window.saveV38Discharge=function(complete){
+    ensure();const root=document.getElementById('v38-discharge-modal'),pid=root?.dataset.pid;if(!pid)return;
+    let rec=latestDischarge(pid);
+    if(!rec||rec.status==='Completed'){rec={id:'DIS-'+Date.now(),patientId:pid,createdAt:new Date().toISOString()};S().dischargeAssessments.push(rec)}
+    const goalOutcomes={};document.querySelectorAll('[data-v38-goal]').forEach(x=>goalOutcomes[x.dataset.v38Goal]=x.value);
+    Object.assign(rec,{
+      date:document.getElementById('v38-date').value,
+      reason:document.getElementById('v38-reason').value,
+      outcome:document.getElementById('v38-outcome').value,
+      followup:document.getElementById('v38-followup').value,
+      functional:document.getElementById('v38-functional').value.trim(),
+      summary:document.getElementById('v38-summary').value.trim(),
+      recommendations:document.getElementById('v38-recommend').value.trim(),
+      homePlan:document.getElementById('v38-home').value.trim(),
+      reviewDate:document.getElementById('v38-review-date').value,
+      therapist:document.getElementById('v38-therapist').value.trim(),
+      goalOutcomes,status:complete?'Completed':'Draft',updatedAt:new Date().toISOString()
+    });
+    if(complete){
+      const pl=plan(pid);if(pl)pl.status='Closed';
+      goals(pid).forEach(g=>{if(goalOutcomes[g.id]==='Achieved'){g.status='Achieved';g.progress=100}});
+    }
+    save();
+    try{if(typeof window.logAudit==='function')window.logAudit(complete?'Patient Discharged':'Discharge Draft Saved','Clinical',`${pname(pid)} — ${rec.date}`)}catch(e){}
+    closeV38Discharge();
+    if(complete)printV38Discharge(rec.id);
+  };
+
+  window.printV38Discharge=function(id){
+    const d=(S().dischargeAssessments||[]).find(x=>String(x.id)===String(id));if(!d)return;
+    const p=patient(d.patientId)||{},c=comparison(d.patientId),pl=plan(d.patientId),gs=goals(d.patientId);
+    const w=window.open('','_blank','width=900,height=1050');
+    w.document.write(`<!doctype html><html><head><title>Discharge Summary</title><style>
+      body{font-family:Arial,sans-serif;color:#294f58;margin:0}.sheet{max-width:800px;margin:auto;padding:34px}header{display:flex;justify-content:space-between;border-bottom:3px solid #174f5b;padding-bottom:15px}small{font-size:9px;color:#9b7633;font-weight:bold}h1{font-size:23px;margin:4px 0}.meta{text-align:right;font-size:11px;color:#6e8287}.patient{margin:16px 0;background:#f2f7f7;padding:13px;border-radius:9px;display:flex;justify-content:space-between}.patient b{font-size:16px}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.kpis div{border:1px solid #dce6e8;border-radius:8px;padding:9px}.kpis b{display:block;font-size:15px;margin-top:3px}.section{margin-top:16px}.section h3{font-size:14px;border-bottom:1px solid #dce6e8;padding-bottom:6px}.compare{display:grid;grid-template-columns:1fr 1fr;gap:8px}.compare>div{background:#f7fafb;border-radius:8px;padding:10px;font-size:11px;line-height:1.5}.text{font-size:11px;line-height:1.65;white-space:pre-wrap}.goals div{display:flex;justify-content:space-between;border-bottom:1px solid #edf1f2;padding:7px 0;font-size:11px}footer{margin-top:28px;border-top:1px solid #dce6e8;padding-top:11px;font-size:9px;color:#839397;display:flex;justify-content:space-between}@media print{.sheet{padding:18px}}
+    </style></head><body><div class="sheet">
+      <header><div><small>MY AIMS REHABILITATION CENTER W.L.L</small><h1>Discharge Summary</h1><span>Final Clinical Assessment</span></div><div class="meta">Discharge: ${esc(d.date)}<br>Therapist: ${esc(d.therapist||'—')}</div></header>
+      <div class="patient"><div><small>PATIENT</small><br><b>${esc(p.name||p.fullName||'Patient')}</b></div><div>${esc(p.id||'')}<br>${esc(p.phone||p.mobile||'')}</div></div>
+      <div class="kpis"><div><small>SESSIONS</small><b>${c.ns.length}</b></div><div><small>INITIAL PAIN</small><b>${c.ns.length?c.initialPain+'/10':'—'}</b></div><div><small>FINAL PAIN</small><b>${c.ns.length?c.finalPain+'/10':'—'}</b></div><div><small>FINAL PROGRESS</small><b>${c.ns.length?c.finalProgress+'%':'—'}</b></div></div>
+      <div class="section"><h3>Treatment Course</h3><div class="text"><b>Plan:</b> ${esc(pl?.title||'—')}<br><b>Discharge reason:</b> ${esc(d.reason)}<br><b>Overall outcome:</b> ${esc(d.outcome)}<br><b>Follow-up:</b> ${esc(d.followup)}${d.reviewDate?' — '+esc(d.reviewDate):''}</div></div>
+      <div class="section"><h3>Initial vs Final Assessment</h3><div class="compare"><div><small>INITIAL</small><br>${esc(c.first.subjective||c.first.objective||'No baseline note.')}</div><div><small>FINAL</small><br>${esc(c.last.response||c.last.objective||'No final note.')}</div></div></div>
+      <div class="section"><h3>Final Functional Assessment</h3><div class="text">${esc(d.functional||'—')}</div></div>
+      <div class="section"><h3>Clinical Outcome Summary</h3><div class="text">${esc(d.summary||'—')}</div></div>
+      <div class="section"><h3>Treatment Goals</h3><div class="goals">${gs.length?gs.map(g=>`<div><span>${esc(g.title)}</span><b>${esc(d.goalOutcomes?.[g.id]||g.status||'Not Assessed')}</b></div>`).join(''):'No goals recorded.'}</div></div>
+      <div class="section"><h3>Recommendations</h3><div class="text">${esc(d.recommendations||'—')}</div></div>
+      <div class="section"><h3>Home Exercise / Self-management</h3><div class="text">${esc(d.homePlan||'—')}</div></div>
+      <footer><span>myAIMS Rehabilitation Center</span><span>Discharge & Final Assessment</span></footer>
+    </div><script>window.onload=()=>window.print();<\/script></body></html>`);
+    w.document.close();
+  };
+
+  function enhanceWorkspace(){
+    const w=document.getElementById('v31-workspace');if(!w?.classList.contains('open'))return;
+    const pid=w.dataset.patientId||w.dataset.pid;if(!pid)return;
+    const top=w.querySelector('.v31-top-actions');
+    if(top&&!top.querySelector('[data-v38-discharge]')){
+      const b=document.createElement('button');b.dataset.v38Discharge='1';b.className='v38-discharge-btn';b.textContent='Discharge';b.onclick=()=>openV38Discharge(pid);top.appendChild(b);
+    }
+    const reports=w.querySelector('[data-v31-panel="reports"],#v31-panel-reports,.v31-reports');
+    if(reports&&!reports.querySelector('.v38-report-card')){
+      const d=latestDischarge(pid);
+      const card=document.createElement('section');card.className='v38-report-card';
+      card.innerHTML=`<div><small>DISCHARGE SUMMARY</small><h3>${d?esc(d.status)+' · '+esc(d.date):'Not prepared'}</h3><p>${d?esc(d.outcome||'Discharge assessment saved.'):'Create the final clinical assessment when the patient completes treatment.'}</p></div><div>${d?`<button onclick="printV38Discharge('${d.id}')">Print Summary</button>`:''}<button onclick="openV38Discharge('${pid}')">${d?'Open Assessment':'Create Discharge'}</button></div>`;
+      reports.prepend(card);
+    }
+  }
+
+  function css(){
+    if(document.getElementById('v38-css'))return;const s=document.createElement('style');s.id='v38-css';s.textContent=`
+      #v38-discharge-modal{display:none}#v38-discharge-modal.open{display:block;position:fixed;inset:0;z-index:101100}.v38-backdrop{position:absolute;inset:0;background:rgba(13,42,49,.74);backdrop-filter:blur(5px)}.v38-dialog{position:relative;width:min(1120px,95vw);height:92vh;margin:4vh auto;background:#f3f7f7;border-radius:19px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 28px 90px rgba(0,0,0,.3);color:#36575f}.v38-dialog>header{display:flex;justify-content:space-between;background:linear-gradient(135deg,#174f5b,#246a75);color:#fff;padding:17px 21px}.v38-dialog header small{font-size:9px;color:#e3c17a;font-weight:900}.v38-dialog header h2{font-size:22px;margin:3px 0}.v38-dialog header p{font-size:11px;margin:0;color:#d5e5e7}.v38-dialog header button{border:0;background:rgba(255,255,255,.12);color:#fff;width:36px;height:36px;border-radius:9px;font-size:21px}.v38-body{padding:12px 15px;overflow:auto}.v38-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:9px}.v38-overview>div,.v38-card{background:#fff;border:1px solid #dce7e8;border-radius:11px}.v38-overview>div{padding:10px}.v38-overview small,.v38-overview b,.v38-overview span{display:block}.v38-overview small,.v38-title small{font-size:8px;color:#a37a32;font-weight:900}.v38-overview b{font-size:18px;color:#31565e;margin:3px 0}.v38-overview span{font-size:9px;color:#829398}.v38-card{padding:13px;margin-bottom:9px}.v38-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.v38-title h3{font-size:16px;color:#31565e;margin:2px 0}.v38-title>span{font-size:9px;background:#edf4f4;border-radius:99px;padding:5px 8px;color:#60777d}.v38-compare{display:grid;grid-template-columns:1fr 35px 1fr;align-items:center;gap:8px}.v38-side{border-radius:10px;padding:11px;background:#f7fafb}.v38-side.final{background:#edf7f3}.v38-side small{font-size:8px;color:#9b7635;font-weight:900}.v38-side>b{display:block;font-size:11px;color:#31565e;margin:3px 0}.v38-side p{font-size:10px;line-height:1.5;color:#657b80;min-height:30px}.v38-side>div{display:flex;gap:6px}.v38-side span{font-size:9px;background:#fff;padding:5px 7px;border-radius:7px}.v38-arrow{text-align:center;font-size:20px;color:#c99a42}.v38-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.v38-form-grid label{display:flex;flex-direction:column;gap:5px}.v38-form-grid .wide{grid-column:1/-1}.v38-form-grid span{font-size:10px;font-weight:800;color:#526f75}.v38-form-grid input,.v38-form-grid select,.v38-form-grid textarea{border:1px solid #d8e3e5;border-radius:8px;padding:9px;font:inherit;font-size:11px;background:#fff}.v38-goals{display:grid;gap:5px}.v38-goal{display:grid;grid-template-columns:1fr 190px;align-items:center;gap:8px;background:#f8fbfb;border:1px solid #e2eaeb;border-radius:8px;padding:8px}.v38-goal b,.v38-goal small{display:block}.v38-goal b{font-size:11px}.v38-goal small{font-size:9px;color:#87979b;margin-top:2px}.v38-goal select{border:1px solid #d7e2e4;border-radius:7px;padding:7px;font-size:10px}.v38-empty{text-align:center;padding:20px;color:#87979b;font-size:10px}.v38-dialog>footer{display:flex;justify-content:space-between;align-items:center;padding:10px 15px;background:#fff;border-top:1px solid #dce6e7}.v38-dialog>footer span{font-size:9px;color:#849599}.v38-dialog>footer>div:last-child{display:flex;gap:6px}.v38-dialog>footer button,.v38-report-card button{border:1px solid #d6e2e4;background:#fff;color:#557078;border-radius:8px;padding:9px 11px;font-size:10px;font-weight:800}.v38-dialog>footer .primary{background:#174f5b;color:#fff;border-color:#174f5b}.v38-discharge-btn{background:#fff6e7!important;border-color:#e1c78f!important;color:#896426!important}.v38-report-card{display:flex;justify-content:space-between;align-items:center;gap:10px;background:linear-gradient(135deg,#f8fbfb,#edf5f4);border:1px solid #d9e6e6;border-radius:11px;padding:12px;margin-bottom:10px}.v38-report-card small{font-size:8px;color:#a27a35;font-weight:900}.v38-report-card h3{font-size:14px;margin:3px 0;color:#31565e}.v38-report-card p{font-size:10px;color:#708489;margin:0}.v38-report-card>div:last-child{display:flex;gap:5px}
+      @media(max-width:720px){.v38-dialog{width:100vw;height:100vh;margin:0;border-radius:0}.v38-overview{grid-template-columns:1fr 1fr}.v38-compare{grid-template-columns:1fr}.v38-arrow{transform:rotate(90deg)}.v38-form-grid{grid-template-columns:1fr}.v38-form-grid .wide{grid-column:auto}.v38-goal{grid-template-columns:1fr}.v38-dialog>footer{align-items:flex-start;flex-direction:column;gap:7px}}
+    `;document.head.appendChild(s)
+  }
+
+  function init(){ensure();css();const o=new MutationObserver(()=>{clearTimeout(window.__v38);window.__v38=setTimeout(enhanceWorkspace,80)});o.observe(document.body,{childList:true,subtree:true});setTimeout(enhanceWorkspace,300)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
