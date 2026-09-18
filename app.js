@@ -11765,3 +11765,89 @@ const css=document.createElement("style");css.textContent=`
 body.myaims-ar #v57-comments{direction:rtl;text-align:right}@media(max-width:1000px){#v57-comments main{grid-template-columns:180px 1fr}#v57-comments aside{display:none}}@media(max-width:650px){#v57-comments{padding:0}#v57-comments>section{height:100vh;border-radius:0}#v57-comments main{grid-template-columns:1fr;overflow:auto}#v57-comments nav{display:grid;grid-template-columns:1fr 1fr}.v57-content{overflow:visible}.v57-progress{display:none}}
 `;document.head.appendChild(css);
 })();
+
+/* =========================================================
+   myAIMS V58 — TRUE START SESSION ENTRY FIX
+   Start Session / Open Note now enter the NEW V55 launcher.
+   The legacy V24/V34/V35 clinical screen remains available
+   internally only as the saved engine/fallback.
+   ========================================================= */
+(function(){
+  const legacyOpen = window.openV24ClinicalNote;
+
+  function db(){ return window.state || window.appState || {}; }
+
+  function appointment(id){
+    return (db().appointments || []).find(a => String(a.id) === String(id)) || null;
+  }
+
+  function patientFor(a){
+    if(!a) return {};
+    return (db().patients || []).find(p =>
+      String(p.id || "") === String(a.patientId || "") ||
+      String(p.name || "") === String(a.patient || "")
+    ) || {};
+  }
+
+  function closeLegacy(){
+    const old=document.getElementById("v24-clinical-modal");
+    if(old){
+      old.classList.remove("open");
+      old.style.display="none";
+    }
+    document.body.classList.remove("modal-open");
+  }
+
+  function newEntry(id){
+    const a=appointment(id);
+    if(!a) {
+      if(typeof legacyOpen==="function") legacyOpen(id);
+      return;
+    }
+    closeLegacy();
+    const p=patientFor(a);
+    if(typeof window.openV55ClinicalLauncher==="function"){
+      window.openV55ClinicalLauncher(p,a);
+      return;
+    }
+    if(typeof legacyOpen==="function") legacyOpen(id);
+  }
+
+  // This is the actual function used by Patient Workspace:
+  // Start Session / Open Note -> NEW launcher.
+  window.openV24ClinicalNote = newEntry;
+
+  // Other modules (e.g. Clinic Today) that call V24 now route here too.
+  window.v39OpenClinical = function(id){ newEntry(id); };
+  window.v39StartSession = function(id){
+    const a=appointment(id);
+    if(a){ a.status="In Session"; try{ if(window.saveState) window.saveState(); }catch(e){} }
+    newEntry(id);
+  };
+
+  // Explicit legacy engine escape hatch for development only.
+  window.openLegacyClinicalSession = function(id){
+    const old=document.getElementById("v24-clinical-modal");
+    if(old) old.style.display="";
+    if(typeof legacyOpen==="function") legacyOpen(id);
+  };
+
+  // If an older wrapper somehow opens the old screen, suppress it whenever
+  // the new launcher is active.
+  document.addEventListener("click",function(e){
+    const b=e.target.closest("#v55-clinical-launcher [data-v55]");
+    if(!b) return;
+    closeLegacy();
+  },true);
+
+  const css=document.createElement("style");
+  css.id="v58-entry-css";
+  css.textContent=`
+    body:has(#v55-clinical-launcher.open) #v24-clinical-modal{
+      display:none!important;
+      visibility:hidden!important;
+      pointer-events:none!important;
+    }
+  `;
+  document.head.appendChild(css);
+})();
