@@ -9867,3 +9867,223 @@ render();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',css);
   else css();
 })();
+
+
+/* =========================================================
+   myAIMS V35 - CLINICAL SESSION FLOW
+   Next clinical stage:
+   - Session workflow navigator
+   - Completion checklist
+   - Previous session comparison
+   - Smart carry-forward from previous note
+   - End Session action
+   - Automatic Completed status
+   - Return to patient Sessions workspace after completion
+   ========================================================= */
+(function(){
+  const S=()=>window.state||window.appState||{};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function appt(id){return (S().appointments||[]).find(a=>String(a.id)===String(id))}
+  function note(id){return (S().sessionNotes||[]).find(n=>String(n.appointmentId)===String(id))}
+  function previous(a){
+    return (S().sessionNotes||[])
+      .filter(n=>String(n.patientId)===String(a.patientId) && String(n.appointmentId)!==String(a.id))
+      .sort((x,y)=>String(y.date||y.updatedAt||'').localeCompare(String(x.date||x.updatedAt||'')))[0]||null;
+  }
+
+  function filled(id){
+    const el=document.getElementById(id);
+    return !!String(el?.value||'').trim();
+  }
+  function selected(selector){
+    return document.querySelectorAll(selector).length>0;
+  }
+  function checklist(){
+    const items=[
+      ['Areas', selected('#v24-tab-session [data-area].active') || Object.keys(window.__v26BodyMap?.areas||{}).length>0],
+      ['Pain Score', !!document.getElementById('v24-pain')],
+      ['Subjective', filled('v24-subjective')],
+      ['Objective', filled('v24-objective')],
+      ['Interventions', selected('#v24-tab-session [data-intervention].active')],
+      ['Response', filled('v24-response')],
+      ['Next Plan', filled('v24-next')]
+    ];
+    const done=items.filter(x=>x[1]).length;
+    return {items,done,total:items.length,pct:Math.round(done/items.length*100)};
+  }
+
+  function renderChecklist(){
+    const host=document.getElementById('v35-completion');
+    if(!host)return;
+    const c=checklist();
+    host.innerHTML=`
+      <div class="v35-complete-head">
+        <div><small>DOCUMENTATION COMPLETION</small><b>${c.pct}%</b></div>
+        <div class="v35-complete-bar"><i style="width:${c.pct}%"></i></div>
+      </div>
+      <div class="v35-checks">
+        ${c.items.map(([label,ok])=>`<span class="${ok?'done':''}"><i>${ok?'✓':'·'}</i>${label}</span>`).join('')}
+      </div>`;
+  }
+
+  function compareHtml(a){
+    const prev=previous(a);
+    if(!prev) return `<div class="v35-no-prev">No previous clinical session available for comparison.</div>`;
+    const currentPain=Number(document.getElementById('v24-pain')?.value||0);
+    const prevPain=Number(prev.painScore||0);
+    const delta=currentPain-prevPain;
+    return `
+      <div class="v35-compare-grid">
+        <div><small>PREVIOUS DATE</small><b>${esc(prev.date||'—')}</b><span>${esc(prev.therapist||'')}</span></div>
+        <div><small>PREVIOUS PAIN</small><b>${prevPain}/10</b><span>${delta<0?'Improving':delta>0?'Higher today':'No change'}</span></div>
+        <div><small>PREVIOUS PROGRESS</small><b>${Number(prev.progressScore||0)}%</b><span>Recorded session progress</span></div>
+        <div class="wide"><small>LAST RECOMMENDATION</small><p>${esc(prev.nextSession||'No recommendation recorded.')}</p></div>
+      </div>`;
+  }
+
+  function addFlow(id){
+    const root=document.getElementById('v24-clinical-modal');
+    const dialog=root?.querySelector('.v34-clinical-workspace');
+    const a=appt(id);
+    if(!dialog||!a||dialog.dataset.v35==='1')return;
+    dialog.dataset.v35='1';
+
+    const tabs=dialog.querySelector('.v24-tabs');
+    if(tabs){
+      const flow=document.createElement('section');
+      flow.className='v35-flow';
+      flow.innerHTML=`
+        <div class="v35-flow-steps">
+          <button type="button" class="active" data-v35-go="session"><i>1</i><span>Assess & Treat</span></button>
+          <button type="button" data-v35-go="plan"><i>2</i><span>Treatment Plan</span></button>
+          <button type="button" data-v35-go="history"><i>3</i><span>Review History</span></button>
+          <button type="button" data-v35-review="1"><i>4</i><span>Complete Session</span></button>
+        </div>
+        <div id="v35-completion"></div>`;
+      tabs.insertAdjacentElement('beforebegin',flow);
+
+      flow.querySelectorAll('[data-v35-go]').forEach(b=>b.onclick=()=>{
+        const name=b.dataset.v35Go;
+        const tabBtn=[...dialog.querySelectorAll('.v24-tabs button')].find(x=>x.getAttribute('onclick')?.includes(`'${name}'`));
+        if(tabBtn) window.switchV24Tab(name,tabBtn);
+        flow.querySelectorAll('[data-v35-go]').forEach(x=>x.classList.toggle('active',x===b));
+      });
+      flow.querySelector('[data-v35-review]').onclick=()=>window.openV35SessionReview(id);
+    }
+
+    const session=document.getElementById('v24-tab-session');
+    if(session){
+      const compare=document.createElement('section');
+      compare.className='v35-previous';
+      compare.innerHTML=`
+        <div class="v35-prev-head">
+          <div><small>SESSION COMPARISON</small><h3>Previous Session Snapshot</h3></div>
+          <button type="button" onclick="carryV35Previous('${id}')">Carry Forward</button>
+        </div>
+        <div id="v35-compare-body">${compareHtml(a)}</div>`;
+      const firstSection=session.querySelector('.v24-section-title');
+      if(firstSection) firstSection.insertAdjacentElement('beforebegin',compare);
+    }
+
+    ['v24-pain','v24-progress','v24-subjective','v24-objective','v24-response','v24-next'].forEach(x=>{
+      document.getElementById(x)?.addEventListener('input',()=>{
+        renderChecklist();
+        const cmp=document.getElementById('v35-compare-body');
+        if(cmp)cmp.innerHTML=compareHtml(a);
+      });
+    });
+    dialog.addEventListener('click',e=>{
+      if(e.target.closest('[data-area],[data-intervention],#v26-body-map'))setTimeout(renderChecklist,30);
+    });
+    renderChecklist();
+  }
+
+  window.carryV35Previous=function(id){
+    const a=appt(id),p=a?previous(a):null;
+    if(!p)return;
+    const pairs=[
+      ['v24-subjective',p.subjective],
+      ['v24-objective',p.objective],
+      ['v24-response',p.response],
+      ['v24-next',p.nextSession]
+    ];
+    pairs.forEach(([eid,val])=>{
+      const el=document.getElementById(eid);
+      if(el && !el.value.trim() && val)el.value=val;
+    });
+    (p.areas||[]).forEach(area=>{
+      const chip=[...document.querySelectorAll('#v24-tab-session [data-area]')].find(x=>x.dataset.area===area);
+      if(chip)chip.classList.add('active');
+    });
+    (p.interventions||[]).forEach(v=>{
+      const chip=[...document.querySelectorAll('#v24-tab-session [data-intervention]')].find(x=>x.dataset.intervention===v);
+      if(chip)chip.classList.add('active');
+    });
+    renderChecklist();
+    document.querySelector('.v34-draft-state')?.replaceChildren(document.createTextNode('Previous note carried forward'));
+  };
+
+  window.openV35SessionReview=function(id){
+    const a=appt(id);if(!a)return;
+    let root=document.getElementById('v35-session-review');
+    if(!root){root=document.createElement('div');root.id='v35-session-review';document.body.appendChild(root)}
+    const c=checklist();
+    const n=note(id);
+    root.className='open';
+    root.innerHTML=`
+      <div class="v35-review-backdrop" onclick="closeV35SessionReview()"></div>
+      <section class="v35-review-dialog">
+        <header><div><small>SESSION COMPLETION</small><h2>Clinical Review</h2><p>${esc(a.date)} · ${esc(a.time||'')} · ${esc(a.therapist||'')}</p></div><button onclick="closeV35SessionReview()">×</button></header>
+        <div class="v35-review-score">
+          <div class="v35-ring" style="--p:${c.pct}"><b>${c.pct}%</b><span>complete</span></div>
+          <div><h3>${c.pct===100?'Documentation complete':'Review before completing'}</h3><p>${c.done} of ${c.total} documentation checkpoints completed.</p></div>
+        </div>
+        <div class="v35-review-checks">${c.items.map(([x,ok])=>`<div class="${ok?'done':''}"><i>${ok?'✓':'!'}</i><span>${x}</span><b>${ok?'Complete':'Needs attention'}</b></div>`).join('')}</div>
+        <div class="v35-review-note">
+          <label><span>Completion Note <small>(optional)</small></span><textarea id="v35-completion-note" placeholder="Final therapist note before closing the session...">${esc(n?.completionNote||'')}</textarea></label>
+        </div>
+        <footer>
+          <button class="secondary" onclick="closeV35SessionReview()">Back to Session</button>
+          <button class="primary" onclick="completeV35Session('${id}')">✓ Complete & Save Session</button>
+        </footer>
+      </section>`;
+  };
+  window.closeV35SessionReview=function(){
+    const x=document.getElementById('v35-session-review');if(x)x.className='';
+  };
+  window.completeV35Session=function(id){
+    const a=appt(id);if(!a)return;
+    const completion=document.getElementById('v35-completion-note')?.value.trim()||'';
+    const status=document.getElementById('v34-session-status');
+    if(status)status.value='Completed';
+    a.status='Completed';
+    window.saveV24ClinicalSession(id);
+    const saved=note(id);
+    if(saved){saved.completionNote=completion;saved.completedAt=new Date().toISOString()}
+    if(typeof window.saveState==='function')window.saveState();
+    closeV35SessionReview();
+  };
+
+  const prevOpen=window.openV24ClinicalNote;
+  if(typeof prevOpen==='function'){
+    window.openV24ClinicalNote=function(id){
+      prevOpen.apply(this,arguments);
+      setTimeout(()=>addFlow(id),150);
+    };
+  }
+
+  function css(){
+    if(document.getElementById('v35-css'))return;
+    const s=document.createElement('style');s.id='v35-css';s.textContent=`
+      .v35-flow{margin:10px 18px 0;background:#fff;border:1px solid #dce7e8;border-radius:14px;padding:10px 12px}
+      .v35-flow-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.v35-flow-steps button{display:flex;align-items:center;gap:8px;border:0;background:#f5f8f8;color:#6b7f84;border-radius:9px;padding:8px 10px;text-align:left;font-size:10px;font-weight:800}
+      .v35-flow-steps button i{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:#e4ecee;font-style:normal;font-size:9px}.v35-flow-steps button.active{background:#e5f1f1;color:#174f5b}.v35-flow-steps button.active i{background:#174f5b;color:#fff}
+      #v35-completion{margin-top:9px;border-top:1px solid #edf2f3;padding-top:8px}.v35-complete-head{display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:center}.v35-complete-head>div:first-child{display:flex;justify-content:space-between;align-items:center}.v35-complete-head small{font-size:8px;color:#9a7535;font-weight:900}.v35-complete-head b{font-size:11px;color:#31565e}.v35-complete-bar{height:6px;background:#edf2f3;border-radius:99px;overflow:hidden}.v35-complete-bar i{display:block;height:100%;background:linear-gradient(90deg,#1e6672,#c89b49);border-radius:99px}.v35-checks{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.v35-checks span{font-size:8px;background:#f5f7f7;color:#89979a;padding:4px 7px;border-radius:99px}.v35-checks span.done{background:#e8f4ef;color:#3e7763}.v35-checks i{font-style:normal;margin-right:3px}
+      .v35-previous{border:1px solid #dce7e8;background:linear-gradient(135deg,#f8fbfb,#f1f7f7);border-radius:12px;padding:12px;margin-bottom:15px}.v35-prev-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}.v35-prev-head small{font-size:9px;color:#a77c32;font-weight:900}.v35-prev-head h3{font-size:15px;color:#31565e;margin:2px 0}.v35-prev-head button{font-size:10px;border:1px solid #d1e0e2;background:#fff;color:#42666e;border-radius:8px;padding:7px 10px;font-weight:800}.v35-compare-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.v35-compare-grid>div{background:#fff;border-radius:9px;padding:9px}.v35-compare-grid .wide{grid-column:1/-1}.v35-compare-grid small{font-size:8px;color:#a27a35;font-weight:900}.v35-compare-grid b,.v35-compare-grid span{display:block}.v35-compare-grid b{font-size:13px;color:#31565e;margin:3px 0}.v35-compare-grid span,.v35-compare-grid p{font-size:10px;color:#75898e;margin:0;line-height:1.45}.v35-no-prev{padding:12px;background:#fff;border-radius:9px;color:#849599;font-size:11px}
+      #v35-session-review{display:none}#v35-session-review.open{display:block;position:fixed;inset:0;z-index:100500}.v35-review-backdrop{position:absolute;inset:0;background:rgba(13,42,49,.72);backdrop-filter:blur(5px)}.v35-review-dialog{position:relative;width:min(680px,94vw);max-height:90vh;overflow:auto;margin:5vh auto;background:#f5f8f8;border-radius:18px;box-shadow:0 25px 80px rgba(0,0,0,.28)}.v35-review-dialog header{display:flex;justify-content:space-between;background:#174f5b;color:#fff;padding:17px 20px;border-radius:18px 18px 0 0}.v35-review-dialog header small{font-size:9px;color:#e3c17b;font-weight:900}.v35-review-dialog header h2{font-size:21px;margin:3px 0}.v35-review-dialog header p{font-size:11px;margin:0;color:#d5e5e7}.v35-review-dialog header button{border:0;background:rgba(255,255,255,.12);color:#fff;width:35px;height:35px;border-radius:9px;font-size:20px}.v35-review-score{display:flex;align-items:center;gap:16px;padding:16px 20px;background:#fff}.v35-ring{--p:0;width:82px;height:82px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#1d6874 calc(var(--p)*1%),#e7eeee 0);position:relative}.v35-ring:after{content:"";position:absolute;width:64px;height:64px;background:#fff;border-radius:50%}.v35-ring b,.v35-ring span{position:relative;z-index:1}.v35-ring b{font-size:17px;color:#31565e}.v35-ring span{font-size:8px;color:#89979a;margin-top:-25px}.v35-review-score h3{font-size:16px;color:#31565e;margin:0 0 4px}.v35-review-score p{font-size:11px;color:#788b8f;margin:0}.v35-review-checks{padding:12px 20px;display:grid;gap:6px}.v35-review-checks>div{display:grid;grid-template-columns:28px 1fr auto;align-items:center;background:#fff;border:1px solid #e1e9ea;border-radius:9px;padding:9px}.v35-review-checks i{width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:#fff0e8;color:#b86c45;font-style:normal}.v35-review-checks .done i{background:#e5f3ed;color:#3f7b64}.v35-review-checks span{font-size:11px;color:#49676e;font-weight:800}.v35-review-checks b{font-size:9px;color:#9a7c63}.v35-review-checks .done b{color:#4d806c}.v35-review-note{padding:0 20px 14px}.v35-review-note span{display:block;font-size:10px;font-weight:800;color:#4f6b71;margin-bottom:5px}.v35-review-note textarea{width:100%;min-height:75px;border:1px solid #d8e4e5;border-radius:9px;padding:10px;font:inherit}.v35-review-dialog footer{display:flex;justify-content:flex-end;gap:7px;padding:12px 20px;background:#fff;border-top:1px solid #dce6e7;border-radius:0 0 18px 18px}.v35-review-dialog footer button{padding:10px 14px;border-radius:8px;font-size:11px;font-weight:800}.v35-review-dialog footer .secondary{background:#fff;border:1px solid #d5e1e3;color:#5b747a}.v35-review-dialog footer .primary{background:#174f5b;border:1px solid #174f5b;color:#fff}
+      @media(max-width:760px){.v35-flow-steps{grid-template-columns:1fr 1fr}.v35-complete-head{grid-template-columns:1fr}.v35-compare-grid{grid-template-columns:1fr}.v35-compare-grid .wide{grid-column:auto}}
+    `;document.head.appendChild(s);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',css);else css();
+})();
