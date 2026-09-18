@@ -11139,3 +11139,130 @@ render();
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* =========================================================
+   myAIMS V41 - ARABIC TRANSLATION REPAIR
+   Screenshot-driven repair for Patient Workspace + Clinical Session.
+   Handles mixed English/Arabic text, dynamic cards, phrases, statuses.
+   ========================================================= */
+(function(){
+  const A={
+    "PATIENT RECORD":"سجل المريض","Patients":"المرضى","Progress Review":"مراجعة التقدم",
+    "Session +":"جلسة +","Clinical Update +":"تحديث سريري +","Overview":"نظرة عامة",
+    "Treatment Plan":"الخطة العلاجية","Sessions":"الجلسات","Progress":"التقدم",
+    "Clinical Timeline":"التسلسل السريري","Reports":"التقارير","ACTIVE PLAN":"الخطة النشطة",
+    "No active plan":"لا توجد خطة نشطة","SESSIONS":"الجلسات","remaining":"متبقية",
+    "LATEST PAIN":"آخر درجة ألم","GOALS":"الأهداف","achieved":"متحقق",
+    "FINANCIAL SUMMARY":"الملخص المالي","Patient Account":"حساب المريض",
+    "TOTAL INVOICED":"إجمالي المفوتر","PATIENT SHARE":"حصة المريض","COLLECTED":"المحصل",
+    "OUTSTANDING":"المستحق","Invoice +":"فاتورة +","Record Payment":"تسجيل سداد",
+    "Print Statement":"طباعة كشف الحساب","LATEST CLINICAL UPDATE":"آخر تحديث سريري",
+    "No update yet":"لا يوجد تحديث بعد","Add the latest patient status or clinical update.":"أضف أحدث حالة للمريض أو تحديث سريري.",
+    "Update +":"تحديث +","TREATMENT PLAN":"الخطة العلاجية","Not created":"لم يتم إنشاؤها",
+    "No active treatment plan documented.":"لا توجد خطة علاجية نشطة موثقة.","Create":"إنشاء",
+    "GOAL PROGRESS":"تقدم الأهداف","Treatment Goals":"الأهداف العلاجية",
+    "No goals added yet.":"لم تتم إضافة أهداف بعد.","Goal +":"هدف +",
+    "RECENT SESSIONS":"الجلسات الأخيرة","Clinical Activity":"النشاط السريري",
+    "View All":"عرض الكل","Initial Assessment":"التقييم الأولي","Scheduled":"مجدول",
+
+    "CLINICAL SESSION WORKSPACE":"مساحة عمل الجلسة السريرية","Autosave on":"الحفظ التلقائي مفعل",
+    "PATIENT":"المريض","DATE":"التاريخ","THERAPIST":"المعالج","VISIT":"الزيارة","PLAN":"الخطة",
+    "Treatment Room 1":"غرفة العلاج 1","Not scheduled":"غير مجدول","min":"دقيقة",
+    "CLINICAL GLANCE":"لمحة سريرية","Previous Pain":"الألم السابق","Previous Progress":"التقدم السابق",
+    "Remaining":"المتبقي","Active Goals":"الأهداف النشطة","First documented session":"أول جلسة موثقة",
+    "Assess & Treat":"التقييم والعلاج","Review History":"مراجعة السجل",
+    "Complete Session":"إكمال الجلسة","DOCUMENTATION COMPLETION":"اكتمال التوثيق",
+    "Areas✓":"المناطق ✓","Pain Score✓":"درجة الألم ✓","Subjective-":"الذاتي -","Objective-":"الموضوعي -",
+    "Interventions-":"التدخلات -","Response-":"الاستجابة -","Next Plan-":"الخطة القادمة -",
+    "Session Note":"ملاحظة الجلسة","Patient History":"سجل المريض",
+    "QUICK DOCUMENTATION":"توثيق سريع","Clinical Phrase Assistant":"مساعد العبارات السريرية",
+    "Click a phrase to add it to the active field":"اضغط على عبارة لإضافتها إلى الحقل النشط",
+    "Subjective":"التقييم الذاتي","Objective":"التقييم الموضوعي","Response":"الاستجابة",
+    "Next Session":"الجلسة القادمة","Improved":"تحسن","Unchanged":"دون تغيير",
+    "Increased symptoms":"زيادة الأعراض","ROM improved":"تحسن مدى الحركة",
+    "Limited by pain":"محدود بسبب الألم","Mobility improved":"تحسن الحركة",
+    "Tolerated well":"تحمل الجلسة جيدًا","Symptoms reduced":"انخفاض الأعراض",
+    "Treatment modified":"تم تعديل العلاج","Continue plan":"الاستمرار بالخطة",
+    "Progress exercises":"تطوير التمارين","Reassess":"إعادة التقييم",
+    "SELECTED AREAS":"المناطق المحددة","Selected":"محدد","Intensity":"الشدة","Clear All":"مسح الكل",
+    "Left Thigh":"الفخذ الأيسر","Right Elbow":"المرفق الأيمن","Right Hand":"اليد اليمنى",
+    "Save Clinical Session":"حفظ الجلسة السريرية","Preview Report":"معاينة التقرير",
+    "Close":"إغلاق","Session Status":"حالة الجلسة"
+  };
+
+  function arMode(){
+    return document.documentElement.dir==='rtl'||document.documentElement.lang==='ar'||
+           document.body.classList.contains('myaims-ar')||localStorage.getItem('myaims-lang')==='ar';
+  }
+  function replaceMixed(str){
+    if(!str||!arMode())return str;
+    let x=String(str);
+    Object.keys(A).sort((a,b)=>b.length-a.length).forEach(k=>{
+      if(x.includes(k))x=x.split(k).join(A[k]);
+    });
+    // Dynamic/common fragments
+    x=x.replace(/\b(\d+)\s+min\b/g,'$1 دقيقة');
+    x=x.replace(/\bremaining\s+(\d+)\b/gi,'متبقي $1');
+    return x;
+  }
+  function repair(root=document.body){
+    if(!arMode()||!root)return;
+    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{
+      acceptNode(n){
+        const p=n.parentElement;
+        if(!p||['SCRIPT','STYLE'].includes(p.tagName))return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const arr=[];while(walker.nextNode())arr.push(walker.currentNode);
+    arr.forEach(n=>{const v=replaceMixed(n.nodeValue);if(v!==n.nodeValue)n.nodeValue=v});
+    root.querySelectorAll?.('[placeholder],[title]').forEach(el=>{
+      ['placeholder','title'].forEach(at=>{
+        if(el.hasAttribute(at))el.setAttribute(at,replaceMixed(el.getAttribute(at)));
+      });
+    });
+    root.querySelectorAll?.('option').forEach(o=>{
+      const original=o.textContent;
+      const translated=replaceMixed(original);
+      if(translated!==original)o.textContent=translated; // keep value untouched
+    });
+  }
+
+  function css(){
+    if(document.getElementById('v41-css'))return;
+    const s=document.createElement('style');s.id='v41-css';s.textContent=`
+      body.myaims-ar #v31-workspace,
+      body.myaims-ar #v24-clinical-modal,
+      body.myaims-ar .v34-clinical-workspace{direction:rtl!important;text-align:right!important}
+      body.myaims-ar #v31-workspace button,
+      body.myaims-ar #v24-clinical-modal button{font-size:14px!important}
+      body.myaims-ar #v31-workspace small,
+      body.myaims-ar #v24-clinical-modal small{font-size:12px!important}
+      body.myaims-ar #v24-clinical-modal .v35-flow-steps{direction:rtl!important}
+      body.myaims-ar #v24-clinical-modal .v24-tabs{direction:rtl!important}
+      body.myaims-ar #v24-clinical-modal input,
+      body.myaims-ar #v24-clinical-modal textarea,
+      body.myaims-ar #v24-clinical-modal select{text-align:right!important;direction:rtl!important}
+    `;document.head.appendChild(s);
+  }
+
+  function init(){
+    css();
+    setTimeout(()=>repair(document.body),120);
+    let t;
+    const mo=new MutationObserver(ms=>{
+      if(!arMode())return;
+      clearTimeout(t);t=setTimeout(()=>{
+        ms.forEach(m=>m.addedNodes.forEach(n=>{if(n.nodeType===1)repair(n);else if(n.nodeType===3&&n.parentElement)repair(n.parentElement)}));
+      },35);
+    });
+    mo.observe(document.body,{childList:true,subtree:true});
+
+    // Run after any language switch or page/modal action.
+    document.addEventListener('click',()=>setTimeout(()=>repair(document.body),100),true);
+    document.addEventListener('change',()=>setTimeout(()=>repair(document.body),80),true);
+    window.applyV41ArabicRepair=()=>repair(document.body);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
