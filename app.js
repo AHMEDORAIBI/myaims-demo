@@ -13408,3 +13408,103 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V78 REGIONAL CLINICAL VIEW";
 })();
+
+/* =========================================================
+   myAIMS V79 — REGIONAL PAIN MAPPING
+   Precise HD clinical markers with severity, spread radius,
+   radiation direction, symptom quality and session storage.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+let armed=false,type="pain",marks=[],seq=1,dragStart=null;
+
+function aid(){try{return ((typeof currentAppointment!=="undefined"&&currentAppointment)?.id)||R()?.dataset?.appointmentId||"demo"}catch(e){return"demo"}}
+function load(){
+ try{db.regionalPainMap=db.regionalPainMap||[];marks=db.regionalPainMap.filter(x=>x.appointmentId===aid());seq=Math.max(0,...marks.map(x=>+String(x.id).replace(/\D/g,"")||0))+1}catch(e){marks=[]}
+}
+function persist(){
+ try{db.regionalPainMap=db.regionalPainMap||[];const id=aid();db.regionalPainMap=db.regionalPainMap.filter(x=>x.appointmentId!==id);db.regionalPainMap.push(...marks.map(({obj,halo,arrow,...m})=>m));save()}catch(e){}
+}
+function color(t){return t==="treatment"?0x168ee8:t==="both"?0x8650d7:0xe94350}
+function add3D(m){
+ const a=A();if(!a?.THREE)return;const T=a.THREE;
+ const mat=new T.MeshPhysicalMaterial({color:color(m.type),emissive:color(m.type),emissiveIntensity:.22,roughness:.28,clearcoat:.35,depthTest:false});
+ const ball=new T.Mesh(new T.SphereGeometry(.13,24,18),mat);ball.position.set(m.x,m.y,m.z);ball.renderOrder=1001;ball.userData.v79=m.id;a.scene.add(ball);m.obj=ball;
+ const cv=document.createElement("canvas");cv.width=cv.height=256;const x=cv.getContext("2d"),g=x.createRadialGradient(128,128,20,128,128,118);
+ const css=m.type==="treatment"?"22,142,232":m.type==="both"?"134,80,215":"233,67,80";
+ g.addColorStop(0,`rgba(${css},.24)`);g.addColorStop(.55,`rgba(${css},.10)`);g.addColorStop(1,`rgba(${css},0)`);x.fillStyle=g;x.fillRect(0,0,256,256);
+ const tex=new T.CanvasTexture(cv),sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false}));
+ sp.position.copy(ball.position);sp.scale.set(1.4*m.spread,1.4*m.spread,1);sp.renderOrder=1000;a.scene.add(sp);m.halo=sp;
+ if(m.radiation>0)addArrow(m);
+}
+function addArrow(m){
+ const a=A();if(!a?.THREE||!m.obj)return;const T=a.THREE;
+ if(m.arrow)a.scene.remove(m.arrow);
+ const dir=new T.Vector3(Math.cos(m.angle||0),Math.sin(m.angle||0),0).normalize();
+ const ar=new T.ArrowHelper(dir,m.obj.position,Math.max(.7,m.radiation*.45),color(m.type),.28,.16);
+ ar.line.material.depthTest=false;ar.cone.material.depthTest=false;ar.renderOrder=1002;a.scene.add(ar);m.arrow=ar;
+}
+function clear3D(){const a=A();if(!a)return;a.scene.children.filter(o=>o.userData?.v79).forEach(o=>a.scene.remove(o));marks.forEach(m=>{if(m.obj)a.scene.remove(m.obj);if(m.halo)a.scene.remove(m.halo);if(m.arrow)a.scene.remove(m.arrow)})}
+function restore(){clear3D();marks.forEach(add3D)}
+function hit(e){
+ const a=A(),cv=a?.renderer?.domElement;if(!a?.raycaster||!cv)return null;
+ const r=cv.getBoundingClientRect(),v=new a.THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+ a.raycaster.setFromCamera(v,a.camera);return a.raycaster.intersectObjects(a.meshes||[],false)[0]||null;
+}
+function place(e){
+ if(!armed)return;const h=hit(e);if(!h)return;e.stopPropagation();
+ const p=h.point,n=String(h.object.name||"Anatomical Structure").replace(/[_-]+/g," ");
+ const m={id:"RP"+seq++,appointmentId:aid(),type,structure:n,x:p.x,y:p.y,z:p.z,severity:type==="treatment"?0:5,spread:1,radiation:0,angle:0,quality:[],note:"",createdAt:new Date().toISOString()};
+ marks.push(m);add3D(m);armed=false;syncArm();render();persist();
+}
+function syncArm(){
+ const r=R(),b=r?.querySelector("#v79-tool [data-arm]");r?.querySelector("#v79-tool")?.classList.toggle("armed",armed);
+ if(b)b.innerHTML=armed?"⌖ Click exact point":"＋ Add Point";
+}
+function render(){
+ const r=R(),list=r?.querySelector("#v79-panel .v79-list"),count=r?.querySelector("#v79-panel [data-count]");if(!list)return;if(count)count.textContent=marks.length;
+ list.innerHTML=marks.length?marks.map((m,i)=>`<article data-id="${m.id}">
+ <header><i class="${m.type}">${i+1}</i><div><b>${m.structure}</b><span>${m.type==="pain"?"Pain":m.type==="treatment"?"Treatment":"Pain + Treatment"}</span></div><button data-del>×</button></header>
+ <label>Severity <strong>${m.severity}/10</strong><input data-sev type="range" min="0" max="10" value="${m.severity}"></label>
+ <label>Spread <strong>${m.spread}</strong><input data-spread type="range" min=".5" max="3" step=".5" value="${m.spread}"></label>
+ <label>Radiation <strong>${m.radiation}</strong><input data-rad type="range" min="0" max="6" step=".5" value="${m.radiation}"></label>
+ <div class="v79-quality">${["Sharp","Dull","Burning","Tingling","Numbness","Tightness"].map(q=>`<button data-q="${q}" class="${m.quality.includes(q)?"on":""}">${q}</button>`).join("")}</div>
+ <textarea placeholder="Clinical note…">${m.note||""}</textarea></article>`).join(""):`<div class="v79-empty">No mapped points<br><span>اختر Add Point ثم حدد المكان بدقة على الجسم</span></div>`;
+ list.querySelectorAll("article").forEach(el=>{
+   const m=marks.find(x=>x.id===el.dataset.id);
+   el.querySelector("[data-del]").onclick=()=>{[m.obj,m.halo,m.arrow].forEach(x=>x&&A()?.scene.remove(x));marks=marks.filter(x=>x!==m);render();persist()};
+   el.querySelector("[data-sev]").oninput=e=>{m.severity=+e.target.value;e.target.parentElement.querySelector("strong").textContent=m.severity+"/10";persist()};
+   el.querySelector("[data-spread]").oninput=e=>{m.spread=+e.target.value;e.target.parentElement.querySelector("strong").textContent=m.spread;if(m.halo)m.halo.scale.set(1.4*m.spread,1.4*m.spread,1);persist()};
+   el.querySelector("[data-rad]").oninput=e=>{m.radiation=+e.target.value;e.target.parentElement.querySelector("strong").textContent=m.radiation;if(m.radiation)addArrow(m);else if(m.arrow){A().scene.remove(m.arrow);m.arrow=null}persist()};
+   el.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{const q=b.dataset.q;m.quality=m.quality.includes(q)?m.quality.filter(x=>x!==q):[...m.quality,q];b.classList.toggle("on");persist()});
+   el.querySelector("textarea").oninput=e=>{m.note=e.target.value;persist()};
+ });
+}
+function install(){
+ const r=R();if(!r||r.querySelector("#v79-tool"))return;load();
+ const tool=document.createElement("div");tool.id="v79-tool";tool.innerHTML=`<div><small>PRECISION MAPPING</small><b>Pain & Treatment Points</b></div><section><button class="on" data-t="pain"><i></i>Pain</button><button data-t="treatment"><i></i>Treatment</button><button data-t="both"><i></i>Both</button></section><button data-arm>＋ Add Point</button>`;
+ (r.querySelector(".v61-stagewrap")||r).appendChild(tool);
+ const panel=document.createElement("aside");panel.id="v79-panel";panel.innerHTML=`<header><div><small>CLINICAL MAP</small><b>Mapped Points</b><span>نقاط الألم والعلاج</span></div><strong data-count>0</strong></header><div class="v79-list"></div><footer><button data-clear>Clear</button><button data-save>✓ Save Map</button></footer>`;
+ (r.querySelector(".v61-stagewrap")||r).appendChild(panel);
+ tool.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{type=b.dataset.t;tool.querySelectorAll("[data-t]").forEach(x=>x.classList.toggle("on",x===b))});
+ tool.querySelector("[data-arm]").onclick=()=>{armed=!armed;syncArm()};
+ panel.querySelector("[data-clear]").onclick=()=>{clear3D();marks=[];render();persist()};
+ panel.querySelector("[data-save]").onclick=()=>{persist();const b=panel.querySelector("[data-save]");b.textContent="✓ Saved · تم الحفظ";setTimeout(()=>b.textContent="✓ Save Map",1200)};
+ const cv=A()?.renderer?.domElement;if(cv)cv.addEventListener("pointerup",e=>{if(dragStart&&Math.hypot(e.clientX-dragStart[0],e.clientY-dragStart[1])<5)place(e);dragStart=null},true),cv.addEventListener("pointerdown",e=>dragStart=[e.clientX,e.clientY],true);
+ restore();render();
+}
+function activate(){const a=A(),r=R();if(!a?.meshes?.length||!r||a.__v79)return;a.__v79=true;install();r.classList.add("v79-map")}
+function boot(){const t=setInterval(()=>{if(A()?.meshes?.length){activate();if(A()?.__v79)clearInterval(t)}},120);setTimeout(()=>clearInterval(t),15000)}
+document.addEventListener("click",e=>{if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,800)},false);
+document.addEventListener("myaims:anatomy-ready",()=>setTimeout(activate,420));
+
+const st=document.createElement("style");st.textContent=`
+#v79-tool{position:absolute;z-index:34;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;padding:6px 7px;border:1px solid #d4e3e6;border-radius:10px;background:rgba(255,255,255,.96);box-shadow:0 10px 28px rgba(20,61,70,.11);backdrop-filter:blur(10px)}
+#v79-tool small,#v79-tool b{display:block;white-space:nowrap}#v79-tool small{font-size:3.8px;color:#b17b2d;font-weight:900}#v79-tool b{font-size:5.6px;color:#315b64}#v79-tool section{display:flex;gap:2px;border-left:1px solid #e0e8ea;padding-left:6px}#v79-tool button{height:27px!important;border:1px solid #dce6e8!important;border-radius:6px!important;background:#fff!important;padding:0 7px!important;font-size:4.8px!important}#v79-tool section button.on{background:#edf6f8!important;border-color:#83b5bf!important;color:#155f70!important;font-weight:900!important}#v79-tool section i{display:inline-block;width:5px;height:5px;border-radius:50%;background:#e94350;margin-right:3px}#v79-tool [data-t="treatment"] i{background:#168ee8}#v79-tool [data-t="both"] i{background:#8650d7}#v79-tool [data-arm]{background:#155f70!important;border-color:#155f70!important;color:#fff!important;font-weight:900!important}#v79-tool.armed [data-arm]{background:#d94350!important;border-color:#d94350!important;animation:v79p 1s infinite}@keyframes v79p{50%{box-shadow:0 0 0 5px rgba(217,67,80,.12)}}
+#v79-panel{position:absolute;z-index:33;right:14px;bottom:60px;width:225px;max-height:390px;border:1px solid #d6e4e7;border-radius:11px;background:rgba(255,255,255,.96);box-shadow:0 12px 34px rgba(20,61,70,.1);backdrop-filter:blur(11px);overflow:hidden}#v79-panel>header{display:flex;justify-content:space-between;padding:9px;border-bottom:1px solid #e5edef}#v79-panel header small,#v79-panel header b,#v79-panel header span{display:block}#v79-panel header small{font-size:4px;color:#b17b2d;font-weight:900}#v79-panel header b{font-size:7px;color:#214f59}#v79-panel header span{font-size:4.8px;color:#82979b;direction:rtl}#v79-panel header>strong{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#edf5f6;color:#17677a;font-size:7px}.v79-list{max-height:300px;overflow:auto;padding:5px}.v79-list article{padding:7px;border-bottom:1px solid #e8eef0}.v79-list article header{display:grid;grid-template-columns:23px 1fr 16px;gap:5px}.v79-list article header i{width:21px;height:21px;border-radius:50%;display:grid;place-items:center;background:#e94350;color:#fff;font-style:normal;font-size:5.5px;font-weight:900}.v79-list article header i.treatment{background:#168ee8}.v79-list article header i.both{background:#8650d7}.v79-list article header b,.v79-list article header span{display:block}.v79-list article header b{font-size:5.5px;color:#365f68}.v79-list article header span{font-size:4.4px;color:#8ba0a4}.v79-list article header button{border:0!important;background:none!important;font-size:9px!important;color:#9bacae!important}.v79-list label{display:grid;grid-template-columns:50px 25px 1fr;align-items:center;margin-top:5px;font-size:4.6px;color:#607b81}.v79-list label strong{font-size:4.6px}.v79-list input{width:100%;accent-color:#e94350}.v79-quality{display:flex;flex-wrap:wrap;gap:2px;margin-top:5px}.v79-quality button{height:20px!important;padding:0 5px!important;border:1px solid #dce6e8!important;border-radius:10px!important;background:#fff!important;font-size:4px!important}.v79-quality button.on{background:#eef7f8!important;border-color:#75aeba!important;color:#155f70!important}.v79-list textarea{width:100%;height:35px;margin-top:5px;border:1px solid #dce6e8;border-radius:5px;padding:4px;font-size:4.7px;resize:none;box-sizing:border-box}.v79-empty{text-align:center;padding:20px 7px;font-size:5.5px;color:#82979b}.v79-empty span{font-size:5px;direction:rtl}#v79-panel footer{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:6px;border-top:1px solid #e5edef}#v79-panel footer button{height:27px!important;border:1px solid #dce6e8!important;border-radius:6px!important;background:#fff!important;font-size:4.8px!important}#v79-panel footer [data-save]{background:#155f70!important;color:#fff!important;border-color:#155f70!important}
+#v61-real3d.v79-map #v76-hint{display:none}
+@media(max-width:900px){#v79-panel{right:5px;width:200px;bottom:54px}#v79-tool>div{display:none}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V79 REGIONAL PAIN MAPPING";
+})();
