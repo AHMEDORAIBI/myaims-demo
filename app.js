@@ -13174,3 +13174,131 @@ function boot(){const t=setInterval(()=>{if(A()?.model&&hd()){activate();if(A()?
 document.addEventListener("click",e=>{if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,650)},false);document.addEventListener("myaims:anatomy-ready",()=>setTimeout(activate,250));
 const st=document.createElement("style");st.textContent=`#v61-real3d.v76-presentation .v61-stagewrap{background:radial-gradient(ellipse at 50% 38%,#fff 0%,#fbfdfe 34%,#f1f6f7 69%,#e5eef0 100%)!important;overflow:hidden}#v61-real3d.v76-presentation #v61-canvas canvas{filter:saturate(1.055) contrast(1.055) brightness(1.01)!important}#v76-stage-title{position:absolute;z-index:12;left:18px;top:17px;display:flex;align-items:flex-start;gap:12px;pointer-events:none}#v76-stage-title small,#v76-stage-title b,#v76-stage-title span{display:block}#v76-stage-title small{font-size:4.7px;font-weight:900;letter-spacing:.11em;color:#b17a2b}#v76-stage-title b{font-size:8px;line-height:1.25;color:#173f49;margin-top:2px}#v76-stage-title span{font-size:5.4px;color:#7e9499;margin-top:2px;direction:rtl;text-align:left}#v76-stage-title em{display:flex;align-items:center;gap:4px;margin-top:2px;padding:4px 7px;border:1px solid #cce2db;border-radius:20px;background:rgba(246,255,251,.92);font-style:normal;font-size:4.6px;font-weight:900;color:#287a64;white-space:nowrap}#v76-stage-title em i{width:5px;height:5px;border-radius:50%;background:#28a47d;box-shadow:0 0 0 3px rgba(40,164,125,.11)}#v76-hint{position:absolute;z-index:11;left:50%;bottom:15px;transform:translateX(-50%);display:flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid rgba(211,225,228,.9);border-radius:20px;background:rgba(255,255,255,.82);backdrop-filter:blur(9px);font-size:4.6px;color:#809499;pointer-events:none;white-space:nowrap}#v76-hint span{font-weight:900;color:#3e626a}#v76-hint i{width:2px;height:2px;border-radius:50%;background:#bdcbce}#v75-viewdock.v76-dock{top:16px!important;right:16px!important;border-radius:10px!important;padding:5px!important;background:rgba(255,255,255,.91)!important;box-shadow:0 8px 26px rgba(19,61,69,.075)!important}#v61-real3d.v76-presentation .v70-render-badge,#v61-real3d.v76-presentation .v71-quality,#v61-real3d.v76-presentation #v72-hd-status,#v61-real3d.v76-presentation #v73-diag{display:none!important}@media(max-width:900px){#v76-stage-title{left:8px;top:8px}#v76-stage-title span,#v76-stage-title em,#v76-hint{display:none}#v75-viewdock.v76-dock{top:8px!important;right:6px!important}}`;document.head.appendChild(st);window.MYAIMS_BUILD="V76 HD ANATOMICAL PRESENTATION";
 })();
+
+/* =========================================================
+   myAIMS V77 — MUSCLE SELECTION EXPERIENCE
+   Premium HD selection: focus, outline/glow, bilingual
+   inspector, clinical tagging and quick isolate/reset.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+let current=null, ghost=null;
+
+const AR={
+ "pectoralis major":"العضلة الصدرية الكبرى","pectoralis minor":"العضلة الصدرية الصغرى",
+ "deltoid":"العضلة الدالية","trapezius":"العضلة شبه المنحرفة",
+ "biceps brachii":"العضلة ذات الرأسين العضدية","triceps brachii":"العضلة ثلاثية الرؤوس العضدية",
+ "latissimus dorsi":"العضلة الظهرية العريضة","rectus abdominis":"العضلة المستقيمة البطنية",
+ "gluteus maximus":"العضلة الألوية الكبرى","gluteus medius":"العضلة الألوية الوسطى",
+ "rectus femoris":"العضلة المستقيمة الفخذية","vastus lateralis":"العضلة المتسعة الوحشية",
+ "vastus medialis":"العضلة المتسعة الإنسية","gastrocnemius":"العضلة التوأمية",
+ "soleus":"العضلة النعلية","tibialis anterior":"العضلة الظنبوبية الأمامية",
+ "hamstring":"عضلات خلف الفخذ","quadriceps":"العضلة رباعية الرؤوس"
+};
+function clean(n){return String(n||"Anatomical Structure").replace(/[_-]+/g," ").replace(/\s+/g," ").trim()}
+function arabic(n){
+ const l=clean(n).toLowerCase();
+ for(const [k,v] of Object.entries(AR))if(l.includes(k))return v;
+ return "البنية التشريحية المحددة";
+}
+function restore(){
+ if(!current)return;
+ try{
+   if(current.userData?.v75Base){
+     const b=current.userData.v75Base;
+     current.material=Array.isArray(b)?b.map(x=>x.clone()):b.clone();
+   }else if(current.userData?.v72Base) current.material=current.userData.v72Base.clone?.()||current.material;
+ }catch(e){}
+ if(ghost?.parent)ghost.parent.remove(ghost);ghost=null;
+}
+function glow(mesh,mode="pain"){
+ const a=A();if(!a?.THREE||!mesh)return;const T=a.THREE;
+ restore();current=mesh;
+ try{
+   ghost=new T.Mesh(mesh.geometry,new T.MeshBasicMaterial({
+     color:mode==="treatment"?0x1d91eb:mode==="both"?0x8b50d1:0x18a1d6,
+     transparent:true,opacity:.14,side:T.BackSide,depthWrite:false
+   }));
+   ghost.position.copy(mesh.position);ghost.quaternion.copy(mesh.quaternion);ghost.scale.copy(mesh.scale).multiplyScalar(1.018);
+   mesh.parent.add(ghost);
+ }catch(e){}
+ const mats=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+ mats.filter(Boolean).forEach(m=>{
+   const c=mode==="treatment"?0x168ee8:mode==="both"?0x8750d7:0x1598d1;
+   if(m.color)m.color.set(c);if(m.emissive)m.emissive.set(c);
+   if("emissiveIntensity" in m)m.emissiveIntensity=.16;
+   if("roughness" in m)m.roughness=.3;if("clearcoat" in m)m.clearcoat=.23;m.needsUpdate=true;
+ });
+}
+function focus(mesh){
+ const a=A();if(!a?.THREE||!mesh)return;const T=a.THREE;
+ const b=new T.Box3().setFromObject(mesh),c=b.getCenter(new T.Vector3()),sz=b.getSize(new T.Vector3());
+ const max=Math.max(sz.x,sz.y,sz.z,.7),dir=a.camera.position.clone().sub(a.controls.target).normalize();
+ const d=Math.max(max*5.2,4.5);
+ a.controls.target.lerp(c,.82);a.camera.position.copy(c.clone().add(dir.multiplyScalar(d)));a.controls.update();
+}
+function inspector(){
+ const r=R();if(!r||r.querySelector("#v77-inspector"))return;
+ const p=document.createElement("aside");p.id="v77-inspector";
+ p.innerHTML=`<header><div><small>SELECTED STRUCTURE</small><b data-name>No structure selected</b><span data-ar>لم يتم تحديد عضلة</span></div><button data-close>×</button></header>
+ <div class="v77-visual"><div class="v77-orb">3D</div><div><small>CLINICAL SELECTION</small><strong data-type>Musculoskeletal Structure</strong><span>Interactive HD anatomy</span></div></div>
+ <div class="v77-tabs"><button class="on">Clinical</button><button>Anatomy</button><button>Session</button></div>
+ <section class="v77-actions"><button data-focus>⌖ Focus</button><button data-isolate>◇ Isolate</button><button data-fade>◐ Fade Others</button><button data-reset>↻ Reset</button></section>
+ <section class="v77-tag"><label>Clinical classification</label><div><button class="on" data-mode="pain"><i></i>Pain</button><button data-mode="treatment"><i></i>Treatment</button><button data-mode="both"><i></i>Both</button></div></section>
+ <section class="v77-note"><label>Clinical note · الملاحظة السريرية</label><textarea placeholder="Add findings, tenderness, movement response or treatment note…"></textarea></section>
+ <footer><button data-save>✓ Save to Session</button></footer>`;
+ (r.querySelector(".v61-stagewrap")||r).appendChild(p);
+ p.querySelector("[data-close]").onclick=()=>p.classList.remove("open");
+ p.querySelector("[data-focus]").onclick=()=>current&&focus(current);
+ p.querySelector("[data-reset]").onclick=()=>{restore();current=null;p.classList.remove("open");try{document.querySelector("#v75-viewdock [data-reset]")?.click()}catch(e){}};
+ p.querySelector("[data-isolate]").onclick=()=>{if(!current)return;A().meshes.forEach(m=>m.visible=m===current)};
+ p.querySelector("[data-fade]").onclick=()=>{if(!current)return;A().meshes.forEach(m=>{if(m===current)return;const ms=Array.isArray(m.material)?m.material:[m.material];ms.forEach(x=>{if(x){x.transparent=true;x.opacity=.12;x.needsUpdate=true}})})};
+ p.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{p.querySelectorAll("[data-mode]").forEach(x=>x.classList.toggle("on",x===b));if(current)glow(current,b.dataset.mode)});
+ p.querySelector("[data-save]").onclick=()=>{
+   if(!current)return;
+   try{
+     db.clinicalStructureSelections=db.clinicalStructureSelections||[];
+     db.clinicalStructureSelections.push({structure:clean(current.name),note:p.querySelector("textarea").value,mode:p.querySelector("[data-mode].on")?.dataset.mode||"pain",createdAt:new Date().toISOString()});save();
+   }catch(e){}
+   const b=p.querySelector("[data-save]");b.textContent="✓ Saved · تم الحفظ";setTimeout(()=>b.textContent="✓ Save to Session",1400);
+ };
+}
+function show(mesh){
+ inspector();const p=R().querySelector("#v77-inspector"),n=clean(mesh.name);
+ p.querySelector("[data-name]").textContent=n;p.querySelector("[data-ar]").textContent=arabic(n);
+ p.querySelector("[data-type]").textContent=/tendon|ligament/i.test(n)?"Tendon / Ligament":"Muscle / Anatomical Structure";
+ p.classList.add("open");glow(mesh,p.querySelector("[data-mode].on")?.dataset.mode||"pain");
+}
+function pick(e){
+ const a=A(),canvas=a?.renderer?.domElement;if(!a?.raycaster||!canvas||e.target!==canvas)return;
+ const rect=canvas.getBoundingClientRect(),T=a.THREE;
+ const m=new T.Vector2(((e.clientX-rect.left)/rect.width)*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
+ a.raycaster.setFromCamera(m,a.camera);
+ const hit=a.raycaster.intersectObjects(a.meshes||[],false)[0];if(hit?.object)show(hit.object);
+}
+function activate(){
+ const a=A(),r=R();if(!a?.meshes?.length||!r||a.__v77)return;
+ a.__v77=true;inspector();a.renderer.domElement.addEventListener("dblclick",e=>{pick(e);if(current)focus(current)});
+ // Single click updates inspector; drag remains rotation.
+ let down=null;
+ a.renderer.domElement.addEventListener("pointerdown",e=>down=[e.clientX,e.clientY]);
+ a.renderer.domElement.addEventListener("pointerup",e=>{if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])<5)pick(e);down=null});
+}
+function boot(){const t=setInterval(()=>{if(A()?.meshes?.length){activate();if(A()?.__v77)clearInterval(t)}},120);setTimeout(()=>clearInterval(t),15000)}
+document.addEventListener("click",e=>{if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,700)},false);
+document.addEventListener("myaims:anatomy-ready",()=>setTimeout(activate,300));
+
+const st=document.createElement("style");st.textContent=`
+#v77-inspector{position:absolute;z-index:36;right:14px;top:62px;width:245px;max-height:calc(100% - 125px);overflow:auto;border:1px solid #d6e4e7;border-radius:12px;background:rgba(255,255,255,.97);box-shadow:0 16px 42px rgba(20,61,70,.13);backdrop-filter:blur(12px);transform:translateX(112%);opacity:0;transition:.24s}
+#v77-inspector.open{transform:none;opacity:1}#v77-inspector header{display:flex;justify-content:space-between;padding:11px;border-bottom:1px solid #e5edef}#v77-inspector header small,#v77-inspector header b,#v77-inspector header span{display:block}#v77-inspector header small{font-size:4.5px;color:#b17b2c;font-weight:900;letter-spacing:.08em}#v77-inspector header b{font-size:8px;color:#174451;margin-top:2px}#v77-inspector header span{font-size:5.5px;color:#738d92;direction:rtl}#v77-inspector header button{border:0!important;background:none!important;font-size:12px!important;color:#83979b!important}
+.v77-visual{display:flex;gap:8px;align-items:center;margin:9px;padding:9px;border-radius:9px;background:linear-gradient(135deg,#f0f7f8,#fbfdfd)}.v77-orb{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#155f70;color:#fff;font-size:8px;font-weight:900;box-shadow:0 5px 13px rgba(21,95,112,.18)}.v77-visual small,.v77-visual strong,.v77-visual span{display:block}.v77-visual small{font-size:4px;color:#9a7a47;font-weight:900}.v77-visual strong{font-size:6px;color:#345e67}.v77-visual span{font-size:4.6px;color:#8ca0a4}
+.v77-tabs{display:grid;grid-template-columns:repeat(3,1fr);padding:0 9px;border-bottom:1px solid #e6edef}.v77-tabs button{height:27px!important;border:0!important;background:none!important;font-size:5px!important;color:#81969a!important}.v77-tabs button.on{color:#155f70!important;font-weight:900!important;border-bottom:2px solid #155f70!important}
+.v77-actions{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:9px}.v77-actions button{height:29px!important;border:1px solid #dce7e9!important;border-radius:6px!important;background:#fff!important;color:#466970!important;font-size:5px!important}
+.v77-tag,.v77-note{padding:0 9px 9px}.v77-tag label,.v77-note label{display:block;font-size:5px;font-weight:900;color:#41636b;margin-bottom:5px}.v77-tag>div{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}.v77-tag button{height:28px!important;border:1px solid #dce6e8!important;border-radius:6px!important;background:#fff!important;font-size:4.8px!important}.v77-tag button.on{background:#eef7f8!important;border-color:#76aeba!important;color:#155f70!important;font-weight:900!important}.v77-tag i{display:inline-block;width:5px;height:5px;border-radius:50%;background:#ef4650;margin-right:3px}.v77-tag [data-mode="treatment"] i{background:#198bea}.v77-tag [data-mode="both"] i{background:#8b50d1}
+.v77-note textarea{width:100%;height:62px;border:1px solid #dbe6e8;border-radius:7px;padding:7px;font-size:5.2px;resize:none;box-sizing:border-box}#v77-inspector footer{padding:8px 9px;border-top:1px solid #e5edef}#v77-inspector footer button{width:100%;height:31px!important;border:0!important;border-radius:7px!important;background:#155f70!important;color:#fff!important;font-size:5.5px!important;font-weight:900!important}
+#v61-real3d.v76-presentation #v75-viewdock{transition:right .24s}#v77-inspector.open~#v75-viewdock{right:270px!important}
+@media(max-width:900px){#v77-inspector{right:5px;top:48px;width:220px}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V77 MUSCLE SELECTION EXPERIENCE";
+})();
