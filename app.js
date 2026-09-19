@@ -13140,3 +13140,37 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V75 HD CAMERA MATERIALS";
 })();
+
+/* =========================================================
+   myAIMS V76 — HD ANATOMICAL PRESENTATION
+   Premium presentation pass for the native HD model.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+function hd(){const a=A(),r=R();return !!(a?.__v75||a?.__v73HD||a?.hd||r?.dataset?.anatomyAsset==="myaims-anatomy-hd.glb"||r?.dataset?.anatomyAsset==="HD")}
+function box(){const a=A();if(!a?.THREE||!a?.model)return null;const b=new a.THREE.Box3().setFromObject(a.model);return{b,s:b.getSize(new a.THREE.Vector3()),c:b.getCenter(new a.THREE.Vector3())}}
+function frame(view="front"){
+ const a=A(),q=box();if(!a||!q)return;const T=a.THREE,{s,c}=q,cam=a.camera,ctl=a.controls;
+ cam.fov=29;cam.updateProjectionMatrix();const vf=T.MathUtils.degToRad(cam.fov),hf=2*Math.atan(Math.tan(vf/2)*Math.max(.4,cam.aspect||1));
+ const d=Math.max((s.y/2)/Math.tan(vf/2),(s.x/2)/Math.tan(hf/2))*1.075,y=c.y+s.y*.008;
+ const p={front:[c.x,y,c.z+d],back:[c.x,y,c.z-d],left:[c.x-d,y,c.z],right:[c.x+d,y,c.z]}[view]||[c.x,y,c.z+d];
+ cam.position.set(...p);cam.near=Math.max(.01,d/1200);cam.far=d*14;cam.updateProjectionMatrix();ctl.target.set(c.x,c.y+s.y*.005,c.z);ctl.minDistance=d*.48;ctl.maxDistance=d*2.8;ctl.update();
+}
+function stage(){
+ const a=A(),q=box();if(!a||!q||a.__v76Stage)return;a.__v76Stage=true;const T=a.THREE,{s,c,b}=q,y=b.min.y;
+ const p=new T.Mesh(new T.CircleGeometry(Math.max(s.x*.54,4.8),128),new T.MeshPhysicalMaterial({color:0xeaf1f2,roughness:.82,metalness:0,transparent:true,opacity:.88,side:T.DoubleSide}));p.rotation.x=-Math.PI/2;p.position.set(c.x,y-.08,c.z);a.scene.add(p);
+ const ring=new T.Mesh(new T.RingGeometry(Math.max(s.x*.57,5.1),Math.max(s.x*.59,5.35),128),new T.MeshBasicMaterial({color:0xcbdcdf,transparent:true,opacity:.52,side:T.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.set(c.x,y-.065,c.z);a.scene.add(ring);
+ const cv=document.createElement("canvas");cv.width=512;cv.height=256;const x=cv.getContext("2d"),g=x.createRadialGradient(256,128,8,256,128,210);g.addColorStop(0,"rgba(25,48,54,.28)");g.addColorStop(.42,"rgba(25,48,54,.12)");g.addColorStop(1,"rgba(25,48,54,0)");x.fillStyle=g;x.fillRect(0,0,512,256);const tex=new T.CanvasTexture(cv),sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,depthWrite:false}));sp.position.set(c.x,y+.015,c.z);sp.scale.set(Math.max(s.x*1.12,9),Math.max(s.x*.48,3.8),1);a.scene.add(sp);
+}
+function ui(){
+ const r=R();if(!r||r.querySelector("#v76-stage-title"))return;const host=r.querySelector(".v61-stagewrap")||r;
+ const h=document.createElement("div");h.id="v76-stage-title";h.innerHTML='<div><small>myAIMS · HD CLINICAL ANATOMY</small><b>Interactive Musculoskeletal Mapping</b><span>التحديد السريري التفاعلي للجهاز العضلي الهيكلي</span></div><em><i></i> HD MODEL</em>';host.appendChild(h);
+ const z=document.createElement("div");z.id="v76-hint";z.innerHTML='<span>Click</span> Select structure <i></i><span>Drag</span> Rotate <i></i><span>Scroll</span> Zoom';host.appendChild(z);
+ const d=r.querySelector("#v75-viewdock");if(d){d.classList.add("v76-dock");d.querySelectorAll("[data-v]").forEach(b=>b.addEventListener("click",()=>setTimeout(()=>frame(b.dataset.v),20)));d.querySelector("[data-reset]")?.addEventListener("click",()=>setTimeout(()=>frame("front"),20))}
+}
+function activate(){const a=A(),r=R();if(!a?.model||!r||!hd()||a.__v76)return;a.__v76=true;r.classList.add("v76-presentation");try{a.renderer.setClearColor(0xf5f9fa,1);a.renderer.toneMappingExposure=1.06}catch(e){}stage();ui();frame("front")}
+function boot(){const t=setInterval(()=>{if(A()?.model&&hd()){activate();if(A()?.__v76)clearInterval(t)}},120);setTimeout(()=>clearInterval(t),15000)}
+document.addEventListener("click",e=>{if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,650)},false);document.addEventListener("myaims:anatomy-ready",()=>setTimeout(activate,250));
+const st=document.createElement("style");st.textContent=`#v61-real3d.v76-presentation .v61-stagewrap{background:radial-gradient(ellipse at 50% 38%,#fff 0%,#fbfdfe 34%,#f1f6f7 69%,#e5eef0 100%)!important;overflow:hidden}#v61-real3d.v76-presentation #v61-canvas canvas{filter:saturate(1.055) contrast(1.055) brightness(1.01)!important}#v76-stage-title{position:absolute;z-index:12;left:18px;top:17px;display:flex;align-items:flex-start;gap:12px;pointer-events:none}#v76-stage-title small,#v76-stage-title b,#v76-stage-title span{display:block}#v76-stage-title small{font-size:4.7px;font-weight:900;letter-spacing:.11em;color:#b17a2b}#v76-stage-title b{font-size:8px;line-height:1.25;color:#173f49;margin-top:2px}#v76-stage-title span{font-size:5.4px;color:#7e9499;margin-top:2px;direction:rtl;text-align:left}#v76-stage-title em{display:flex;align-items:center;gap:4px;margin-top:2px;padding:4px 7px;border:1px solid #cce2db;border-radius:20px;background:rgba(246,255,251,.92);font-style:normal;font-size:4.6px;font-weight:900;color:#287a64;white-space:nowrap}#v76-stage-title em i{width:5px;height:5px;border-radius:50%;background:#28a47d;box-shadow:0 0 0 3px rgba(40,164,125,.11)}#v76-hint{position:absolute;z-index:11;left:50%;bottom:15px;transform:translateX(-50%);display:flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid rgba(211,225,228,.9);border-radius:20px;background:rgba(255,255,255,.82);backdrop-filter:blur(9px);font-size:4.6px;color:#809499;pointer-events:none;white-space:nowrap}#v76-hint span{font-weight:900;color:#3e626a}#v76-hint i{width:2px;height:2px;border-radius:50%;background:#bdcbce}#v75-viewdock.v76-dock{top:16px!important;right:16px!important;border-radius:10px!important;padding:5px!important;background:rgba(255,255,255,.91)!important;box-shadow:0 8px 26px rgba(19,61,69,.075)!important}#v61-real3d.v76-presentation .v70-render-badge,#v61-real3d.v76-presentation .v71-quality,#v61-real3d.v76-presentation #v72-hd-status,#v61-real3d.v76-presentation #v73-diag{display:none!important}@media(max-width:900px){#v76-stage-title{left:8px;top:8px}#v76-stage-title span,#v76-stage-title em,#v76-hint{display:none}#v75-viewdock.v76-dock{top:8px!important;right:6px!important}}`;document.head.appendChild(st);window.MYAIMS_BUILD="V76 HD ANATOMICAL PRESENTATION";
+})();
