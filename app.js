@@ -13508,3 +13508,100 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V79 REGIONAL PAIN MAPPING";
 })();
+
+/* =========================================================
+   myAIMS V80 — CLINICAL BODY MAP SUMMARY
+   Session-ready summary of mapped pain/treatment findings,
+   severity KPIs, regions, symptom qualities and prior-session
+   comparison. Uses existing V79 regionalPainMap data.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const AID=()=>{try{return ((typeof currentAppointment!=="undefined"&&currentAppointment)?.id)||R()?.dataset?.appointmentId||"demo"}catch(e){return"demo"}};
+const REGION_RULES=[
+ ["Neck / الرقبة",/neck|cervical|sternocleidomastoid|scalene|levator/i],
+ ["Shoulder / الكتف",/shoulder|deltoid|supraspinatus|infraspinatus|subscapularis|teres/i],
+ ["Upper Back / أعلى الظهر",/trapezius|rhomboid|thoracic/i],
+ ["Lower Back / أسفل الظهر",/lumbar|multifidus|erector spinae|quadratus lumborum|latissimus/i],
+ ["Hip / الورك",/hip|gluteus|piriformis|iliopsoas|tensor fascia/i],
+ ["Thigh / الفخذ",/femoris|vastus|hamstring|adductor|sartorius/i],
+ ["Knee / الركبة",/knee|patella|popliteus/i],
+ ["Calf / بطة الساق",/gastrocnemius|soleus|calf/i],
+ ["Lower Leg / أسفل الساق",/tibialis|fibularis|peroneus/i]
+];
+function data(){try{return (db.regionalPainMap||[]).filter(x=>x.appointmentId===AID())}catch(e){return[]}}
+function region(n){return (REGION_RULES.find(x=>x[1].test(n||""))||["Other / أخرى"])[0]}
+function avg(a){const x=a.filter(m=>m.type!=="treatment"&&Number.isFinite(+m.severity));return x.length?x.reduce((s,m)=>s+(+m.severity||0),0)/x.length:0}
+function previous(cur){
+ try{
+  const all=db.regionalPainMap||[],ids=[...new Set(all.map(x=>x.appointmentId).filter(x=>x&&x!==AID()))];
+  if(!ids.length)return null;
+  const id=ids[ids.length-1],arr=all.filter(x=>x.appointmentId===id);
+  return {id,arr,avg:avg(arr)}
+ }catch(e){return null}
+}
+function build(){
+ const cur=data(),pain=cur.filter(x=>x.type!=="treatment"),treat=cur.filter(x=>x.type!=="pain"),av=avg(cur),mx=pain.length?Math.max(...pain.map(x=>+x.severity||0)):0,prev=previous(cur);
+ const delta=prev?av-prev.avg:null;
+ const regs={};cur.forEach(m=>{const r=region(m.structure);(regs[r]||(regs[r]=[])).push(m)});
+ const qualities={};cur.forEach(m=>(m.quality||[]).forEach(q=>qualities[q]=(qualities[q]||0)+1));
+ return {cur,pain,treat,av,mx,prev,delta,regs,qualities};
+}
+function cardHTML(x){
+ const trend=x.delta===null?`<span class="neutral">No previous session</span>`:Math.abs(x.delta)<.05?`<span class="neutral">→ No change</span>`:x.delta<0?`<span class="better">↓ ${Math.abs(x.delta).toFixed(1)} improvement</span>`:`<span class="worse">↑ ${Math.abs(x.delta).toFixed(1)} increase</span>`;
+ const regRows=Object.entries(x.regs).map(([r,a])=>{
+   const pa=a.filter(m=>m.type!=="treatment"),ra=pa.length?avg(pa):0;
+   return `<div class="v80-region"><div><b>${r}</b><span>${a.length} mapped point${a.length===1?"":"s"}</span></div><strong>${pa.length?ra.toFixed(1)+"/10":"Treatment"}</strong></div>`
+ }).join("");
+ const q=Object.entries(x.qualities).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`<span>${n}<i>${c}</i></span>`).join("");
+ const findings=x.cur.slice(0,8).map((m,i)=>`<tr><td>${i+1}</td><td>${m.structure||"Structure"}</td><td>${m.type||"pain"}</td><td>${m.type==="treatment"?"—":(+m.severity||0)+"/10"}</td><td>${(m.quality||[]).join(", ")||"—"}</td></tr>`).join("");
+ return `<div class="v80-summary">
+ <header><div><small>CLINICAL BODY MAP SUMMARY</small><h2>Body Map Findings</h2><p>ملخص خريطة الألم والعلاج للجلسة الحالية</p></div><div class="v80-status"><i></i> Session Data</div></header>
+ <section class="v80-kpis">
+  <article><small>PAIN POINTS</small><b>${x.pain.length}</b><span>نقاط الألم</span></article>
+  <article><small>AVG. PAIN</small><b>${x.av.toFixed(1)}<em>/10</em></b><span>متوسط الألم</span></article>
+  <article><small>MAX. PAIN</small><b>${x.mx}<em>/10</em></b><span>أعلى درجة</span></article>
+  <article><small>TREATMENT AREAS</small><b>${x.treat.length}</b><span>مناطق العلاج</span></article>
+ </section>
+ <section class="v80-grid"><div class="v80-box"><div class="v80-head"><b>Regional Overview</b><span>ملخص المناطق</span></div>${regRows||`<div class="v80-empty">No mapped regions yet</div>`}</div>
+ <div class="v80-box"><div class="v80-head"><b>Session Comparison</b><span>المقارنة مع الجلسة السابقة</span></div>
+ <div class="v80-compare"><div><small>CURRENT</small><b>${x.av.toFixed(1)}</b></div><em>vs</em><div><small>PREVIOUS</small><b>${x.prev?x.prev.avg.toFixed(1):"—"}</b></div></div><div class="v80-trend">${trend}</div>
+ <div class="v80-head v80-qh"><b>Symptoms</b><span>طبيعة الأعراض</span></div><div class="v80-qualities">${q||"<small>No symptom qualities selected</small>"}</div></div></section>
+ <section class="v80-tablebox"><div class="v80-head"><b>Mapped Findings</b><span>النتائج المسجلة</span></div><table><thead><tr><th>#</th><th>Structure</th><th>Type</th><th>Severity</th><th>Symptoms</th></tr></thead><tbody>${findings||`<tr><td colspan="5">No mapped findings</td></tr>`}</tbody></table></section>
+ <section class="v80-note"><b>Clinical Summary · الملخص السريري</b><textarea placeholder="Clinical interpretation, response to treatment, functional impact, or follow-up recommendation…"></textarea></section>
+ <footer><button data-back>← Body Map</button><button data-copy>Copy Summary</button><button data-report>✓ Add to Session Report</button></footer></div>`;
+}
+function install(){
+ const r=R();if(!r||r.querySelector("#v80-open"))return;
+ const b=document.createElement("button");b.id="v80-open";b.innerHTML=`▤ <span>Clinical Summary</span>`;(r.querySelector(".v61-stagewrap")||r).appendChild(b);b.onclick=open;
+}
+function open(){
+ const r=R();if(!r)return;let o=r.querySelector("#v80-overlay");if(o)o.remove();
+ o=document.createElement("div");o.id="v80-overlay";o.innerHTML=`<div class="v80-shell"><button class="v80-x">×</button>${cardHTML(build())}</div>`;(r.querySelector(".v61-stagewrap")||r).appendChild(o);
+ o.querySelector(".v80-x").onclick=()=>o.remove();o.querySelector("[data-back]").onclick=()=>o.remove();
+ o.querySelector("[data-copy]").onclick=async()=>{
+   const x=build(),txt=`Clinical Body Map Summary\nPain points: ${x.pain.length}\nAverage pain: ${x.av.toFixed(1)}/10\nMaximum pain: ${x.mx}/10\nTreatment areas: ${x.treat.length}\nRegions: ${Object.keys(x.regs).join(", ")||"None"}`;
+   try{await navigator.clipboard.writeText(txt);const b=o.querySelector("[data-copy]");b.textContent="✓ Copied";setTimeout(()=>b.textContent="Copy Summary",1200)}catch(e){}
+ };
+ o.querySelector("[data-report]").onclick=()=>{
+   const x=build(),note=o.querySelector("textarea").value;
+   try{db.clinicalBodyMapSummaries=db.clinicalBodyMapSummaries||[];db.clinicalBodyMapSummaries.push({appointmentId:AID(),painPoints:x.pain.length,averagePain:+x.av.toFixed(1),maximumPain:x.mx,treatmentAreas:x.treat.length,regions:Object.keys(x.regs),qualities:x.qualities,note,createdAt:new Date().toISOString()});save()}catch(e){}
+   const b=o.querySelector("[data-report]");b.textContent="✓ Added · تمت الإضافة";setTimeout(()=>b.textContent="✓ Add to Session Report",1500);
+ };
+}
+function activate(){const a=typeof app!=="undefined"?app:null,r=R();if(!a?.meshes?.length||!r||a.__v80)return;a.__v80=true;install();r.classList.add("v80-summary-ready")}
+function boot(){const t=setInterval(()=>{const a=typeof app!=="undefined"?app:null;if(a?.meshes?.length){activate();if(a.__v80)clearInterval(t)}},120);setTimeout(()=>clearInterval(t),15000)}
+document.addEventListener("click",e=>{if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,850)},false);
+document.addEventListener("myaims:anatomy-ready",()=>setTimeout(activate,470));
+
+const st=document.createElement("style");st.textContent=`
+#v80-open{position:absolute;z-index:35;right:14px;top:17px;height:30px!important;padding:0 10px!important;border:1px solid #cfe0e3!important;border-radius:8px!important;background:rgba(255,255,255,.94)!important;color:#285d68!important;font-size:5px!important;font-weight:900!important;box-shadow:0 6px 18px rgba(20,61,70,.07)}
+#v80-overlay{position:absolute;z-index:80;inset:0;background:rgba(21,48,54,.42);backdrop-filter:blur(5px);display:grid;place-items:center;padding:18px}.v80-shell{position:relative;width:min(780px,94%);max-height:94%;overflow:auto;border-radius:14px;background:#f6f9fa;box-shadow:0 28px 80px rgba(10,37,43,.24)}.v80-x{position:absolute;z-index:2;right:12px;top:10px;border:0!important;background:none!important;font-size:13px!important;color:#82969a!important}.v80-summary{padding:18px}.v80-summary>header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}.v80-summary header small{font-size:4.6px;color:#b17b2d;font-weight:900;letter-spacing:.08em}.v80-summary h2{margin:2px 0 0;font-size:15px;color:#173f49}.v80-summary header p{margin:2px 0;font-size:6px;color:#81969a;direction:rtl;text-align:left}.v80-status{display:flex;align-items:center;gap:4px;padding:5px 8px;border:1px solid #cfe2dc;border-radius:15px;background:#f4fbf8;font-size:4.8px;color:#347963;font-weight:800}.v80-status i{width:5px;height:5px;border-radius:50%;background:#28a47d}
+.v80-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.v80-kpis article{padding:10px;border:1px solid #dde7e9;border-radius:9px;background:#fff}.v80-kpis small,.v80-kpis b,.v80-kpis span{display:block}.v80-kpis small{font-size:4px;color:#899ca0;font-weight:900}.v80-kpis b{font-size:14px;color:#174f5c;margin:3px 0}.v80-kpis b em{font-size:5px;font-style:normal;color:#8da0a4}.v80-kpis span{font-size:4.7px;color:#8da0a4;direction:rtl;text-align:left}
+.v80-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:7px;margin-top:7px}.v80-box,.v80-tablebox,.v80-note{border:1px solid #dde7e9;border-radius:9px;background:#fff;padding:9px}.v80-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:6px;border-bottom:1px solid #edf1f2}.v80-head b{font-size:6px;color:#315c65}.v80-head span{font-size:4.7px;color:#8ba0a4;direction:rtl}.v80-region{display:flex;justify-content:space-between;align-items:center;padding:6px 2px;border-bottom:1px solid #eef2f3}.v80-region b,.v80-region span{display:block}.v80-region b{font-size:5.2px;color:#42656c}.v80-region span{font-size:4.2px;color:#94a4a7}.v80-region strong{font-size:5.4px;color:#17677a}.v80-compare{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px}.v80-compare div{text-align:center}.v80-compare small,.v80-compare b{display:block}.v80-compare small{font-size:4px;color:#94a4a7}.v80-compare b{font-size:13px;color:#1a5562}.v80-compare em{font-size:5px;color:#a0adaf}.v80-trend{text-align:center;font-size:5px}.v80-trend .better{color:#288166}.v80-trend .worse{color:#c34c55}.v80-trend .neutral{color:#84989c}.v80-qh{margin-top:9px}.v80-qualities{display:flex;flex-wrap:wrap;gap:3px;padding-top:6px}.v80-qualities>span{padding:4px 6px;border-radius:12px;background:#f0f6f7;font-size:4.4px;color:#526f75}.v80-qualities i{margin-left:4px;font-style:normal;font-weight:900;color:#17677a}
+.v80-tablebox{margin-top:7px}.v80-tablebox table{width:100%;border-collapse:collapse;margin-top:5px}.v80-tablebox th,.v80-tablebox td{padding:5px;border-bottom:1px solid #edf1f2;text-align:left;font-size:4.5px}.v80-tablebox th{color:#809499;font-weight:900}.v80-tablebox td{color:#496a71}.v80-note{margin-top:7px}.v80-note b{display:block;font-size:5.5px;color:#365f68;margin-bottom:5px}.v80-note textarea{width:100%;height:55px;box-sizing:border-box;border:1px solid #dce6e8;border-radius:6px;padding:7px;font-size:5px;resize:none}.v80-summary footer{display:flex;justify-content:flex-end;gap:5px;margin-top:9px}.v80-summary footer button{height:30px!important;padding:0 10px!important;border:1px solid #d9e5e7!important;border-radius:7px!important;background:#fff!important;color:#486a71!important;font-size:5px!important}.v80-summary footer [data-report]{background:#155f70!important;border-color:#155f70!important;color:#fff!important;font-weight:900!important}.v80-empty{padding:16px;text-align:center;font-size:5px;color:#91a1a4}
+#v61-real3d.v80-summary-ready #v75-viewdock{right:125px!important}
+@media(max-width:900px){#v80-open{right:5px;top:7px}.v80-grid{grid-template-columns:1fr}.v80-kpis{grid-template-columns:1fr 1fr}.v80-summary{padding:12px}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V80 CLINICAL BODY MAP SUMMARY";
+})();
