@@ -13302,3 +13302,109 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V77 MUSCLE SELECTION EXPERIENCE";
 })();
+
+/* =========================================================
+   myAIMS V78 — REGIONAL CLINICAL VIEW
+   One-click clinical camera navigation for Shoulder, Neck,
+   Lower Back, Hip, Knee and Calf with surrounding context.
+   ========================================================= */
+(function(){
+const R=()=>document.getElementById("v61-real3d");
+const A=()=>typeof app!=="undefined"?app:null;
+let active=null, faded=[];
+
+const REGIONS={
+ neck:{en:"Neck",ar:"الرقبة",y:.88,zoom:.22,keys:["sternocleidomastoid","trapezius","levator scapula","scalene","neck"]},
+ shoulder:{en:"Shoulder",ar:"الكتف",y:.75,zoom:.25,keys:["deltoid","supraspinatus","infraspinatus","teres","subscapularis","shoulder"]},
+ lowerback:{en:"Lower Back",ar:"أسفل الظهر",y:.48,zoom:.28,keys:["erector spinae","multifidus","quadratus lumborum","latissimus","lumbar"]},
+ hip:{en:"Hip",ar:"الورك",y:.36,zoom:.28,keys:["gluteus","piriformis","iliopsoas","tensor fascia","hip"]},
+ knee:{en:"Knee",ar:"الركبة",y:.17,zoom:.23,keys:["vastus","rectus femoris","patella","gastrocnemius","popliteus","knee"]},
+ calf:{en:"Calf",ar:"بطة الساق",y:.08,zoom:.25,keys:["gastrocnemius","soleus","tibialis","fibularis","calf"]}
+};
+function q(){const a=A();if(!a?.THREE||!a?.model)return null;const b=new a.THREE.Box3().setFromObject(a.model);return {b,s:b.getSize(new a.THREE.Vector3()),c:b.getCenter(new a.THREE.Vector3())}}
+function restoreFade(){
+ faded.forEach(({m,materials})=>{try{m.material=Array.isArray(materials)?materials.map(x=>x.clone()):materials.clone()}catch(e){}});
+ faded=[];
+}
+function context(region){
+ const a=A(),cfg=REGIONS[region];if(!a||!cfg)return;
+ restoreFade();
+ const hits=a.meshes.filter(m=>cfg.keys.some(k=>String(m.name||"").toLowerCase().includes(k)));
+ if(!hits.length)return;
+ const set=new Set(hits);
+ a.meshes.forEach(m=>{
+   if(set.has(m))return;
+   try{
+     const old=Array.isArray(m.material)?m.material.map(x=>x.clone()):m.material.clone();
+     faded.push({m,materials:old});
+     const ms=Array.isArray(m.material)?m.material:[m.material];
+     ms.forEach(x=>{x.transparent=true;x.opacity=.16;x.depthWrite=false;x.needsUpdate=true});
+   }catch(e){}
+ });
+}
+function gotoRegion(region,side="front"){
+ const a=A(),cfg=REGIONS[region],z=q();if(!a||!cfg||!z)return;
+ active=region;const T=a.THREE,{s,c,b}=z;
+ const target=new T.Vector3(c.x,b.min.y+s.y*cfg.y,c.z);
+ const span=Math.max(s.x*.36,s.y*cfg.zoom);
+ const vf=T.MathUtils.degToRad(a.camera.fov||29),dist=(span/2)/Math.tan(vf/2)*1.65;
+ const pos=side==="back"?[target.x,target.y,target.z-dist]:side==="left"?[target.x-dist,target.y,target.z]:side==="right"?[target.x+dist,target.y,target.z]:[target.x,target.y,target.z+dist];
+ a.controls.target.copy(target);a.camera.position.set(...pos);a.camera.near=Math.max(.01,dist/1000);a.camera.far=dist*20;a.camera.updateProjectionMatrix();a.controls.update();
+ context(region);updateUI(region,side);
+}
+function updateUI(region,side){
+ const r=R(),cfg=REGIONS[region];if(!r||!cfg)return;
+ r.querySelectorAll("#v78-regions [data-region]").forEach(x=>x.classList.toggle("on",x.dataset.region===region));
+ r.querySelectorAll("#v78-regionbar [data-side]").forEach(x=>x.classList.toggle("on",x.dataset.side===side));
+ const title=r.querySelector("#v78-regionbar [data-title]"),ar=r.querySelector("#v78-regionbar [data-ar]");
+ if(title)title.textContent=cfg.en+" Clinical View";if(ar)ar.textContent=cfg.ar;
+ r.querySelector("#v78-regionbar")?.classList.add("show");
+}
+function install(){
+ const r=R();if(!r||r.querySelector("#v78-regions"))return;
+ const left=document.createElement("div");left.id="v78-regions";
+ left.innerHTML=`<header><small>REGIONAL NAVIGATION</small><b>Clinical Regions</b><span>المناطق السريرية</span></header>
+ ${Object.entries(REGIONS).map(([k,v])=>`<button data-region="${k}"><i></i><div><b>${v.en}</b><span>${v.ar}</span></div><em>›</em></button>`).join("")}
+ <button class="v78-whole" data-whole><i></i><div><b>Whole Body</b><span>الجسم بالكامل</span></div><em>↻</em></button>`;
+ (r.querySelector(".v61-stagewrap")||r).appendChild(left);
+
+ const bar=document.createElement("div");bar.id="v78-regionbar";
+ bar.innerHTML=`<div><small>REGIONAL CLINICAL VIEW</small><b data-title>Regional View</b><span data-ar></span></div>
+ <section><button class="on" data-side="front">Front</button><button data-side="back">Back</button><button data-side="left">Left</button><button data-side="right">Right</button></section>
+ <button data-exit>×</button>`;
+ (r.querySelector(".v61-stagewrap")||r).appendChild(bar);
+
+ left.querySelectorAll("[data-region]").forEach(b=>b.onclick=()=>gotoRegion(b.dataset.region,"front"));
+ left.querySelector("[data-whole]").onclick=()=>exit();
+ bar.querySelectorAll("[data-side]").forEach(b=>b.onclick=()=>active&&gotoRegion(active,b.dataset.side));
+ bar.querySelector("[data-exit]").onclick=()=>exit();
+}
+function exit(){
+ restoreFade();active=null;
+ const r=R();r?.querySelector("#v78-regionbar")?.classList.remove("show");
+ r?.querySelectorAll("#v78-regions [data-region]").forEach(x=>x.classList.remove("on"));
+ try{r?.querySelector("#v75-viewdock [data-reset]")?.click()}catch(e){}
+}
+function activate(){
+ const a=A(),r=R();if(!a?.meshes?.length||!r||a.__v78)return;
+ a.__v78=true;install();r.classList.add("v78-regional");
+}
+function boot(){const t=setInterval(()=>{if(A()?.meshes?.length){activate();if(A()?.__v78)clearInterval(t)}},120);setTimeout(()=>clearInterval(t),15000)}
+document.addEventListener("click",e=>{if(e.target.closest('#v55-clinical-launcher [data-v55="assessment"],#v55-workspace [data-sub="pain"]'))setTimeout(boot,750)},false);
+document.addEventListener("myaims:anatomy-ready",()=>setTimeout(activate,350));
+
+const st=document.createElement("style");st.textContent=`
+#v78-regions{position:absolute;z-index:28;left:14px;top:118px;width:125px;padding:7px;border:1px solid #d9e5e7;border-radius:11px;background:rgba(255,255,255,.92);box-shadow:0 10px 30px rgba(19,60,68,.075);backdrop-filter:blur(10px)}
+#v78-regions header{padding:3px 5px 7px;border-bottom:1px solid #e6edef}#v78-regions header small,#v78-regions header b,#v78-regions header span{display:block}#v78-regions header small{font-size:3.9px;color:#b17b2d;font-weight:900}#v78-regions header b{font-size:6.7px;color:#214f59}#v78-regions header span{font-size:4.7px;color:#84999d;direction:rtl;text-align:left}
+#v78-regions>button{display:grid!important;grid-template-columns:9px 1fr 8px!important;align-items:center!important;width:100%!important;min-height:34px!important;padding:4px 5px!important;border:0!important;border-bottom:1px solid #edf1f2!important;border-radius:6px!important;background:transparent!important;text-align:left!important}
+#v78-regions>button:hover,#v78-regions>button.on{background:#eef7f8!important}#v78-regions>button.on{box-shadow:inset 2px 0 #17677a}
+#v78-regions button>i{width:6px;height:6px;border-radius:50%;background:#b8c9cc}#v78-regions button.on>i{background:#168ca4;box-shadow:0 0 0 3px rgba(22,140,164,.11)}
+#v78-regions button b,#v78-regions button span{display:block}#v78-regions button b{font-size:5.3px;color:#3b6169}#v78-regions button span{font-size:4.3px;color:#8ca0a4;direction:rtl;text-align:left}#v78-regions button em{font-style:normal;color:#9badaf;font-size:8px}.v78-whole{margin-top:4px!important;background:#f8fafb!important}
+#v78-regionbar{position:absolute;z-index:30;left:50%;top:66px;transform:translate(-50%,-10px);display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #d6e4e7;border-radius:9px;background:rgba(255,255,255,.95);box-shadow:0 8px 24px rgba(20,61,70,.09);opacity:0;pointer-events:none;transition:.2s;backdrop-filter:blur(10px)}
+#v78-regionbar.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}#v78-regionbar>div{min-width:85px}#v78-regionbar small,#v78-regionbar b,#v78-regionbar span{display:block}#v78-regionbar small{font-size:3.8px;color:#b17b2d;font-weight:900}#v78-regionbar b{font-size:6px;color:#234f59}#v78-regionbar span{font-size:4.5px;color:#85999d;direction:rtl}
+#v78-regionbar section{display:flex;gap:2px}#v78-regionbar section button{height:25px!important;padding:0 6px!important;border:0!important;border-radius:5px!important;background:#f3f7f8!important;font-size:4.7px!important;color:#637d82!important}#v78-regionbar section button.on{background:#155f70!important;color:#fff!important}#v78-regionbar>[data-exit]{border:0!important;background:none!important;font-size:10px!important;color:#8ba0a4!important}
+#v61-real3d.v78-regional #v76-stage-title{left:153px}
+@media(max-width:900px){#v78-regions{left:5px;top:92px;width:105px}#v61-real3d.v78-regional #v76-stage-title{display:none}#v78-regionbar{top:48px}}
+`;document.head.appendChild(st);
+window.MYAIMS_BUILD="V78 REGIONAL CLINICAL VIEW";
+})();
