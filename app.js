@@ -16921,6 +16921,51 @@ function makeUI(){
  });
  panel.querySelector('.v109-actions').append(verify);
 
+ // V113 — direct binding verification and high-visibility pose.
+ const verifySkin=document.createElement('button');
+ verifySkin.type='button';verifySkin.dataset.v113Skin='';
+ verifySkin.textContent=t('Force visible 4D pose','إظهار وضعية 4D واضحة');
+ verifySkin.addEventListener('click',()=>{
+  pause();
+  if(!body||!a){setStatus(t('4D body not loaded.','نموذج 4D غير محمل.'));return}
+  const T=a.THREE,skins=[];
+  body.traverse(n=>{if(n.isSkinnedMesh)skins.push(n)});
+  if(!skins.length){setStatus(t('No SkinnedMesh: the loaded model cannot deform.','لا يوجد مجسم مرتبط بالهيكل.'));return}
+  const skin=skins[0],bones=skin.skeleton.bones;
+  const byName=n=>bones.find(b=>b.name===n);
+  const targets=[
+   ['upperarm.L',new T.Vector3(0,0,1),1.4],
+   ['forearm.L',new T.Vector3(1,0,0),1.7],
+   ['upperarm.R',new T.Vector3(0,0,1),-1.4],
+   ['forearm.R',new T.Vector3(1,0,0),-1.7],
+   ['thigh.L',new T.Vector3(1,0,0),.7],
+   ['shin.L',new T.Vector3(1,0,0),1.4],
+   ['thigh.R',new T.Vector3(1,0,0),-.7],
+   ['shin.R',new T.Vector3(1,0,0),-1.4]
+  ];
+  body.traverse(n=>{if(n.isBone&&n.userData.v109Rest)n.quaternion.copy(n.userData.v109Rest)});
+  let count=0;
+  for(const [name,axis,radians] of targets){
+   const bone=byName(name);if(!bone)continue;
+   if(!bone.userData.v109Rest)bone.userData.v109Rest=bone.quaternion.clone();
+   bone.quaternion.copy(bone.userData.v109Rest).multiply(new T.Quaternion().setFromAxisAngle(axis,radians));
+   count++;
+  }
+  body.updateMatrixWorld(true);
+  skins.forEach(n=>{n.frustumCulled=false;n.skeleton.update();n.material?.needsUpdate&&(n.material.needsUpdate=true)});
+  const attrs=skin.geometry.attributes;
+  const msg=t('Skinned meshes: ','مجسمات مرتبطة: ')+skins.length+
+    ' · '+t('Bones: ','العظام: ')+bones.length+
+    ' · '+t('Moved: ','تم تحريك: ')+count+'/8'+
+    ' · JOINTS_0 '+(attrs.skinIndex?'OK':'MISSING')+
+    ' · WEIGHTS_0 '+(attrs.skinWeight?'OK':'MISSING');
+  const diag=panel.querySelector('[data-v111-diagnostic]');
+  if(diag)diag.textContent=msg;
+  setStatus(t('Compare the new pose with Reset. If no visible change, send this diagnostic line.','قارن الوضعية الجديدة مع زر إعادة الوضع. إذا لم يظهر تغيير، أرسل السطر التشخيصي.'));
+ });
+ panel.querySelector('.v109-actions').append(verifySkin);
+
+
 
  panel.querySelectorAll('[data-v109-close]').forEach(b=>b.addEventListener('click',dispose));
  panel.querySelector('[data-v109-range]').addEventListener('input',e=>{pause();angle(e.target.value)});
@@ -17050,5 +17095,5 @@ function loop(){
  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-window.MYAIMS_4D_FOUNDATION_VERSION='V112';
+window.MYAIMS_4D_FOUNDATION_VERSION='V113';
 })();
