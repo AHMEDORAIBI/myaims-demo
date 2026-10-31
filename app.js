@@ -14408,3 +14408,122 @@ const style=document.createElement('style');style.id='v88-quality-check-style';s
 if(!install()){let attempts=0;const timer=setInterval(()=>{if(install()||++attempts>=20)clearInterval(timer)},150)}
 window.MYAIMS_PATIENT_UI_VERSION='V88';
 })();
+
+
+/* ===========================================================
+ myAIMS V89 — PATIENT-FIRST LAYOUT & SETTINGS DIAGNOSTICS
+ Keeps V88 structural checker, moves its visible entry to
+ Settings. No storage changes, no clinical handler replacement.
+ =========================================================== */
+(function(){
+"use strict";
+const patientWorkspace=()=>document.getElementById("v31-workspace");
+const settings=()=>document.getElementById("page-settings");
+const db=()=>window.state||window.appState||{};
+const isAr=()=>document.documentElement.lang==="ar"||document.documentElement.dir==="rtl";
+const T=(en,ar)=>isAr()?ar:en;
+function checkList(){
+ const w=patientWorkspace(),pid=w?.dataset.pid;
+ return [
+  [T("Patient records","سجلات المرضى"),Array.isArray(db().patients)],
+  [T("Patient navigation","التنقل بين أقسام المريض"),typeof window.v31Tab==="function"],
+  [T("Clinical session entry","الدخول إلى الجلسات"),typeof window.openV24ClinicalNote==="function"&&typeof window.openV28AddSession==="function"],
+  [T("Clinical launcher","واجهة الأدوات السريرية"),typeof window.openV55ClinicalLauncher==="function"],
+  [T("3D entry function","وظيفة الدخول إلى خريطة الجسم"),typeof window.openV55ClinicalLauncher==="function"],
+  [T("Treatment plan editor","محرر الخطة العلاجية"),typeof window.openV28PlanEditor==="function"],
+  [T("Session reports","تقارير الجلسات"),typeof window.previewV24SessionReport==="function"],
+  [T("Local patient storage","تخزين المرضى محليًا"),Array.isArray(db().patients)],
+ ];
+}
+function renderDiagnostic(){
+ const panel=document.getElementById("v89-diagnostics-results");if(!panel)return;
+ const checks=checkList(),ok=checks.filter(x=>x[1]).length;
+ panel.replaceChildren();
+ const p=document.createElement("p");
+ p.textContent=T(`${ok} of ${checks.length} structural checks passed. This does not test clinical workflows or the actual 3D model loading.`,
+ `اجتاز ${ok} من ${checks.length} فحوص بنيوية. لا يشمل ذلك اختبار سير الجلسات أو التحميل الفعلي للنموذج ثلاثي الأبعاد.`);
+ panel.append(p);
+ const grid=document.createElement("div");grid.className="v89-diagnostic-grid";
+ checks.forEach(([name,passed])=>{
+  const item=document.createElement("div");item.className="v89-diagnostic-item";
+  const title=document.createElement("span");title.textContent=name;
+  const state=document.createElement("b");state.textContent=passed?T("Detected","موجود"):T("Needs review","يحتاج مراجعة");
+  state.className=passed?"v89-passed":"v89-failed";
+  item.append(title,state);grid.append(item);
+ });
+ panel.append(grid);
+ const foot=document.createElement("p");foot.className="v89-disclaimer";
+ foot.textContent=T("Manual validation is still required: start a session, open Body Map 3D, return to Patients, and check Billing and Appointments.",
+ "لا يزال الاختبار اليدوي مطلوبًا: تشغيل جلسة، فتح Body Map 3D، الرجوع للمرضى، ثم فحص الفواتير والمواعيد.");
+ panel.append(foot);
+}
+function settingsPanel(){
+ const page=settings();if(!page||page.querySelector("#v89-diagnostics"))return;
+ const section=document.createElement("section");section.id="v89-diagnostics";
+ section.innerHTML=`<div class="v89-settings-head"><div><small>MY AIMS · SYSTEM TOOLS</small><h3></h3><p></p></div><button type="button" id="v89-run-diagnostics"></button></div><div id="v89-diagnostics-results" hidden></div>`;
+ page.append(section);
+ const btn=section.querySelector("#v89-run-diagnostics");
+ function localize(){
+  section.querySelector("h3").textContent=T("System Compatibility Check","فحص توافق النظام");
+  section.querySelector(".v89-settings-head p").textContent=T("Structural diagnostics for patient records and clinical functions.","فحوص بنيوية لملفات المرضى والوظائف السريرية.");
+  btn.textContent=T("Run Check","تشغيل الفحص");
+ }
+ localize();
+ btn.addEventListener("click",()=>{
+  const results=section.querySelector("#v89-diagnostics-results");
+  results.hidden=false;
+  renderDiagnostic();
+ });
+}
+function compact(){
+ const w=patientWorkspace();if(!w?.classList.contains("open"))return;
+ w.classList.add("v89-patient-first");
+ // Existing checker remains installed and functional but is hidden
+ // in the patient workspace; diagnostic access is now in Settings.
+ const old=w.querySelector("#v88-quality-check");
+ if(old)old.open=false;
+}
+function init(){try{settingsPanel();compact()}catch(e){console.warn("V89 patient-first:",e)}}
+function install(){
+ const open=window.openV31PatientWorkspace;
+ if(typeof open!=="function"||open.__v89)return false;
+ function wrapped(){const result=open.apply(this,arguments);compact();return result}
+ wrapped.__v89=true;window.openV31PatientWorkspace=wrapped;
+ init();return true;
+}
+document.addEventListener("click",e=>{
+ if(e.target.closest('.nav-item[data-page="settings"]'))queueMicrotask(settingsPanel);
+},false);
+const css=document.createElement("style");css.id="v89-patient-first-css";css.textContent=`
+/* V88 is retained, but diagnostics no longer interrupt the patient record. */
+#v31-workspace #v88-quality-check{display:none!important}
+#v31-workspace.v89-patient-first #v84-patient-context{margin:11px 0 12px!important}
+#v31-workspace.v89-patient-first #v84-patient-context .v84-context-main,#v31-workspace.v89-patient-first #v84-patient-context .v84-next-visit{padding:13px 15px!important}
+#v31-workspace.v89-patient-first #v84-patient-context .v84-context-eyebrow{margin-bottom:9px!important}
+#v31-workspace.v89-patient-first #v84-patient-context .v84-context-grid article b{font-size:17px!important}
+#v31-workspace.v89-patient-first .v31-top{padding:15px 18px!important}
+#v31-workspace.v89-patient-first .v31-tabs{margin:0 0 10px!important}
+#v31-workspace.v89-patient-first #v85-quick-nav{margin:0 0 13px!important;padding:8px 12px!important}
+#v31-workspace.v89-patient-first #v81-dashboard .v81-section-head{margin-top:16px!important}
+#v31-workspace.v89-patient-first #v81-dashboard .v81-tiles{gap:10px!important}
+#v31-workspace.v89-patient-first #v81-dashboard .v81-tile{min-height:128px!important;padding:13px!important}
+#v31-workspace.v89-patient-first #v81-dashboard .v81-tile-icon{margin-bottom:8px!important}
+#v31-workspace.v89-patient-first #v86-clinical-snapshot{margin-top:15px!important}
+#v89-diagnostics{margin:22px 0;padding:20px;background:#fff;border:1px solid #dfe9f0;border-radius:15px;box-shadow:0 5px 18px rgba(29,71,100,.035)}
+#v89-diagnostics .v89-settings-head{display:flex;align-items:center;justify-content:space-between;gap:14px}
+#v89-diagnostics small{font-size:10px;color:#b18b53;letter-spacing:.07em;font-weight:850}
+#v89-diagnostics h3{font-size:17px!important;color:#1a4864!important;margin:5px 0!important}
+#v89-diagnostics .v89-settings-head p{font-size:12px;color:#849aa9;margin:0}
+#v89-run-diagnostics{border:0;background:#215eaa;color:#fff;border-radius:10px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer}
+#v89-diagnostics-results{margin-top:15px;border-top:1px solid #e7edf2;padding-top:12px}
+#v89-diagnostics-results[hidden]{display:none!important}
+#v89-diagnostics-results>p{font-size:12px;color:#668399;line-height:1.6}
+#v89-diagnostics-results .v89-diagnostic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+#v89-diagnostics-results .v89-diagnostic-item{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #e4edf3;background:#f7fafc;border-radius:10px;padding:11px;font-size:11px;color:#45667c}
+#v89-diagnostics-results .v89-passed{color:#18835b}
+#v89-diagnostics-results .v89-failed{color:#b84b47}
+@media(max-width:650px){#v89-diagnostics{padding:12px}#v89-diagnostics .v89-settings-head{align-items:flex-start;flex-direction:column}#v89-diagnostics-results .v89-diagnostic-grid{grid-template-columns:1fr}}
+`;document.head.append(css);
+if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>25)clearInterval(timer)},120)}
+window.MYAIMS_PATIENT_UI_VERSION="V89";
+})();
