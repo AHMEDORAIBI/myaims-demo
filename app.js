@@ -14782,3 +14782,105 @@ window.MYAIMS_PATIENT_UI_VERSION="V89";
  if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>=25)clearInterval(timer)},120)}
  window.MYAIMS_PATIENT_UI_VERSION='V92';
 })();
+
+/* ============================================================
+ myAIMS V93 — CLINICAL TIMELINE SEARCH & DATE FILTER
+ Non-destructive extension of V92. Filters DOM display only.
+ No edits to clinical records, sessions, or storage.
+ ============================================================ */
+(function(){
+ 'use strict';
+ const root=()=>document.getElementById('v31-workspace');
+ const ar=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+ const tr=(en,arabic)=>ar()?arabic:en;
+ let query='',from='',to='';
+ function filter(){
+  const w=root(),controls=w?.querySelector('#v92-timeline-controls');
+  const timeline=w?.querySelector('#v31-body .v29-timeline');
+  if(!controls||!timeline)return;
+  const active=controls.querySelector('[data-v92-filter][aria-pressed="true"]')?.dataset.v92Filter||'all';
+  const items=[...timeline.querySelectorAll('.v29-time-item')];
+  let count=0;
+  items.forEach(item=>{
+   const kind=active==='all'||item.classList.contains(active);
+   const text=(item.textContent||'').toLocaleLowerCase();
+   const matches=text.includes(query.toLocaleLowerCase());
+   // Date filtering uses the date displayed in the item only if it
+   // contains an unambiguous ISO date. No guessing or date parsing.
+   const iso=text.match(/\b20\d\d-\d\d-\d\d\b/)?.[0]||'';
+   const dateOK=(!from&&!to)||(!iso?false:(!from||iso>=from)&&(!to||iso<=to));
+   item.hidden=!(kind&&matches&&dateOK);
+   if(!item.hidden)count++;
+  });
+  const result=controls.querySelector('[data-v93-count]');
+  if(result)result.textContent=tr(`${count} matching events`,`${count} حدث مطابق`);
+  const empty=w.querySelector('.v92-filter-empty');
+  if(empty)empty.hidden=count>0;
+ }
+ function enhance(){
+  const w=root(),controls=w?.querySelector('#v92-timeline-controls');
+  if(!w?.classList.contains('open')||!controls)return;
+  if(!controls.querySelector('#v93-search')){
+   const tools=document.createElement('div');tools.className='v93-tools';
+   const label=document.createElement('label');label.className='v93-search-label';
+   const input=document.createElement('input');input.id='v93-search';input.type='search';
+   input.placeholder=tr('Search timeline notes or services…','البحث في الملاحظات أو الخدمات…');
+   input.value=query;input.setAttribute('aria-label',tr('Search timeline','البحث في التسلسل الزمني'));
+   label.append(input);
+   const dateFrom=document.createElement('input');dateFrom.type='date';dateFrom.value=from;dateFrom.dataset.v93Date='from';
+   dateFrom.setAttribute('aria-label',tr('From date','من تاريخ'));
+   const dateTo=document.createElement('input');dateTo.type='date';dateTo.value=to;dateTo.dataset.v93Date='to';
+   dateTo.setAttribute('aria-label',tr('To date','إلى تاريخ'));
+   const clear=document.createElement('button');clear.type='button';clear.dataset.v93Clear='';clear.textContent=tr('Clear','مسح');
+   const count=document.createElement('small');count.dataset.v93Count='';count.setAttribute('aria-live','polite');
+   tools.append(label,dateFrom,dateTo,clear,count);controls.append(tools);
+  }
+  filter();
+ }
+ document.addEventListener('input',event=>{
+  if(event.target?.id==='v93-search'){query=event.target.value;filter();}
+  if(event.target?.matches?.('#v92-timeline-controls [data-v93-date]')){
+   if(event.target.dataset.v93Date==='from')from=event.target.value;
+   else to=event.target.value;
+   filter();
+  }
+ });
+ document.addEventListener('change',event=>{
+  if(event.target?.matches?.('#v92-timeline-controls [data-v93-date]'))filter();
+ });
+ document.addEventListener('click',event=>{
+  if(event.target?.closest?.('#v92-timeline-controls [data-v92-filter]'))queueMicrotask(filter);
+  if(event.target?.closest?.('#v92-timeline-controls [data-v93-clear]')){
+   query='';from='';to='';
+   const controls=root()?.querySelector('#v92-timeline-controls');
+   if(controls){
+    const search=controls.querySelector('#v93-search');if(search)search.value='';
+    controls.querySelectorAll('[data-v93-date]').forEach(input=>input.value='');
+   }
+   filter();
+  }
+ });
+ function install(){
+  const tab=window.v31Tab;
+  if(typeof tab!=='function'||tab.__v93)return false;
+  function wrapped(){const result=tab.apply(this,arguments);enhance();return result}
+  wrapped.__v93=true;window.v31Tab=wrapped;
+  const open=window.openV31PatientWorkspace;
+  if(typeof open==='function'&&!open.__v93){
+   function wrappedOpen(){const result=open.apply(this,arguments);enhance();return result}
+   wrappedOpen.__v93=true;window.openV31PatientWorkspace=wrappedOpen;
+  }
+  enhance();return true;
+ }
+ const css=document.createElement('style');css.id='v93-timeline-search-css';css.textContent=`
+ #v92-timeline-controls .v93-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;padding:11px;background:#f8fbfe;border:1px solid #e1eaf2;border-radius:12px}
+ #v92-timeline-controls .v93-search-label{flex:1 1 230px;min-width:180px}
+ #v92-timeline-controls .v93-tools input{box-sizing:border-box;min-height:37px;border:1px solid #dbe7f0!important;border-radius:9px!important;background:#fff!important;color:#274c65!important;padding:8px 11px!important;font-size:12px!important;max-width:100%}
+ #v92-timeline-controls .v93-search-label input{width:100%}
+ #v92-timeline-controls .v93-tools button{min-height:37px;border:1px solid #dce7ef!important;border-radius:9px!important;background:#fff!important;color:#476c85!important;padding:8px 12px!important;font-size:11px!important;font-weight:800!important}
+ #v92-timeline-controls .v93-tools small{color:#66859a;font-size:11px;margin-inline-start:auto}
+ @media(max-width:650px){#v92-timeline-controls .v93-tools{gap:6px;padding:8px}#v92-timeline-controls .v93-tools input[type=date]{flex:1 1 115px;min-width:0}#v92-timeline-controls .v93-tools small{width:100%}}
+ `;document.head.append(css);
+ if(!install()){let tries=0;const timer=setInterval(()=>{if(install()||++tries>=25)clearInterval(timer)},120)}
+ window.MYAIMS_PATIENT_UI_VERSION='V93';
+})();
