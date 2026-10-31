@@ -14884,3 +14884,106 @@ window.MYAIMS_PATIENT_UI_VERSION="V89";
  if(!install()){let tries=0;const timer=setInterval(()=>{if(install()||++tries>=25)clearInterval(timer)},120)}
  window.MYAIMS_PATIENT_UI_VERSION='V93';
 })();
+
+
+/* ============================================================
+ myAIMS V94 — CLINICAL TIMELINE PRINT VIEW
+ Printable read-only view of the currently filtered timeline.
+ No database writes, no session handler changes, no dependencies.
+ ============================================================ */
+(function(){
+'use strict';
+const root=()=>document.getElementById('v31-workspace');
+const isAr=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const tr=(en,ar)=>isAr()?ar:en;
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function setup(){
+ const w=root(),controls=w?.querySelector('#v92-timeline-controls');
+ if(!w?.classList.contains('open')||!controls||controls.querySelector('[data-v94-print]'))return;
+ const b=document.createElement('button');
+ b.type='button';b.dataset.v94Print='';
+ b.className='v94-print-button';
+ b.textContent=tr('Print filtered timeline','طباعة التسلسل الزمني المصفّى');
+ const tools=controls.querySelector('.v93-tools')||controls;
+ tools.append(b);
+}
+function makePrint(){
+ const w=root(),timeline=w?.querySelector('#v31-body .v29-timeline');
+ if(!w||!timeline)return;
+ const pid=w.dataset.pid;
+ const db=window.state||window.appState||{};
+ const p=(db.patients||[]).find(x=>String(x.id)===String(pid));
+ const visible=[...timeline.querySelectorAll('.v29-time-item')].filter(el=>!el.hidden&&getComputedStyle(el).display!=='none');
+ const filters=w.querySelector('#v92-timeline-controls');
+ const q=filters?.querySelector('#v93-search')?.value||'';
+ const from=filters?.querySelector('[data-v93-date="from"]')?.value||'';
+ const to=filters?.querySelector('[data-v93-date="to"]')?.value||'';
+ const selected=filters?.querySelector('[data-v92-filter][aria-pressed="true"]')?.dataset.v92Filter||'all';
+ const sheet=document.createElement('section');sheet.id='v94-print-sheet';
+ const title=document.createElement('h1');title.textContent=tr('Clinical Timeline','التسلسل الزمني السريري');
+ const name=document.createElement('p');name.className='v94-patient-line';
+ name.textContent=tr('Patient','المريض')+': '+(p?.name||'—')+'  |  '+tr('Patient ID','رقم المريض')+': '+(pid||'—');
+ const meta=document.createElement('p');meta.className='v94-print-meta';
+ meta.textContent=tr('Events','الأحداث')+': '+visible.length+'  |  '+tr('Filter','التصفية')+': '+selected+
+ (from?'  |  '+tr('From','من')+': '+from:'')+(to?'  |  '+tr('To','إلى')+': '+to:'')+
+ (q?'  |  '+tr('Search','بحث')+': '+q:'');
+ const list=document.createElement('div');list.className='v94-print-events';
+ if(!visible.length){
+  const empty=document.createElement('p');empty.textContent=tr('No matching events.','لا توجد أحداث مطابقة.');list.append(empty);
+ }
+ visible.forEach((el,i)=>{
+  const card=document.createElement('article');card.className='v94-print-event';
+  const n=document.createElement('b');n.textContent=String(i+1)+'. ';
+  const content=document.createElement('div');content.textContent=(el.innerText||el.textContent||'').trim();
+  card.append(n,content);list.append(card);
+ });
+ sheet.append(title,name,meta,list);
+ sheet.setAttribute('dir',isAr()?'rtl':'ltr');
+ // Print via a temporary in-document sheet to avoid pop-up blockers
+ // and to avoid opening external resources or copying patient data.
+ document.body.append(sheet);
+ document.body.classList.add('v94-printing');
+ try{window.print()}finally{
+  // Keep the print sheet until afterprint so delayed print dialogs work.
+  const cleanup=()=>{sheet.remove();document.body.classList.remove('v94-printing');window.removeEventListener('afterprint',cleanup)};
+  window.addEventListener('afterprint',cleanup,{once:true});
+  // Browsers without afterprint can clear it on the next print click.
+ }
+}
+document.addEventListener('click',e=>{
+ if(!e.target.closest('#v92-timeline-controls [data-v94-print]'))return;
+ e.preventDefault();e.stopPropagation();
+ const old=document.getElementById('v94-print-sheet');
+ if(old){old.remove();document.body.classList.remove('v94-printing')}
+ makePrint();
+},false);
+function install(){
+ const tab=window.v31Tab;
+ if(typeof tab!=='function'||tab.__v94)return false;
+ function wrapped(){const result=tab.apply(this,arguments);setup();return result}
+ wrapped.__v94=true;window.v31Tab=wrapped;
+ const open=window.openV31PatientWorkspace;
+ if(typeof open==='function'&&!open.__v94){
+  function wrappedOpen(){const result=open.apply(this,arguments);setup();return result}
+  wrappedOpen.__v94=true;window.openV31PatientWorkspace=wrappedOpen;
+ }
+ setup();return true;
+}
+const css=document.createElement('style');css.id='v94-timeline-print-css';css.textContent=`
+#v92-timeline-controls .v94-print-button{border:1px solid #c6dced!important;border-radius:9px!important;background:#eaf5fd!important;color:#1e5d88!important;font-size:11px!important;font-weight:800!important;padding:9px 13px!important;cursor:pointer}
+#v92-timeline-controls .v94-print-button:hover{background:#dbeefa!important}
+#v94-print-sheet{display:none}
+@media print{
+ @page{size:A4 portrait;margin:15mm}
+ body.v94-printing>*:not(#v94-print-sheet){display:none!important}
+ body.v94-printing #v94-print-sheet{display:block!important;position:static!important;width:100%!important;background:#fff!important;color:#182c3c!important;font-family:Arial,sans-serif!important;font-size:10pt!important}
+ #v94-print-sheet h1{font-size:20pt;margin:0 0 12px;color:#173e56}
+ #v94-print-sheet .v94-patient-line{font-size:11pt;font-weight:700}
+ #v94-print-sheet .v94-print-meta{font-size:9pt;color:#526b7b;border-bottom:1px solid #d7e0e7;padding-bottom:12px}
+ #v94-print-sheet .v94-print-event{display:flex;gap:10px;break-inside:avoid;page-break-inside:avoid;padding:12px 0;border-bottom:1px solid #e0e8ed;white-space:pre-wrap;line-height:1.6}
+ #v94-print-sheet .v94-print-event>b{color:#3a718f}
+}
+`;document.head.append(css);
+if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>25)clearInterval(timer)},120)}
+window.MYAIMS_PATIENT_UI_VERSION='V94';
+})();
