@@ -15144,3 +15144,188 @@ window.MYAIMS_PATIENT_UI_VERSION='V95';
  }
  window.MYAIMS_PATIENT_UI_VERSION='V96';
 })();
+
+
+/* ================================================================
+ myAIMS V97 — ADVANCED HYBRID 4D MOTION LAB (FOUNDATION)
+ Keeps HD anatomy GLB and original clinical 3D interaction intact.
+ A separate, labelled educational kinematics preview is provided.
+ This does NOT rig/animate the HD anatomy or measure real ROM.
+ ================================================================ */
+(function(){
+'use strict';
+const ID='v97-motion-lab';
+const joints={
+ shoulder:{en:'Shoulder abduction',ar:'إبعاد الكتف',min:0,max:150,default:75,unit:'°'},
+ elbow:{en:'Elbow flexion',ar:'ثني المرفق',min:0,max:145,default:75,unit:'°'},
+ knee:{en:'Knee flexion',ar:'ثني الركبة',min:0,max:135,default:65,unit:'°'},
+ hip:{en:'Hip flexion',ar:'ثني الورك',min:0,max:120,default:60,unit:'°'}
+};
+const ar=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const tr=(en,arabic)=>ar()?arabic:en;
+let current=null;
+function mount(){
+ const host=document.getElementById('v61-real3d');
+ if(!host||!host.classList.contains('open')||host.querySelector('#'+ID))return;
+ const stage=host.querySelector('.v61-stagewrap');
+ if(!stage)return;
+ const panel=document.createElement('section');
+ panel.id=ID;
+ panel.className='v97-motion-lab';
+ panel.innerHTML=`
+ <div class="v97-header">
+  <div><small>4D ADVANCED HYBRID · V97</small><h3>${tr('Motion Lab','مختبر الحركة')}</h3></div>
+  <button type="button" data-v97-collapse aria-expanded="false" aria-controls="v97-content">${tr('Open Motion Lab','فتح مختبر الحركة')} ▾</button>
+ </div>
+ <div id="v97-content" hidden>
+  <p class="v97-disclaimer">${tr('Educational motion preview. The HD anatomical model remains unchanged. Angles shown here are simulated, not patient measurements.','معاينة تعليمية للحركة. يبقى النموذج التشريحي عالي الدقة دون تغيير. الزوايا المعروضة محاكاة وليست قياسات للمريض.')}</p>
+  <div class="v97-controls">
+   <label>${tr('Joint movement','حركة المفصل')}
+    <select data-v97-joint>${Object.entries(joints).map(([key,j])=>`<option value="${key}">${tr(j.en,j.ar)}</option>`).join('')}</select>
+   </label>
+   <label>${tr('Side','الجانب')}
+    <select data-v97-side><option value="right">${tr('Right','يمين')}</option><option value="left">${tr('Left','يسار')}</option></select>
+   </label>
+   <label>${tr('Speed','السرعة')}
+    <select data-v97-speed><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select>
+   </label>
+  </div>
+  <div class="v97-preview">
+   <canvas data-v97-canvas width="600" height="260" role="img" aria-label="${tr('Simplified joint movement illustration','رسم توضيحي مبسط لحركة المفصل')}"></canvas>
+   <div class="v97-preview-label">${tr('SIMULATED KINEMATICS · NOT A DIAGNOSTIC MEASUREMENT','محاكاة حركية · ليست قياسًا تشخيصيًا')}</div>
+  </div>
+  <div class="v97-slider">
+   <label for="v97-angle">${tr('Simulated angle','الزاوية الافتراضية')} <strong data-v97-angle-value>75°</strong></label>
+   <input id="v97-angle" type="range" min="0" max="150" step="1" value="75" data-v97-angle>
+  </div>
+  <div class="v97-actions">
+   <button type="button" data-v97-play>▶ ${tr('Play','تشغيل')}</button>
+   <button type="button" data-v97-reset>↺ ${tr('Reset','إعادة ضبط')}</button>
+   <span data-v97-state aria-live="polite">${tr('Paused','متوقف')}</span>
+  </div>
+ </div>`;
+ stage.append(panel);
+ const state={host,panel,angle:75,playing:false,raf:0,last:0,phase:0,dir:1,ctx:panel.querySelector('canvas').getContext('2d')};
+ current=state;
+ const $=s=>panel.querySelector(s);
+ const angleInput=$('[data-v97-angle]'),jointInput=$('[data-v97-joint]');
+ function configure(){
+  const j=joints[jointInput.value];
+  angleInput.min=j.min;angleInput.max=j.max;state.angle=j.default;
+  state.dir=1;state.phase=0;angleInput.value=state.angle;
+  update();
+ }
+ function update(){
+  $('[data-v97-angle-value]').textContent=Math.round(state.angle)+'°';
+  angleInput.value=Math.round(state.angle);
+  draw(state);
+ }
+ function stop(){
+  state.playing=false;
+  if(state.raf)cancelAnimationFrame(state.raf);
+  state.raf=0;state.last=0;
+  $('[data-v97-play]').textContent='▶ '+tr('Play','تشغيل');
+  $('[data-v97-state]').textContent=tr('Paused','متوقف');
+ }
+ function frame(time){
+  if(!state.playing)return;
+  if(!document.contains(panel)||!host.classList.contains('open')){stop();return}
+  const dt=state.last?Math.min((time-state.last)/1000,.05):0;
+  state.last=time;
+  const j=joints[jointInput.value],speed=Number($('[data-v97-speed]').value)||1;
+  state.angle+=state.dir*dt*42*speed;
+  if(state.angle>=j.max){state.angle=j.max;state.dir=-1}
+  if(state.angle<=j.min){state.angle=j.min;state.dir=1}
+  update();state.raf=requestAnimationFrame(frame);
+ }
+ $('[data-v97-collapse]').addEventListener('click',()=>{
+  const body=$('#v97-content'),opening=body.hidden;
+  body.hidden=!opening;
+  $('[data-v97-collapse]').setAttribute('aria-expanded',String(opening));
+  $('[data-v97-collapse]').textContent=opening?tr('Close Motion Lab','إغلاق مختبر الحركة')+' ▴':tr('Open Motion Lab','فتح مختبر الحركة')+' ▾';
+  if(!opening)stop();else update();
+ });
+ jointInput.addEventListener('change',()=>{stop();configure()});
+ $('[data-v97-side]').addEventListener('change',update);
+ angleInput.addEventListener('input',()=>{stop();state.angle=Number(angleInput.value);update()});
+ $('[data-v97-play]').addEventListener('click',()=>{
+  if(state.playing){stop();return}
+  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches){
+   $('[data-v97-state]').textContent=tr('Animation disabled by reduced-motion preference. Use the angle slider.','تم تعطيل الحركة وفق إعداد تقليل الحركة. استخدم شريط الزاوية.');
+   return;
+  }
+  state.playing=true;state.last=0;
+  $('[data-v97-play]').textContent='❚❚ '+tr('Pause','إيقاف مؤقت');
+  $('[data-v97-state]').textContent=tr('Simulating','محاكاة جارية');
+  state.raf=requestAnimationFrame(frame);
+ });
+ $('[data-v97-reset]').addEventListener('click',()=>{stop();configure()});
+ configure();
+}
+function draw(s){
+ const canvas=s.panel.querySelector('canvas'),ctx=s.ctx;if(!ctx)return;
+ const w=canvas.width,h=canvas.height;
+ ctx.clearRect(0,0,w,h);
+ ctx.fillStyle='#f6fafc';ctx.fillRect(0,0,w,h);
+ ctx.strokeStyle='#e0eaf0';ctx.lineWidth=1;
+ for(let x=0;x<w;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}
+ for(let y=0;y<h;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}
+ const joint=s.panel.querySelector('[data-v97-joint]').value;
+ const side=s.panel.querySelector('[data-v97-side]').value;
+ const mirror=side==='left'?-1:1;
+ const rad=s.angle*Math.PI/180;
+ const origin={x:w*.5,y:h*.53},length=90;
+ ctx.lineCap='round';ctx.lineJoin='round';
+ function segment(x1,y1,x2,y2,color,width){
+  ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+ }
+ function dot(x,y,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()}
+ const pivot=origin;
+ let a,b;
+ if(joint==='knee'||joint==='elbow'){
+  a={x:pivot.x,y:pivot.y-75};
+  b={x:pivot.x+mirror*Math.sin(rad)*length,y:pivot.y+Math.cos(rad)*length};
+ }else{
+  a={x:pivot.x,y:pivot.y+80};
+  b={x:pivot.x+mirror*Math.sin(rad)*length,y:pivot.y-Math.cos(rad)*length};
+ }
+ segment(a.x,a.y,pivot.x,pivot.y,'#557b91',17);
+ segment(pivot.x,pivot.y,b.x,b.y,'#14a1a0',14);
+ dot(pivot.x,pivot.y,13,'#ffffff');dot(pivot.x,pivot.y,8,'#0c8290');
+ dot(b.x,b.y,8,'#14a1a0');
+ ctx.font='bold 20px Arial';ctx.fillStyle='#19475c';ctx.textAlign='left';
+ ctx.fillText(Math.round(s.angle)+'°',20,32);
+ ctx.font='13px Arial';ctx.fillStyle='#5b7a8b';
+ ctx.fillText(joints[joint].en,20,55);
+ ctx.textAlign='right';ctx.fillText(side.toUpperCase(),w-20,32);
+}
+const style=document.createElement('style');
+style.id='v97-motion-lab-style';
+style.textContent=`
+#v97-motion-lab{margin:12px 14px 16px;border:1px solid #d5e7eb;border-radius:14px;background:#fff;box-shadow:0 3px 14px #16495a0a;overflow:hidden;color:#20495d}
+#v97-motion-lab .v97-header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px}
+#v97-motion-lab .v97-header small{font-size:9px;letter-spacing:1.1px;color:#2e9293;font-weight:800}
+#v97-motion-lab .v97-header h3{font-size:15px;margin:3px 0 0}
+#v97-motion-lab button{cursor:pointer;border:1px solid #d3e4ea;border-radius:8px;background:#f2f9fa;color:#215b68;font-weight:700;padding:9px 11px}
+#v97-motion-lab button:focus-visible,#v97-motion-lab select:focus-visible,#v97-motion-lab input:focus-visible{outline:2px solid #139eaa;outline-offset:2px}
+#v97-content{padding:0 14px 14px}
+#v97-content[hidden]{display:none!important}
+#v97-motion-lab .v97-disclaimer{font-size:11px;color:#687f8b;line-height:1.65;background:#f7fafb;border-radius:8px;padding:9px}
+#v97-motion-lab .v97-controls{display:grid;grid-template-columns:2fr 1fr 1fr;gap:9px;margin:12px 0}
+#v97-motion-lab label{font-size:11px;font-weight:700;display:block}
+#v97-motion-lab select{display:block;width:100%;border:1px solid #cbdfe5;background:#fff;border-radius:8px;padding:8px;margin-top:5px;color:#23475a}
+#v97-motion-lab .v97-preview{position:relative;border:1px solid #e1eaee;border-radius:10px;overflow:hidden}
+#v97-motion-lab canvas{display:block;width:100%;height:auto;max-height:210px}
+#v97-motion-lab .v97-preview-label{position:absolute;bottom:7px;left:9px;right:9px;text-align:center;font-size:9px;font-weight:800;letter-spacing:.5px;color:#557b88}
+#v97-motion-lab .v97-slider{margin-top:12px}
+#v97-motion-lab .v97-slider label{display:flex;justify-content:space-between}
+#v97-motion-lab input[type=range]{width:100%;accent-color:#159b9e}
+#v97-motion-lab .v97-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+#v97-motion-lab .v97-actions span{font-size:11px;color:#6b8290}
+@media(max-width:650px){#v97-motion-lab .v97-controls{grid-template-columns:1fr 1fr}#v97-motion-lab .v97-controls label:first-child{grid-column:1/-1}#v97-motion-lab .v97-header{align-items:flex-start;flex-direction:column}}
+`;document.head.append(style);
+const observer=new MutationObserver(()=>mount());
+observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+mount();
+window.MYAIMS_4D_FOUNDATION_VERSION='V97';
+})();
