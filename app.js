@@ -14326,3 +14326,85 @@ function install(){
 if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>=20)clearInterval(timer)},150)}
 window.MYAIMS_PATIENT_UI_VERSION="V87";
 })();
+
+
+/* ============================================================
+ myAIMS V88 — PATIENT WORKSPACE QUALITY CHECK
+ Read-only diagnostic UI. No writes, no new clinical data.
+ ============================================================ */
+(function(){
+'use strict';
+const workspace=()=>document.getElementById('v31-workspace');
+const db=()=>window.state||window.appState||{};
+const ar=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const T=(en,arabic)=>ar()?arabic:en;
+const tests=()=>[
+ {key:'patient',label:T('Patient record','ملف المريض'),ok:!!(db().patients||[]).some(p=>String(p.id)===String(workspace()?.dataset.pid))},
+ {key:'tabs',label:T('Patient navigation','التنقل داخل الملف'),ok:typeof window.v31Tab==='function'&&!!workspace()?.querySelector('.v31-tabs')},
+ {key:'session',label:T('Clinical session entry','الدخول إلى الجلسة'),ok:typeof window.openV24ClinicalNote==='function'&&typeof window.openV28AddSession==='function'},
+ {key:'launcher',label:T('Clinical launcher','واجهة الأدوات السريرية'),ok:typeof window.openV55ClinicalLauncher==='function'},
+ {key:'anatomy',label:T('3D anatomy loader','محرك خريطة الجسم ثلاثية الأبعاد'),ok:!!document.querySelector('script[src*="three"],script[type="module"]')||typeof window.openV55ClinicalLauncher==='function'},
+ {key:'plan',label:T('Treatment plan editor','محرر الخطة العلاجية'),ok:typeof window.openV28PlanEditor==='function'},
+ {key:'reports',label:T('Session reports','تقارير الجلسات'),ok:typeof window.previewV24SessionReport==='function'},
+ {key:'storage',label:T('Local patient storage','تخزين بيانات المرضى'),ok:Array.isArray(db().patients)}
+];
+function mount(){
+ const w=workspace();if(!w?.classList.contains('open')||!w.dataset.pid)return;
+ const target=w.querySelector('.v31-top');if(!target)return;
+ let box=w.querySelector('#v88-quality-check');
+ if(!box){
+  box=document.createElement('details');box.id='v88-quality-check';
+  box.innerHTML='<summary></summary><div class="v88-check-content"></div>';
+  target.insertAdjacentElement('afterend',box);
+ }
+ const summary=box.querySelector('summary');
+ summary.textContent=T('System compatibility check · Click to inspect','فحص توافق النظام · اضغط لعرض النتائج');
+ if(box.open)render(box);
+}
+function render(box){
+ const checks=tests(),ok=checks.filter(x=>x.ok).length;
+ const content=box.querySelector('.v88-check-content');if(!content)return;
+ content.replaceChildren();
+ const intro=document.createElement('p');intro.textContent=T(
+  `${ok} of ${checks.length} structural checks passed. This does not confirm that each feature works in the browser.`,
+  `اجتاز ${ok} من أصل ${checks.length} فحوص بنيوية. لا تعني هذه النتيجة أن جميع الوظائف تعمل فعليًا في المتصفح.`);
+ content.appendChild(intro);
+ const list=document.createElement('div');list.className='v88-check-list';
+ for(const check of checks){
+  const row=document.createElement('div');row.className='v88-check-row';
+  const name=document.createElement('span');name.textContent=check.label;
+  const status=document.createElement('strong');status.className=check.ok?'v88-ok':'v88-issue';
+  status.textContent=check.ok?T('Detected','موجود'):T('Review needed','يحتاج مراجعة');
+  row.append(name,status);list.appendChild(row);
+ }
+ content.appendChild(list);
+ const note=document.createElement('p');note.className='v88-note';
+ note.textContent=T('Manual test: open a patient, start a session, open the Body Map, return to the patient list, then verify billing and appointments.',
+ 'اختبار يدوي: افتح ملف المريض، ثم الجلسة وخريطة الجسم، وارجع لقائمة المرضى، وبعدها تأكد من الفواتير والمواعيد.');
+ content.appendChild(note);
+}
+document.addEventListener('toggle',e=>{
+ if(e.target?.id==='v88-quality-check'&&e.target.open)render(e.target);
+},true);
+function install(){
+ const fn=window.openV31PatientWorkspace;
+ if(typeof fn!=='function'||fn.__v88)return false;
+ function wrapped(){const result=fn.apply(this,arguments);mount();return result}
+ wrapped.__v88=true;window.openV31PatientWorkspace=wrapped;
+ mount();return true;
+}
+const style=document.createElement('style');style.id='v88-quality-check-style';style.textContent=`
+#v31-workspace.open #v88-quality-check{background:#fff;border:1px solid #dce8f0;border-radius:12px;margin:10px 0;padding:0 14px;box-shadow:0 3px 12px rgba(26,68,94,.025)}
+#v88-quality-check summary{cursor:pointer;list-style:revert;padding:12px 2px;font-size:12px;font-weight:800;color:#34637e}
+#v88-quality-check .v88-check-content{border-top:1px solid #e5edf3;padding:10px 0 15px}
+#v88-quality-check .v88-check-content>p{font-size:11px;line-height:1.7;color:#7892a1;margin:4px 0 12px}
+#v88-quality-check .v88-check-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+#v88-quality-check .v88-check-row{display:flex;justify-content:space-between;gap:8px;align-items:center;background:#f7fafc;border:1px solid #e6edf2;border-radius:9px;padding:10px;font-size:11px;color:#42657b}
+#v88-quality-check .v88-check-row strong{white-space:nowrap;font-size:10px}
+#v88-quality-check .v88-ok{color:#23816c}#v88-quality-check .v88-issue{color:#bb6d36}
+#v88-quality-check .v88-note{margin-top:13px!important;color:#597a8c!important}
+@media(max-width:650px){#v88-quality-check .v88-check-list{grid-template-columns:1fr}}
+`;document.head.appendChild(style);
+if(!install()){let attempts=0;const timer=setInterval(()=>{if(install()||++attempts>=20)clearInterval(timer)},150)}
+window.MYAIMS_PATIENT_UI_VERSION='V88';
+})();
