@@ -14248,3 +14248,81 @@ const style=document.createElement("style");style.id="v86-clinical-snapshot-styl
 if(!install()){let tries=0;const timer=setInterval(()=>{if(install()||++tries>=20)clearInterval(timer)},150)}
 window.MYAIMS_PATIENT_UI_VERSION="V86";
 })();
+
+
+/* ===========================================================
+ myAIMS V87 — PATIENT CARD ACTIONS & RECORD ACCURACY
+ Minimal corrective layer; does not modify saved records.
+ =========================================================== */
+(function(){
+"use strict";
+const root=()=>document.getElementById("v31-workspace");
+const data=()=>window.state||window.appState||{};
+const langAR=()=>document.documentElement.lang==="ar"||document.documentElement.dir==="rtl";
+const text=(en,ar)=>langAR()?ar:en;
+function patient(pid){return (data().patients||[]).find(p=>String(p.id)===String(pid))}
+function appointments(p){
+ return (data().appointments||[]).filter(a=>
+  String(a.patientId||"")===String(p.id)||
+  (!a.patientId&&String(a.patient||"").trim().toLowerCase()===String(p.name||"").trim().toLowerCase()));
+}
+function update(){
+ const w=root(),dash=w?.querySelector("#v81-dashboard");
+ if(!w?.classList.contains("open")||!dash)return;
+ const pid=dash.dataset.v81Pid,p=patient(pid);if(!p)return;
+ // Match existing V31 appointment logic; only display actual records.
+ const all=appointments(p);
+ const today=new Date().toISOString().slice(0,10);
+ const next=all.filter(a=>String(a.date||"")>=today&&!/cancel/i.test(a.status||""))
+ .sort((a,b)=>(String(a.date||"")+" "+String(a.time||"")).localeCompare(String(b.date||"")+" "+String(b.time||"")))[0];
+ const box=dash.querySelector(".v81-next");
+ if(box){
+  const sig=[next?.id,next?.date,next?.time,next?.service,langAR()].join("|");
+  if(box.dataset.v87!==sig){
+   box.dataset.v87=sig;
+   box.replaceChildren();
+   const small=document.createElement("small");small.textContent=text("NEXT APPOINTMENT","الموعد القادم");
+   const strong=document.createElement("strong");strong.textContent=next?.date||text("Not scheduled","غير محدد");
+   const span=document.createElement("span");span.textContent=[next?.time,next?.service||next?.visitType].filter(Boolean).join(" · ");
+   box.append(small,strong,span);
+  }
+ }
+ const snap=dash.querySelector("#v86-clinical-snapshot");
+ if(snap){
+  const notes=(data().sessionNotes||[]).filter(n=>String(n.patientId||"")===String(pid)||all.some(a=>String(a.id)===String(n.appointmentId)));
+  const latest=notes.slice().sort((a,b)=>String(b.date||b.createdAt||"").localeCompare(String(a.date||a.createdAt||"")))[0];
+  const pain=snap.querySelector(".v86-pain-value");
+  if(pain)pain.textContent=latest?.painScore!=null&&latest.painScore!==""&&Number.isFinite(Number(latest.painScore))?`${latest.painScore}/10`:"—";
+ }
+}
+function openClinical(pid){
+ const p=patient(pid);if(!p)return;
+ const a=appointments(p).filter(x=>x.id).sort((x,y)=>String(y.date||"").localeCompare(String(x.date||"")))[0];
+ if(a&&typeof window.openV24ClinicalNote==="function"){window.openV24ClinicalNote(a.id);return}
+ if(typeof window.openV28AddSession==="function")window.openV28AddSession(pid);
+}
+document.addEventListener("click",e=>{
+ const btn=e.target.closest("#v81-dashboard [data-v81]");
+ if(!btn)return;
+ const action=btn.dataset.v81;
+ if(!["body","start","notes"].includes(action))return;
+ const pid=btn.closest("#v81-dashboard")?.dataset.v81Pid;
+ if(!pid)return;
+ e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+ openClinical(pid);
+},true);
+function install(){
+ const fn=window.openV31PatientWorkspace;
+ if(typeof fn!=="function"||fn.__v87)return false;
+ function wrapped(){const ret=fn.apply(this,arguments);update();return ret}
+ wrapped.__v87=true;window.openV31PatientWorkspace=wrapped;
+ const tab=window.v31Tab;
+ if(typeof tab==="function"&&!tab.__v87){
+  function wrappedTab(){const ret=tab.apply(this,arguments);update();return ret}
+  wrappedTab.__v87=true;window.v31Tab=wrappedTab;
+ }
+ update();return true;
+}
+if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>=20)clearInterval(timer)},150)}
+window.MYAIMS_PATIENT_UI_VERSION="V87";
+})();
