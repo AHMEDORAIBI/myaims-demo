@@ -15600,3 +15600,132 @@ observer.observe(document.body,{childList:true,subtree:true});
 install();
 window.MYAIMS_4D_FOUNDATION_VERSION='V99';
 })();
+
+
+/* ============================================================
+ myAIMS V100 — ROM COMPARISON WORKSPACE
+ Manual, session-labelled comparison of clinician-entered values.
+ Does not infer patient measurements from simulated motion.
+ Does not write to clinical records, localStorage, or the database.
+ ============================================================ */
+(function(){
+'use strict';
+const root=()=>document.getElementById('v97-motion-lab');
+const isAr=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const t=(en,ar)=>isAr()?ar:en;
+const ranges={shoulder:180,elbow:150,knee:150,hip:130};
+function build(){
+ const panel=root();
+ if(!panel||panel.querySelector('[data-v100-rom]'))return;
+ const target=panel.querySelector('[data-v99-presets]')||panel.querySelector('.v97-actions');
+ if(!target)return;
+ const section=document.createElement('section');section.className='v100-rom';section.dataset.v100Rom='';
+ section.innerHTML=`
+ <div class="v100-head">
+  <div><small>V100 · CLINICAL COMPARISON</small><h4>${t('Range of Motion Comparison','مقارنة نطاق حركة المفصل')}</h4></div>
+  <button type="button" data-v100-toggle aria-expanded="false">${t('Open comparison','فتح المقارنة')} ▾</button>
+ </div>
+ <div class="v100-body" data-v100-body hidden>
+  <p class="v100-notice">${t('Enter actual clinician-measured angles. This comparison is separate from the 4D simulation and is not saved to the patient record.','أدخل زوايا مقاسة فعليًا بواسطة المعالج. المقارنة مستقلة عن المحاكاة 4D ولا تُحفظ في سجل المريض.')}</p>
+  <div class="v100-grid">
+   <label>${t('Joint','المفصل')}
+    <select data-v100-joint>
+     <option value="shoulder">${t('Shoulder','الكتف')}</option>
+     <option value="elbow">${t('Elbow','المرفق')}</option>
+     <option value="knee" selected>${t('Knee','الركبة')}</option>
+     <option value="hip">${t('Hip','الورك')}</option>
+    </select>
+   </label>
+   <label>${t('Side','الجانب')}
+    <select data-v100-side><option value="right">${t('Right','يمين')}</option><option value="left">${t('Left','يسار')}</option></select>
+   </label>
+   <label>${t('Baseline date','تاريخ القياس الأول')}<input type="date" data-v100-date1></label>
+   <label>${t('Follow-up date','تاريخ القياس الثاني')}<input type="date" data-v100-date2></label>
+   <label>${t('Baseline ROM (degrees)','نطاق الحركة الأول بالدرجات')}<input type="number" min="0" max="180" step="0.1" inputmode="decimal" placeholder="—" data-v100-value1></label>
+   <label>${t('Follow-up ROM (degrees)','نطاق الحركة الثاني بالدرجات')}<input type="number" min="0" max="180" step="0.1" inputmode="decimal" placeholder="—" data-v100-value2></label>
+  </div>
+  <div class="v100-result" data-v100-result role="status" aria-live="polite">${t('Enter both measurements to compare.','أدخل القياسين للمقارنة.')}</div>
+  <div class="v100-chart" data-v100-chart hidden>
+   <div class="v100-bar-row"><span>${t('Baseline','الأول')}</span><div class="v100-track"><div data-v100-bar1></div></div><b data-v100-label1></b></div>
+   <div class="v100-bar-row"><span>${t('Follow-up','الثاني')}</span><div class="v100-track"><div data-v100-bar2></div></div><b data-v100-label2></b></div>
+  </div>
+  <div class="v100-buttons"><button type="button" data-v100-clear>${t('Clear values','مسح القيم')}</button><button type="button" data-v100-copy disabled>${t('Copy comparison summary','نسخ ملخص المقارنة')}</button></div>
+  <p class="v100-foot">${t('ROM values are user-entered and unverified. Differences alone do not establish clinical improvement. No automatic saving.','قيم نطاق الحركة مدخلة يدويًا وغير متحقق منها. اختلاف القياسات وحده لا يثبت التحسن السريري. لا يوجد حفظ تلقائي.')}</p>
+ </div>`;
+ target.insertAdjacentElement('afterend',section);
+ const $=s=>section.querySelector(s);
+ let summary='';
+ function calculate(){
+  const a=$('[data-v100-value1]').value.trim(),b=$('[data-v100-value2]').value.trim();
+  const j=$('[data-v100-joint]').value,max=ranges[j],result=$('[data-v100-result]'),chart=$('[data-v100-chart]');
+  const copy=$('[data-v100-copy]');copy.disabled=true;summary='';chart.hidden=true;
+  if(a===''||b===''){result.textContent=t('Enter both measurements to compare.','أدخل القياسين للمقارنة.');return}
+  const n1=Number(a),n2=Number(b);
+  if(!Number.isFinite(n1)||!Number.isFinite(n2)||n1<0||n2<0||n1>max||n2>max){
+   result.textContent=t('Enter values from 0 to ','أدخل قيمًا من 0 إلى ')+max+'°';return;
+  }
+  const d=Number((n2-n1).toFixed(1));
+  const delta=(d>0?'+':'')+d.toFixed(1)+'°';
+  const date1=$('[data-v100-date1]').value,date2=$('[data-v100-date2]').value;
+  if(date1&&date2&&date2<date1){result.textContent=t('Follow-up date must not precede baseline date.','يجب ألا يسبق تاريخ المتابعة تاريخ القياس الأول.');return}
+  result.textContent=t('Measured ROM difference: ','الفرق بين القياسين: ')+delta+
+    ' · '+t('Baseline ','الأول ')+n1+'° · '+t('Follow-up ','الثاني ')+n2+'°';
+  $('[data-v100-bar1]').style.width=(n1/max*100)+'%';
+  $('[data-v100-bar2]').style.width=(n2/max*100)+'%';
+  $('[data-v100-label1]').textContent=n1+'°';$('[data-v100-label2]').textContent=n2+'°';
+  chart.hidden=false;
+  const joint=$('[data-v100-joint]').selectedOptions[0].textContent;
+  const side=$('[data-v100-side]').selectedOptions[0].textContent;
+  summary=[t('ROM comparison (manually entered)','مقارنة نطاق الحركة (إدخال يدوي)'),
+   t('Joint','المفصل')+': '+joint,t('Side','الجانب')+': '+side,
+   t('Baseline','القياس الأول')+': '+n1+'°'+(date1?' — '+date1:''),
+   t('Follow-up','القياس الثاني')+': '+n2+'°'+(date2?' — '+date2:''),
+   t('Difference','الفرق')+': '+delta,
+   t('Not saved to patient record. Requires clinical interpretation.','غير محفوظ في سجل المريض ويحتاج إلى تفسير سريري.')].join('\n');
+  copy.disabled=false;
+ }
+ $('[data-v100-toggle]').addEventListener('click',()=>{
+  const body=$('[data-v100-body]'),open=body.hidden;
+  body.hidden=!open;
+  $('[data-v100-toggle]').setAttribute('aria-expanded',String(open));
+  $('[data-v100-toggle]').textContent=open?t('Close comparison','إغلاق المقارنة')+' ▴':t('Open comparison','فتح المقارنة')+' ▾';
+ });
+ section.addEventListener('input',e=>{if(e.target.matches('input'))calculate()});
+ section.addEventListener('change',e=>{if(e.target.matches('select'))calculate()});
+ $('[data-v100-clear]').addEventListener('click',()=>{
+  section.querySelectorAll('input').forEach(input=>input.value='');calculate();
+ });
+ $('[data-v100-copy]').addEventListener('click',async()=>{
+  if(!summary)return;
+  try{
+   if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(summary)}
+   else{const el=document.createElement('textarea');el.value=summary;document.body.append(el);el.select();document.execCommand('copy');el.remove()}
+   $('[data-v100-result]').textContent=t('Comparison copied. Review before using in a clinical note.','تم نسخ المقارنة. راجعها قبل استخدامها في الملاحظة السريرية.');
+  }catch(e){$('[data-v100-result]').textContent=t('Copy unavailable in this browser.','النسخ غير متاح في هذا المتصفح.')}
+ });
+}
+const style=document.createElement('style');style.id='v100-rom-css';
+style.textContent=`
+#v97-motion-lab .v100-rom{border:1px solid #d7e8ee;border-radius:11px;margin-top:12px;background:#fff;overflow:hidden}
+#v97-motion-lab .v100-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px}
+#v97-motion-lab .v100-head small{font-size:9px;letter-spacing:.8px;color:#428e9b;font-weight:800}
+#v97-motion-lab .v100-head h4{font-size:13px;margin:4px 0 0}
+#v97-motion-lab .v100-body{padding:0 12px 13px}
+#v97-motion-lab .v100-body[hidden],#v97-motion-lab .v100-chart[hidden]{display:none!important}
+#v97-motion-lab .v100-notice,#v97-motion-lab .v100-foot{font-size:11px;line-height:1.6;color:#627d89}
+#v97-motion-lab .v100-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#v97-motion-lab .v100-grid input{box-sizing:border-box;width:100%;border:1px solid #cbdfe5;border-radius:8px;padding:8px;margin-top:5px;color:#23475a;background:#fff}
+#v97-motion-lab .v100-result{font-size:12px;font-weight:700;color:#226c78;padding:12px 0;min-height:16px}
+#v97-motion-lab .v100-bar-row{display:grid;grid-template-columns:76px 1fr 55px;align-items:center;gap:8px;margin:9px 0;font-size:11px}
+#v97-motion-lab .v100-track{height:11px;background:#e8f1f4;border-radius:12px;overflow:hidden}
+#v97-motion-lab .v100-track>div{height:100%;background:#289c9c;border-radius:12px}
+#v97-motion-lab .v100-bar-row:first-child .v100-track>div{background:#7b9aaa}
+#v97-motion-lab .v100-buttons{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+#v97-motion-lab .v100-buttons button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:450px){#v97-motion-lab .v100-grid{grid-template-columns:1fr}#v97-motion-lab .v100-head{flex-direction:column;align-items:flex-start}}
+`;document.head.append(style);
+const observer=new MutationObserver(()=>{if(root()&&!root().querySelector('[data-v100-rom]'))build()});
+observer.observe(document.body,{childList:true,subtree:true});
+build();
+window.MYAIMS_4D_FOUNDATION_VERSION='V100';
+})();
