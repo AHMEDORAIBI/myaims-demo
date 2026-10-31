@@ -14051,3 +14051,81 @@ const style=document.createElement("style");style.id="v84-patient-profile-css";s
 if(!install()){let tries=0;const timer=setInterval(()=>{if(install()||++tries>=20)clearInterval(timer)},150)}
 window.MYAIMS_PATIENT_UI_VERSION="V84";
 })();
+
+
+/* ===========================================================
+ myAIMS V85 — CLINICAL QUICK NAVIGATION
+ Additive navigation strip, scoped to the V31 patient workspace.
+ Existing V31 tab actions remain the single source of truth.
+ =========================================================== */
+(function(){
+"use strict";
+const w=()=>document.getElementById("v31-workspace");
+const ar=()=>document.documentElement.lang==="ar"||document.documentElement.dir==="rtl";
+const t=(en,arabic)=>ar()?arabic:en;
+const items=[
+ ["overview","▦","Overview","نظرة عامة"],
+ ["plan","✧","Treatment Plan","الخطة العلاجية"],
+ ["sessions","▤","Sessions","الجلسات"],
+ ["progress","▥","Progress","التقدم"],
+ ["timeline","◷","Timeline","التسلسل الزمني"],
+ ["reports","▧","Reports","التقارير"]
+];
+function tab(){
+ const buttons=[...(w()?.querySelectorAll(".v31-tabs button")||[])];
+ const idx=buttons.findIndex(b=>b.classList.contains("active"));
+ return idx>=0?items[idx]?.[0]||"overview":"overview";
+}
+function render(){
+ const el=w();if(!el?.classList.contains("open")||!el.dataset.pid)return;
+ let bar=el.querySelector("#v85-quick-nav");
+ if(!bar){
+  bar=document.createElement("nav");
+  bar.id="v85-quick-nav";
+  bar.setAttribute("aria-label","Patient workspace quick navigation");
+  const tabs=el.querySelector(".v31-tabs");
+  if(!tabs)return;
+  tabs.insertAdjacentElement("afterend",bar);
+ }
+ const selected=tab(),signature=[selected,ar()].join("|");
+ if(bar.dataset.signature===signature)return;
+ bar.dataset.signature=signature;
+ bar.innerHTML=`<span class="v85-label">${t("QUICK NAVIGATION","تنقل سريع")}</span><div class="v85-nav-items">${items.map(([key,icon,en,arabic])=>`<button type="button" data-v85-tab="${key}" class="${key===selected?"selected":""}" aria-current="${key===selected?"page":"false"}"><span aria-hidden="true">${icon}</span><b>${t(en,arabic)}</b></button>`).join("")}</div>`;
+}
+function install(){
+ const open=window.openV31PatientWorkspace;
+ if(typeof open!=="function"||open.__v85)return false;
+ function wrapped(){const value=open.apply(this,arguments);render();return value}
+ wrapped.__v85=true;window.openV31PatientWorkspace=wrapped;
+ const oldTab=window.v31Tab;
+ if(typeof oldTab==="function"&&!oldTab.__v85){
+  function wrappedTab(){const value=oldTab.apply(this,arguments);render();return value}
+  wrappedTab.__v85=true;window.v31Tab=wrappedTab;
+ }
+ render();return true;
+}
+document.addEventListener("click",function(e){
+ const b=e.target.closest("#v85-quick-nav button[data-v85-tab]");
+ if(!b)return;
+ const el=w(),pid=el?.dataset.pid,key=b.dataset.v85Tab;
+ if(!pid||!items.some(x=>x[0]===key))return;
+ e.preventDefault();
+ // Delegate to the existing patient-workspace tab controller.
+ if(typeof window.v31Tab==="function")window.v31Tab(pid,key);
+},false);
+const css=document.createElement("style");css.id="v85-clinical-quick-nav-css";css.textContent=`
+#v31-workspace.open #v85-quick-nav{display:flex;align-items:center;gap:15px;background:#fff;border:1px solid #e1eaf2;border-radius:14px;padding:10px 14px;margin:-3px 0 14px;box-shadow:0 5px 18px rgba(29,71,104,.035)}
+#v85-quick-nav .v85-label{flex:0 0 auto;font-size:10px;letter-spacing:.06em;font-weight:900;color:#aa8655}
+#v85-quick-nav .v85-nav-items{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0}
+#v85-quick-nav button{display:flex;align-items:center;gap:6px;border:1px solid transparent!important;border-radius:9px!important;background:transparent!important;color:#6e8b9e!important;padding:8px 10px!important;min-height:34px!important;font-size:11px!important;cursor:pointer}
+#v85-quick-nav button span{font-size:16px;line-height:1}
+#v85-quick-nav button b{font-size:11px;font-weight:750}
+#v85-quick-nav button:hover{background:#f0f6fb!important;color:#235c88!important}
+#v85-quick-nav button.selected{background:#e8f3ff!important;color:#205fae!important;border-color:#cfe3f6!important}
+#v85-quick-nav button:focus-visible{outline:2px solid #3d91c8;outline-offset:2px}
+@media(max-width:980px){#v31-workspace.open #v85-quick-nav{align-items:stretch;flex-direction:column;gap:6px}#v85-quick-nav .v85-nav-items{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px}#v85-quick-nav button{flex:0 0 auto;white-space:nowrap}}
+@media(max-width:650px){#v31-workspace.open #v85-quick-nav{padding:9px;margin-bottom:10px}#v85-quick-nav .v85-label{font-size:9px}#v85-quick-nav button{padding:7px 9px!important}}
+`;document.head.appendChild(css);
+if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>=20)clearInterval(timer)},150)}
+window.MYAIMS_PATIENT_UI_VERSION="V85";
+})();
