@@ -16047,3 +16047,108 @@ observer.observe(document.body,{subtree:true,childList:true,attributes:true,attr
 renderControls();
 window.MYAIMS_4D_FOUNDATION_VERSION='V102';
 })();
+
+
+/* ============================================================
+ myAIMS V103 — NATIVE KNEE INSPECTION & CAMERA FOCUS
+ Reuses V102 original HD anatomy movement. Adds camera focus,
+ original-view restoration and visible readiness diagnostics.
+ Does not change clinical records or GLB assets.
+ ============================================================ */
+(function(){
+'use strict';
+const ar=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const t=(en,arabic)=>ar()?arabic:en;
+const root=()=>document.getElementById('v61-real3d');
+let saved=null,lastApp=null;
+const meshName=m=>String(m.name||m.parent?.name||'').toLowerCase();
+function app(){
+ const a=window.__MYAIMS_HD_VIEWER;
+ return a?.model&&a?.renderer?.domElement?.isConnected&&root()?.classList.contains('open')?a:null;
+}
+function tibias(a){
+ const T=a.THREE,arr=[];
+ a.model.updateMatrixWorld(true);
+ a.model.traverse(m=>{
+  if(!m.isMesh||!/^tibia(?:\.\d+)?$/.test(meshName(m)))return;
+  const box=new T.Box3().setFromObject(m);
+  if(box.isEmpty())return;
+  const center=box.getCenter(new T.Vector3());
+  arr.push({m,center,box});
+ });
+ return arr.sort((x,y)=>x.center.x-y.center.x);
+}
+function focus(){
+ const a=app(),section=root()?.querySelector('#v102-hd-motion');
+ const status=section?.querySelector('[data-v103-status]');
+ if(!a){if(status)status.textContent=t('HD anatomy viewer is not ready.','عارض التشريح عالي الدقة غير جاهز.');return}
+ const ts=tibias(a);
+ if(ts.length<2){if(status)status.textContent=t('Could not identify both tibia structures.','تعذر تحديد عظمتَي الظنبوب.');return}
+ const side=section.querySelector('[data-v102-side]')?.value||'right';
+ const tibia=side==='left'?ts[0]:ts[ts.length-1];
+ const T=a.THREE;
+ const pivot=new T.Vector3(tibia.center.x,tibia.box.max.y,tibia.center.z);
+ const height=new T.Box3().setFromObject(a.model).getSize(new T.Vector3()).y;
+ if(!saved||lastApp!==a){
+  saved={position:a.camera.position.clone(),target:a.controls?.target?.clone()};
+  lastApp=a;
+ }
+ const direction=a.camera.position.clone().sub(a.controls?.target||new T.Vector3(0,0,0));
+ if(direction.lengthSq()<.01)direction.set(0,0,1);
+ direction.normalize();
+ const distance=Math.max(height*.21,2.2);
+ a.camera.position.copy(pivot).addScaledVector(direction,distance);
+ if(a.controls){
+  a.controls.target.copy(pivot);
+  a.controls.update();
+ }else a.camera.lookAt(pivot);
+ if(status)status.textContent=t('Camera focused on knee. Use the angle slider or Play to inspect motion.','تم تقريب الكاميرا إلى الركبة. استخدم شريط الزاوية أو زر التشغيل لمعاينة الحركة.');
+}
+function restore(){
+ const a=app(),status=root()?.querySelector('[data-v103-status]');
+ if(!a||!saved||lastApp!==a){if(status)status.textContent=t('No previous camera view to restore.','لا توجد زاوية كاميرا سابقة لاستعادتها.');return}
+ a.camera.position.copy(saved.position);
+ if(a.controls&&saved.target){a.controls.target.copy(saved.target);a.controls.update()}
+ else a.camera.lookAt(0,0,0);
+ saved=null;lastApp=null;
+ if(status)status.textContent=t('Full-body camera view restored.','تمت استعادة عرض الجسم الكامل.');
+}
+function install(){
+ const r=root(),box=r?.querySelector('#v102-hd-motion');
+ if(!box||box.querySelector('[data-v103-focus]'))return;
+ const buttons=box.querySelector('.v102-buttons');
+ if(!buttons)return;
+ const focusBtn=document.createElement('button');
+ focusBtn.type='button';focusBtn.dataset.v103Focus='';
+ focusBtn.textContent=t('Focus knee','تقريب الركبة');
+ const back=document.createElement('button');
+ back.type='button';back.dataset.v103Back='';
+ back.textContent=t('Full body','الجسم كاملًا');
+ buttons.append(focusBtn,back);
+ const status=document.createElement('div');status.dataset.v103Status='';status.className='v103-status';
+ status.setAttribute('role','status');
+ status.textContent=t('Tip: Focus knee to inspect the original HD model during movement.','نصيحة: قرّب الركبة لمعاينة النموذج الأصلي أثناء الحركة.');
+ box.querySelector('.v102-body')?.append(status);
+ focusBtn.addEventListener('click',focus);
+ back.addEventListener('click',restore);
+ const toggle=box.querySelector('[data-v102-toggle]');
+ toggle?.addEventListener('click',()=>{
+  if(box.querySelector('.v102-body')?.hidden)restore();
+ });
+}
+const style=document.createElement('style');style.id='v103-knee-focus-css';
+style.textContent=`
+#v102-hd-motion .v102-buttons{flex-wrap:wrap}
+#v102-hd-motion .v103-status{font-size:10px;line-height:1.5;color:#286e7b;margin-top:7px}
+#v102-hd-motion [data-v103-focus],#v102-hd-motion [data-v103-back]{background:#e7f5f4!important}
+@media(max-width:540px){#v102-hd-motion .v102-buttons button{flex:1 1 42%}}
+`;document.head.append(style);
+const obs=new MutationObserver(()=>{
+ const a=app();
+ if(saved&&lastApp!==a){saved=null;lastApp=null}
+ if(root()?.querySelector('#v102-hd-motion')&&!root().querySelector('[data-v103-focus]'))install();
+});
+obs.observe(document.body,{childList:true,subtree:true});
+install();
+window.MYAIMS_4D_FOUNDATION_VERSION='V103';
+})();
