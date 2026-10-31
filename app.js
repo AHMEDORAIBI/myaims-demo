@@ -16546,3 +16546,208 @@ observer.observe(document.body,{subtree:true,childList:true,attributes:true,attr
 if(app())init(app());
 window.MYAIMS_4D_FOUNDATION_VERSION='V107';
 })();
+
+
+/* ============================================================
+ myAIMS V108 — ORIGINAL HD ELBOW MOTION (EXPERIMENTAL)
+ Rigid forearm mesh preview on original HD GLB. Includes
+ clickable elbow hotspots, safe restoration and focus.
+ No skinning, deformation or validated clinical ROM.
+ ============================================================ */
+(function(){
+'use strict';
+const root=()=>document.getElementById('v61-real3d');
+const tr=(en,ar)=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl'?ar:en;
+let rig=null,raf=0,playing=false,previous=0,sign=1,observer=null,focusSave=null;
+const app=()=>{const a=window.__MYAIMS_HD_VIEWER;return root()?.classList.contains('open')&&a?.model?.parent&&a?.renderer?.domElement?.isConnected?a:null};
+function stop(){playing=false;if(raf)cancelAnimationFrame(raf);raf=0;previous=0;const b=root()?.querySelector('[data-v108-play]');if(b)b.textContent=tr('▶ Play elbow','▶ تحريك المرفق')}
+function restore(){
+ stop();
+ if(!rig)return;
+ const {pivot,records,a}=rig;
+ pivot.rotation.set(0,0,0);pivot.updateMatrixWorld(true);
+ for(const r of records){
+  if(!r.mesh||!r.parent)continue;
+  r.parent.attach(r.mesh);
+  r.mesh.position.copy(r.position);r.mesh.quaternion.copy(r.quaternion);r.mesh.scale.copy(r.scale);
+ }
+ a.scene.remove(pivot);rig=null;
+ const range=root()?.querySelector('[data-v108-angle]');if(range)range.value='0';
+ const out=root()?.querySelector('[data-v108-output]');if(out)out.textContent='0°';
+}
+function pairs(a,name){
+ const T=a.THREE,arr=[];
+ a.model.updateMatrixWorld(true);
+ a.model.traverse(m=>{
+  if(!m.isMesh||!new RegExp('^'+name+'(?:\\.\\d+)?$','i').test(m.name||''))return;
+  const box=new T.Box3().setFromObject(m);
+  if(!box.isEmpty())arr.push({m,box,c:box.getCenter(new T.Vector3())});
+ });
+ return arr.sort((x,y)=>x.c.x-y.c.x);
+}
+function init(side){
+ restore();
+ const a=app();if(!a)return {error:tr('Wait for the HD anatomical model to load.','انتظر تحميل النموذج التشريحي.')};
+ const T=a.THREE,ulnas=pairs(a,'Ulna'),radii=pairs(a,'Radius'),humeri=pairs(a,'Humerus');
+ if(ulnas.length<2||radii.length<2||humeri.length<2)return {error:tr('Separate ulna, radius and humerus meshes were not detected.','لم تُكتشف عظام الزند والكعبرة والعضد المنفصلة.')};
+ const idx=side==='left'?0:-1;
+ const ulna=idx===0?ulnas[0]:ulnas[ulnas.length-1];
+ const radius=idx===0?radii[0]:radii[radii.length-1];
+ const humerus=idx===0?humeri[0]:humeri[humeri.length-1];
+ const other=idx===0?ulnas[ulnas.length-1]:ulnas[0];
+ const pivotPos=new T.Vector3((ulna.c.x+radius.c.x)*.5,ulna.box.max.y-.02*ulna.box.getSize(new T.Vector3()).y,(ulna.c.z+radius.c.z)*.5);
+ const bodyBox=new T.Box3().setFromObject(a.model);
+ const height=bodyBox.getSize(new T.Vector3()).y;
+ const mid=(ulna.c.x+other.c.x)/2,sgn=Math.sign(ulna.c.x-other.c.x);
+ const armSpan=Math.abs(ulna.c.x-humerus.c.x)+ulna.box.getSize(new T.Vector3()).x;
+ const nearRadius=Math.max(armSpan*1.5,height*.12);
+ const lowerY=Math.min(ulna.box.min.y,radius.box.min.y)-height*.14;
+ const upperY=pivotPos.y+height*.018;
+ const pivot=new T.Group();pivot.name='MYAIMS_V108_ELBOW_PIVOT';
+ pivot.position.copy(pivotPos);a.scene.add(pivot);pivot.updateMatrixWorld(true);
+ const records=[];
+ // Constrain by proximity to the selected forearm, avoiding trunk and contralateral limb.
+ // Only meshes fully below the approximate elbow pivot are included.
+ a.model.traverse(m=>{
+  if(!m.isMesh||!m.geometry)return;
+  if(m===humerus.m)return;
+  const b=new T.Box3().setFromObject(m);if(b.isEmpty())return;
+  const c=b.getCenter(new T.Vector3());
+  if((c.x-mid)*sgn<=0)return;
+  if(c.y<lowerY||c.y>upperY||b.max.y>upperY)return;
+  if(Math.abs(c.x-ulna.c.x)>nearRadius||Math.abs(c.z-ulna.c.z)>nearRadius)return;
+  records.push({mesh:m,parent:m.parent,position:m.position.clone(),quaternion:m.quaternion.clone(),scale:m.scale.clone()});
+ });
+ // Ensure the forearm bones are moved even when they slightly cross the pivot.
+ for(const item of [ulna,radius]){
+  if(!records.some(r=>r.mesh===item.m))
+   records.push({mesh:item.m,parent:item.m.parent,position:item.m.position.clone(),quaternion:item.m.quaternion.clone(),scale:item.m.scale.clone()});
+ }
+ if(records.length<2){a.scene.remove(pivot);return {error:tr('Insufficient forearm structures.','تراكيب الساعد غير كافية.')}}
+ for(const r of records)pivot.attach(r.mesh);
+ rig={pivot,records,a,side,pivotPos};
+ return {count:records.length};
+}
+function setAngle(v){
+ if(!rig)return;
+ const degrees=Math.max(0,Math.min(120,Number(v)||0));
+ const direction=root()?.querySelector('[data-v108-direction]')?.value==='reverse'?-1:1;
+ rig.pivot.rotation.x=direction*degrees*Math.PI/180;
+ rig.pivot.updateMatrixWorld(true);
+ const out=root()?.querySelector('[data-v108-output]');if(out)out.textContent=Math.round(degrees)+'°';
+}
+function focus(){
+ const a=app();if(!rig||!a)return;
+ const T=a.THREE;
+ if(!focusSave||focusSave.a!==a)focusSave={a,position:a.camera.position.clone(),target:a.controls?.target?.clone()};
+ const direction=a.camera.position.clone().sub(a.controls?.target||new T.Vector3());
+ if(direction.lengthSq()<.001)direction.set(0,0,1);
+ const height=new T.Box3().setFromObject(a.model).getSize(new T.Vector3()).y;
+ a.camera.position.copy(rig.pivotPos).addScaledVector(direction.normalize(),Math.max(height*.23,2));
+ if(a.controls){a.controls.target.copy(rig.pivotPos);a.controls.update()}else a.camera.lookAt(rig.pivotPos);
+}
+function full(){
+ const a=app();if(!focusSave||a!==focusSave.a)return;
+ a.camera.position.copy(focusSave.position);
+ if(a.controls&&focusSave.target){a.controls.target.copy(focusSave.target);a.controls.update()}
+ focusSave=null;
+}
+function activate(side){
+ const box=root()?.querySelector('#v108-elbow-controls');
+ if(!box)return;
+ box.hidden=false;
+ box.querySelector('[data-v108-side]').value=side;
+ const res=init(side);
+ box.querySelector('[data-v108-status]').textContent=res.error||tr('Moving ','تحريك ')+res.count+tr(' original forearm meshes.',' مجسمًا أصليًا للساعد.');
+ if(!res.error){setAngle(0);focus()}
+}
+function mount(){
+ const r=root(),stage=r?.querySelector('.v61-stagewrap');
+ if(!r?.classList.contains('open')||!stage||stage.querySelector('#v108-elbow-controls'))return;
+ const panel=document.createElement('section');panel.id='v108-elbow-controls';panel.hidden=true;
+ panel.innerHTML=`
+ <div class="v108-heading"><strong>${tr('V108 · Elbow motion (experimental)','V108 · حركة المرفق (تجريبية)')}</strong><button type="button" data-v108-close>×</button></div>
+ <p>${tr('Rigid preview on the original anatomy. Not clinically validated and does not deform muscles.','معاينة صلبة على النموذج الأصلي. ليست معتمدة سريريًا ولا تحاكي تشوه العضلات.')}</p>
+ <div class="v108-fields">
+  <label>${tr('Side','الجانب')}<select data-v108-side><option value="right">${tr('Right','يمين')}</option><option value="left">${tr('Left','يسار')}</option></select></label>
+  <label>${tr('Direction','الاتجاه')}<select data-v108-direction><option value="normal">${tr('Default','افتراضي')}</option><option value="reverse">${tr('Reverse','عكسي')}</option></select></label>
+ </div>
+ <label>${tr('Elbow flexion','ثني المرفق')} <output data-v108-output>0°</output><input type="range" min="0" max="120" value="0" data-v108-angle></label>
+ <div class="v108-actions"><button type="button" data-v108-play>▶ ${tr('Play elbow','تحريك المرفق')}</button><button type="button" data-v108-focus>${tr('Focus','تقريب')}</button><button type="button" data-v108-full>${tr('Full body','الجسم كاملًا')}</button><button type="button" data-v108-reset>${tr('Restore pose','استعادة الوضع')}</button></div>
+ <div data-v108-status role="status"></div>`;
+ stage.append(panel);
+ panel.querySelector('[data-v108-close]').addEventListener('click',()=>{restore();full();panel.hidden=true});
+ panel.querySelector('[data-v108-side]').addEventListener('change',e=>activate(e.target.value));
+ panel.querySelector('[data-v108-direction]').addEventListener('change',()=>{
+  const slider=panel.querySelector('[data-v108-angle]');setAngle(slider.value);
+ });
+ panel.querySelector('[data-v108-angle]').addEventListener('input',e=>{
+  const v=e.target.value;stop();
+  if(!rig){const res=init(panel.querySelector('[data-v108-side]').value);if(res.error){panel.querySelector('[data-v108-status]').textContent=res.error;return}}
+  setAngle(v);
+ });
+ panel.querySelector('[data-v108-reset]').addEventListener('click',()=>{restore();panel.querySelector('[data-v108-status]').textContent=tr('Original pose restored.','تمت استعادة الوضع الأصلي.')});
+ panel.querySelector('[data-v108-focus]').addEventListener('click',focus);
+ panel.querySelector('[data-v108-full]').addEventListener('click',full);
+ panel.querySelector('[data-v108-play]').addEventListener('click',()=>{
+  if(playing){stop();return}
+  if(!rig){const res=init(panel.querySelector('[data-v108-side]').value);if(res.error){panel.querySelector('[data-v108-status]').textContent=res.error;return}}
+  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches){
+   panel.querySelector('[data-v108-status]').textContent=tr('Reduced motion is enabled. Use the angle slider.','تقليل الحركة مفعل. استخدم شريط الزاوية.');return;
+  }
+  playing=true;previous=0;sign=1;
+  panel.querySelector('[data-v108-play]').textContent=tr('❚❚ Pause','❚❚ إيقاف');
+  const slider=panel.querySelector('[data-v108-angle]');
+  function tick(now){
+   if(!playing)return;
+   if(!panel.isConnected||!r.classList.contains('open')||app()!==rig?.a){restore();return}
+   const dt=previous?Math.min(.05,(now-previous)/1000):0;previous=now;
+   let v=Number(slider.value)+sign*dt*32;
+   if(v>=120){v=120;sign=-1}if(v<=0){v=0;sign=1}
+   slider.value=String(v);setAngle(v);raf=requestAnimationFrame(tick);
+  }
+  raf=requestAnimationFrame(tick);
+ });
+}
+function wireMarkers(){
+ const r=root();if(!r)return;
+ // Capture before V107's marker handler. Only elbows are given actual motion.
+ if(r.dataset.v108ElbowCapture)return;
+ r.dataset.v108ElbowCapture='1';
+ r.addEventListener('click',e=>{
+  const marker=e.target.closest?.('.v107-marker');
+  if(!marker||!r.contains(marker))return;
+  const label=marker.querySelector('.v107-label')?.textContent||'';
+  const isElbow=/Elbow|المرفق/i.test(label);
+  if(!isElbow)return;
+  e.stopImmediatePropagation();e.preventDefault();
+  const side=/Left|يسار/i.test(label)?'left':'right';
+  mount();activate(side);
+ },true);
+}
+const style=document.createElement('style');style.id='v108-elbow-css';
+style.textContent=`
+#v108-elbow-controls{position:absolute;z-index:22;left:12px;top:62px;width:min(310px,calc(100% - 24px));box-sizing:border-box;padding:12px;background:#fffffff5;color:#285b67;border:1px solid #c8e0e4;border-radius:11px;box-shadow:0 6px 24px #20465a2b;font-size:11px}
+#v108-elbow-controls[hidden]{display:none!important}
+#v108-elbow-controls .v108-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#v108-elbow-controls p{font-size:10px;line-height:1.5;color:#607e87}
+#v108-elbow-controls .v108-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#v108-elbow-controls label{display:block;font-weight:700;margin-top:7px}
+#v108-elbow-controls select,#v108-elbow-controls input{display:block;width:100%;box-sizing:border-box;margin-top:4px}
+#v108-elbow-controls select{border:1px solid #d4e4e8;border-radius:5px;padding:5px}
+#v108-elbow-controls input{accent-color:#0c929e}
+#v108-elbow-controls button{background:#e9f5f6!important;border:1px solid #c4dfe3!important;border-radius:6px!important;color:#23606a!important;padding:6px 8px!important;font-size:10px!important;cursor:pointer}
+#v108-elbow-controls .v108-actions{display:flex;gap:5px;flex-wrap:wrap;margin:9px 0}
+#v108-elbow-controls [data-v108-status]{font-size:10px;line-height:1.5;color:#4b7983}
+#v61-real3d .v107-marker:has(.v107-label){cursor:pointer}
+`;
+document.head.append(style);
+observer=new MutationObserver(()=>{
+ const a=app();
+ if(rig&&(!a||rig.a!==a)){restore();focusSave=null}
+ if(a){mount();wireMarkers()}
+});
+observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+mount();wireMarkers();
+window.MYAIMS_4D_FOUNDATION_VERSION='V108';
+})();
