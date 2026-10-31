@@ -16838,6 +16838,14 @@ function makeUI(){
  <div data-v109-status role="status">${t('Loading rigged model…','تحميل النموذج المتحرك…')}</div>`;
  stage.append(panel);
  overlay=document.createElement('div');overlay.id='v109-rig-markers';stage.append(overlay);
+ const chooser=document.createElement('div');
+ chooser.className='v110-joint-chooser';
+ joints.forEach(j=>{
+  const b=document.createElement('button');b.type='button';b.textContent=t(j.label,j.ar);
+  b.addEventListener('click',()=>{select(j);angle(Math.min(35,j.max))});
+  chooser.append(b);
+ });
+ panel.querySelector('.v109-joint-name').before(chooser);
  panel.querySelectorAll('[data-v109-close]').forEach(b=>b.addEventListener('click',dispose));
  panel.querySelector('[data-v109-range]').addEventListener('input',e=>{pause();angle(e.target.value)});
  panel.querySelector('[data-v109-reset]').addEventListener('click',resetPose);
@@ -16857,7 +16865,7 @@ function makeUI(){
  });
  for(const j of joints){
   const b=document.createElement('button');b.type='button';b.className='v109-hotspot';
-  b.dataset.v109Joint=j.id;b.innerHTML='<span>+</span>';
+  b.dataset.v109Joint=j.id;b.innerHTML='<span>+</span><small>'+t(j.label,j.ar)+'</small>';
   b.title=t(j.label,j.ar);b.setAttribute('aria-label',t(j.label,j.ar));
   b.addEventListener('pointerdown',e=>{
    e.preventDefault();e.stopPropagation();select(j);
@@ -16898,9 +16906,9 @@ async function open(){
   body.position.sub(center);body.updateMatrixWorld(true);
   v.scene.add(body);original.visible=false;
   // V102/V108 rigs should be restored before entering rig mode, if active.
-  makeUI();select(joints[0]);setStatus(t('Rig loaded. Select and drag any of the 8 blue joint markers.','تم تحميل الهيكل. اختر واسحب أيًا من علامات المفاصل الزرقاء الثماني.'));
+  makeUI();select(joints[2]);angle(35);setStatus(t('Rig loaded. Select and drag any of the 8 blue joint markers.','تم تحميل الهيكل. اختر واسحب أيًا من علامات المفاصل الزرقاء الثماني.'));
   const target=new THREE.Box3().setFromObject(body).getCenter(new THREE.Vector3());
-  v.camera.position.set(0,1,62);
+  v.camera.position.set(0,1,44);
   if(v.controls){v.controls.target.copy(target);v.controls.update()}
   buttons.disabled=false;buttons.textContent=t('Exit 4D body','إغلاق جسم 4D');
  }catch(e){dispose();buttons&&(buttons.disabled=false);window.alert(t('Could not load rigged model: ','تعذر تحميل النموذج المتحرك: ')+e.message)}
@@ -16926,8 +16934,8 @@ function project(){
   const p=bone.getWorldPosition(new a.THREE.Vector3()).project(a.camera);
   const x=rect.left-parent.left+(p.x+1)*rect.width*.5;
   const y=rect.top-parent.top+(1-p.y)*rect.height*.5;
-  button.hidden=!(p.z>-1&&p.z<1&&x>=0&&x<=parent.width&&y>=0&&y<=parent.height);
-  button.style.left=x+'px';button.style.top=y+'px';
+  button.hidden=!(Number.isFinite(x)&&Number.isFinite(y));
+  button.style.left=Math.max(16,Math.min(parent.width-16,x))+'px';button.style.top=Math.max(16,Math.min(parent.height-16,y))+'px';
  }
 }
 const css=document.createElement('style');css.id='v109-rig-style';
@@ -16947,6 +16955,10 @@ css.textContent=`
 #v109-rig-markers .v109-hotspot.active{background:#db9d20!important;box-shadow:0 0 0 6px #db9d2055!important}
 #v109-rig-markers .v109-hotspot[hidden]{display:none!important}
 #v61-real3d:has(#v109-rig-panel) .v106-hotspots,#v61-real3d:has(#v109-rig-panel) .v107-layer,#v61-real3d:has(#v109-rig-panel) #v102-hd-motion,#v61-real3d:has(#v109-rig-panel) #v108-elbow-controls{display:none!important}
+#v109-rig-panel .v110-joint-chooser{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;max-height:112px;overflow-y:auto;margin:8px 0}
+#v109-rig-panel .v110-joint-chooser button{font-size:9px!important;padding:5px!important}
+#v109-rig-markers .v109-hotspot{overflow:visible!important}
+#v109-rig-markers .v109-hotspot small{position:absolute;top:37px;left:50%;transform:translateX(-50%);background:#ffffffed;color:#086678;border:1px solid #a9d5dd;border-radius:4px;padding:2px 4px;white-space:nowrap;font-size:9px;pointer-events:none}
 `;document.head.append(css);
 const observer=new MutationObserver(()=>{
  if(body&&(!current()||current()!==a)){dispose();return}
@@ -16959,5 +16971,5 @@ function loop(){
  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-window.MYAIMS_4D_FOUNDATION_VERSION='V109';
+window.MYAIMS_4D_FOUNDATION_VERSION='V110';
 })();
