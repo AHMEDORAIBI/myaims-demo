@@ -14609,3 +14609,83 @@ window.MYAIMS_PATIENT_UI_VERSION="V89";
  if(!wrap()){let n=0;const timer=setInterval(()=>{if(wrap()||++n>=25)clearInterval(timer)},120)}
  window.MYAIMS_PATIENT_UI_VERSION='V90';
 })();
+
+
+/* =============================================================
+ myAIMS V91 — CLEAN PATIENT OVERVIEW & RESPONSIVE REFINEMENT
+ Presentation-only. Preserves all existing buttons, clinical
+ records, event handlers, original tabs and clinical components.
+ ============================================================= */
+(function(){
+ 'use strict';
+ const root=()=>document.getElementById('v31-workspace');
+ const isArabic=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+ const translate=(en,ar)=>isArabic()?ar:en;
+ function update(){
+  const w=root();if(!w||!w.classList.contains('open'))return;
+  const dash=w.querySelector('#v81-dashboard');
+  if(!dash)return;
+  w.classList.add('v91-clean-overview');
+  // The V31 header is the authoritative patient identity and actions.
+  // V81 contains a second header: hide its duplicate presentation only.
+  const duplicate=dash.querySelector('.v81-hero');
+  if(duplicate)duplicate.setAttribute('aria-hidden','true');
+  // Add a small explanation for the legacy clinical details, keeping
+  // the actual legacy DOM, data and event handlers untouched.
+  const legacy=dash.querySelector('.v81-legacy');
+  const summary=legacy?.querySelector('summary');
+  if(summary){
+   summary.textContent=translate('More clinical details and original tools','المزيد من التفاصيل والأدوات السريرية الأصلية');
+  }
+  // Remove decorative-only duplicates from accessibility navigation.
+  const quick=w.querySelector('#v85-quick-nav');
+  if(quick)quick.setAttribute('aria-label',translate('Patient sections','أقسام ملف المريض'));
+ }
+ function install(){
+  const old=window.openV31PatientWorkspace;
+  if(typeof old!=='function'||old.__v91)return false;
+  function wrapped(){const result=old.apply(this,arguments);update();return result}
+  wrapped.__v91=true;window.openV31PatientWorkspace=wrapped;
+  const tab=window.v31Tab;
+  if(typeof tab==='function'&&!tab.__v91){
+   function wrappedTab(){const result=tab.apply(this,arguments);update();return result}
+   wrappedTab.__v91=true;window.v31Tab=wrappedTab;
+  }
+  update();return true;
+ }
+ const css=document.createElement('style');
+ css.id='v91-clean-patient-overview';
+ css.textContent=`
+ /* Hide the second identity header only when the real V31 header exists. */
+ #v31-workspace.v91-clean-overview:has(.v31-top) #v81-dashboard>.v81-hero{display:none!important}
+ #v31-workspace.v91-clean-overview #v81-dashboard>.v81-section-head{margin-top:7px!important}
+ #v31-workspace.v91-clean-overview #v81-dashboard>.v81-tiles{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px!important}
+ #v31-workspace.v91-clean-overview #v81-dashboard .v81-tile{min-height:138px!important;transition:transform .15s ease,box-shadow .15s ease!important}
+ #v31-workspace.v91-clean-overview #v81-dashboard .v81-tile:focus-visible,
+ #v31-workspace.v91-clean-overview #v85-quick-nav button:focus-visible{outline:3px solid #2b86c4!important;outline-offset:2px!important}
+ #v31-workspace.v91-clean-overview #v81-dashboard .v81-legacy{margin-top:17px!important}
+ #v31-workspace.v91-clean-overview #v81-dashboard .v81-legacy summary{background:#f8fbfe!important;color:#376985!important}
+ #v31-workspace.v91-clean-overview #v86-clinical-snapshot .v86-card{min-width:0!important}
+ #v31-workspace.v91-clean-overview #v86-clinical-snapshot .v86-card h4,
+ #v31-workspace.v91-clean-overview #v86-clinical-snapshot .v86-card p{overflow-wrap:anywhere!important}
+ @media(max-width:1050px){
+  #v31-workspace.v91-clean-overview #v81-dashboard>.v81-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+ }
+ @media(max-width:650px){
+  #v31-workspace.v91-clean-overview #v81-dashboard>.v81-tiles{gap:9px!important}
+  #v31-workspace.v91-clean-overview #v81-dashboard .v81-tile{min-height:132px!important;padding:12px!important}
+  #v31-workspace.v91-clean-overview #v86-clinical-snapshot .v86-grid{grid-template-columns:1fr!important}
+  #v31-workspace.v91-clean-overview #v86-clinical-snapshot .v86-card{min-height:145px!important}
+  #v31-workspace.v91-clean-overview #v84-patient-context .v84-context-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ }
+ @media(prefers-reduced-motion:reduce){
+  #v31-workspace.v91-clean-overview #v81-dashboard .v81-tile{transition:none!important}
+ }
+ `;
+ document.head.appendChild(css);
+ if(!install()){
+  let attempts=0;
+  const interval=setInterval(()=>{if(install()||++attempts>=25)clearInterval(interval)},120);
+ }
+ window.MYAIMS_PATIENT_UI_VERSION='V91';
+})();
