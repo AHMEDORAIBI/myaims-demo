@@ -15329,3 +15329,139 @@ observer.observe(document.body,{childList:true,subtree:true,attributes:true,attr
 mount();
 window.MYAIMS_4D_FOUNDATION_VERSION='V97';
 })();
+
+
+/* ============================================================
+ myAIMS V98 — INDEPENDENT ARTICULATED 3D JOINT PREVIEW
+ Uses the existing Three.js module cache from the anatomy viewer.
+ Procedural rig, not a modification of the HD anatomical GLB.
+ ============================================================ */
+(function(){
+'use strict';
+const tr=(en,ar)=>document.documentElement.dir==='rtl'||document.documentElement.lang==='ar'?ar:en;
+let lab=null,renderer=null,scene=null,camera=null,pivot=null,upper=null,lower=null,ball=null,view=null,enabled=false,ro=null;
+function destroy(){
+ if(ro){ro.disconnect();ro=null}
+ if(renderer){renderer.dispose();renderer.domElement.remove();renderer=null}
+ if(scene)scene.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>m.dispose())}});
+ scene=null;camera=null;pivot=null;upper=null;lower=null;ball=null;view=null;enabled=false;
+}
+function createGeometry(THREE,len,radius,color){
+ const group=new THREE.Group();
+ const mat=new THREE.MeshStandardMaterial({color,roughness:.5,metalness:.06});
+ const cyl=new THREE.Mesh(new THREE.CylinderGeometry(radius*.85,radius,len,16),mat);
+ cyl.position.y=-len/2;group.add(cyl);
+ const end=new THREE.Mesh(new THREE.SphereGeometry(radius,16,12),mat);
+ end.position.y=-len;group.add(end);
+ return group;
+}
+function update(){
+ if(!enabled||!lab||!renderer||!pivot)return;
+ if(!document.contains(lab)){destroy();return}
+ const joint=lab.querySelector('[data-v97-joint]')?.value||'shoulder';
+ const angle=Number(lab.querySelector('[data-v97-angle]')?.value||0);
+ const side=lab.querySelector('[data-v97-side]')?.value||'right';
+ const sign=side==='left'?-1:1;
+ // The proximal segment remains fixed. The distal segment rotates around
+ // the simulated joint center; rotation is an illustrative joint axis.
+ pivot.rotation.set(0,0,0);
+ pivot.rotation.z=sign*angle*Math.PI/180;
+ pivot.rotation.x=joint==='hip'?.13:0;
+ if(upper)upper.rotation.z=(joint==='shoulder'||joint==='hip')?Math.PI:0;
+ if(camera)camera.position.set(sign*2.8,1.9,5.5);
+ camera.lookAt(0,0,0);
+ renderer.render(scene,camera);
+ const info=lab.querySelector('[data-v98-info]');
+ if(info)info.textContent=tr('Procedural 3D joint rig · simulated '+Math.round(angle)+'°','هيكل مفصل ثلاثي الأبعاد · زاوية افتراضية '+Math.round(angle)+'°');
+}
+function init(){
+ const cache=window.__V61_THREE;
+ const THREE=cache?.THREE;
+ if(!THREE||!view)return false;
+ try{
+  const canvas=document.createElement('canvas');canvas.className='v98-webgl-canvas';
+  view.append(canvas);
+  renderer=new THREE.WebGLRenderer({canvas,alpha:false,antialias:true,powerPreference:'low-power'});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  scene=new THREE.Scene();scene.background=new THREE.Color(0xf5fafc);
+  camera=new THREE.PerspectiveCamera(36,2,.1,100);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x8ea9b6,2.3));
+  const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,4);scene.add(light);
+  const grid=new THREE.GridHelper(5,12,0xc5dce5,0xe3eef2);grid.position.y=-1.85;scene.add(grid);
+  const rig=new THREE.Group();scene.add(rig);
+  upper=createGeometry(THREE,1.35,.20,0x638ca2);
+  upper.position.y=1.35;rig.add(upper);
+  const socket=new THREE.Mesh(new THREE.SphereGeometry(.24,20,16),new THREE.MeshStandardMaterial({color:0x1d6c83,roughness:.35}));
+  rig.add(socket);
+  pivot=new THREE.Group();rig.add(pivot);
+  lower=createGeometry(THREE,1.3,.17,0x13a1a2);pivot.add(lower);
+  const jointRing=new THREE.Mesh(new THREE.TorusGeometry(.28,.025,8,48),new THREE.MeshBasicMaterial({color:0xe6a44a}));
+  jointRing.rotation.x=Math.PI/2;rig.add(jointRing);
+  ro=new ResizeObserver(resize);ro.observe(view);
+  resize();enabled=true;update();
+  return true;
+ }catch(e){
+  destroy();
+  const status=lab?.querySelector('[data-v98-info]');
+  if(status)status.textContent=tr('3D preview unavailable. The original 2D preview remains available.','تعذرت معاينة 3D، وتظل المعاينة الثنائية متاحة.');
+  return false;
+ }
+}
+function resize(){
+ if(!renderer||!view)return;
+ const width=Math.max(250,view.clientWidth),height=Math.max(220,view.clientHeight);
+ renderer.setSize(width,height,false);
+ camera.aspect=width/height;camera.updateProjectionMatrix();
+ update();
+}
+function enhance(){
+ const panel=document.getElementById('v97-motion-lab');
+ if(!panel||panel.querySelector('[data-v98-toggle]'))return;
+ const actions=panel.querySelector('.v97-actions');
+ if(!actions)return;
+ lab=panel;
+ const btn=document.createElement('button');btn.type='button';btn.dataset.v98Toggle='';
+ btn.textContent=tr('View 3D Rig','عرض المفصل 3D');
+ actions.append(btn);
+ const container=document.createElement('div');container.className='v98-view';container.hidden=true;
+ container.innerHTML='<div class="v98-label">PROCEDURAL 3D JOINT PREVIEW</div><p data-v98-info aria-live="polite"></p>';
+ const preview=panel.querySelector('.v97-preview');
+ preview?.insertAdjacentElement('afterend',container);
+ btn.addEventListener('click',()=>{
+  if(!container.hidden){
+   container.hidden=true;preview.hidden=false;btn.textContent=tr('View 3D Rig','عرض المفصل 3D');destroy();return;
+  }
+  view=container;container.hidden=false;preview.hidden=true;
+  btn.textContent=tr('Return to 2D','العودة إلى 2D');
+  const status=container.querySelector('[data-v98-info]');
+  if(!window.__V61_THREE?.THREE){
+   status.textContent=tr('Waiting for the existing 3D anatomy engine. Open the HD anatomy view first.','بانتظار محرك التشريح الحالي. افتح نموذج التشريح ثلاثي الأبعاد أولًا.');
+   container.hidden=true;preview.hidden=false;btn.textContent=tr('View 3D Rig','عرض المفصل 3D');
+   return;
+  }
+  init();
+ });
+ panel.addEventListener('input',e=>{if(e.target.closest('[data-v97-angle]'))update()});
+ panel.addEventListener('change',e=>{if(e.target.closest('[data-v97-joint],[data-v97-side]'))update()});
+ // The V97 playback changes the slider value programmatically, without
+ // emitting input events. Poll only while the separate 3D view is open.
+ let previous='';
+ const interval=setInterval(()=>{
+  if(!document.contains(panel)){clearInterval(interval);destroy();return}
+  if(!enabled||container.hidden)return;
+  const next=[panel.querySelector('[data-v97-angle]')?.value,panel.querySelector('[data-v97-joint]')?.value,panel.querySelector('[data-v97-side]')?.value].join('|');
+  if(next!==previous){previous=next;update()}
+ },100);
+}
+const style=document.createElement('style');style.id='v98-rig-style';style.textContent=`
+#v97-motion-lab .v98-view{position:relative;height:270px;border:1px solid #d9e8ee;border-radius:10px;overflow:hidden;background:#f5fafc;margin:10px 0}
+#v97-motion-lab .v98-view[hidden]{display:none!important}
+#v97-motion-lab .v98-webgl-canvas{display:block;width:100%;height:100%}
+#v97-motion-lab .v98-label{position:absolute;top:10px;left:12px;color:#497a8b;font-size:9px;font-weight:800;letter-spacing:.8px;pointer-events:none}
+#v97-motion-lab [data-v98-info]{position:absolute;bottom:4px;left:12px;right:12px;text-align:center;color:#527483;font-size:11px;pointer-events:none}
+`;document.head.append(style);
+const obs=new MutationObserver(()=>{if(document.getElementById('v97-motion-lab')&&!document.querySelector('[data-v98-toggle]'))enhance()});
+obs.observe(document.body,{childList:true,subtree:true});
+enhance();
+window.MYAIMS_4D_FOUNDATION_VERSION='V98';
+})();
