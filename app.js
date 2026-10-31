@@ -16751,3 +16751,213 @@ observer.observe(document.body,{childList:true,subtree:true,attributes:true,attr
 mount();wireMarkers();
 window.MYAIMS_4D_FOUNDATION_VERSION='V108';
 })();
+
+
+/* ============================================================
+ myAIMS V109 — RIGGED 4D ANATOMY PREVIEW
+ Loads assets/body_superficial.app5m.glb into existing Three.js
+ HD viewer, preserves original model, and allows direct drag
+ on articulated shoulder, elbow, hip, knee joint hotspots.
+ Educational preview only: not clinically validated.
+ ============================================================ */
+(function(){
+'use strict';
+const root=()=>document.getElementById('v61-real3d');
+const ar=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const t=(en,arabic)=>ar()?arabic:en;
+let a=null,body=null,original=null,cameraSave=null,buttons=null,panel=null,overlay=null;
+let selected=null,drag=null,animation=0,play=false,last=0,phase=0,loading=false;
+const joints=[
+ {id:'shoulder.L',bone:'upperarm.L',label:'Left shoulder',ar:'الكتف الأيسر',axis:'z',max:85},
+ {id:'shoulder.R',bone:'upperarm.R',label:'Right shoulder',ar:'الكتف الأيمن',axis:'z',max:85},
+ {id:'elbow.L',bone:'forearm.L',label:'Left elbow',ar:'المرفق الأيسر',axis:'x',max:120},
+ {id:'elbow.R',bone:'forearm.R',label:'Right elbow',ar:'المرفق الأيمن',axis:'x',max:120},
+ {id:'hip.L',bone:'thigh.L',label:'Left hip',ar:'الورك الأيسر',axis:'x',max:85},
+ {id:'hip.R',bone:'thigh.R',label:'Right hip',ar:'الورك الأيمن',axis:'x',max:85},
+ {id:'knee.L',bone:'shin.L',label:'Left knee',ar:'الركبة اليسرى',axis:'x',max:115},
+ {id:'knee.R',bone:'shin.R',label:'Right knee',ar:'الركبة اليمنى',axis:'x',max:115}
+];
+const current=()=>{const v=window.__MYAIMS_HD_VIEWER;return root()?.classList.contains('open')&&v?.model?.parent&&v?.renderer?.domElement?.isConnected?v:null};
+function setStatus(message){const e=panel?.querySelector('[data-v109-status]');if(e)e.textContent=message}
+function pause(){play=false;if(animation)cancelAnimationFrame(animation);animation=0;last=0;const b=panel?.querySelector('[data-v109-play]');if(b)b.textContent=t('▶ Animate','▶ تشغيل الحركة')}
+function angle(value){
+ if(!selected||!body)return;
+ const bone=body.getObjectByName(selected.bone);
+ if(!bone)return;
+ const deg=Math.max(0,Math.min(selected.max,Number(value)||0));
+ const direction=selected.id.endsWith('.R')?-1:1;
+ const axis=selected.axis;
+ bone.quaternion.copy(bone.userData.v109Rest);
+ const rotation=new a.THREE.Quaternion().setFromAxisAngle(new a.THREE.Vector3(axis==='x'?1:0,axis==='y'?1:0,axis==='z'?1:0),direction*deg*Math.PI/180);
+ bone.quaternion.multiply(rotation);
+ bone.updateMatrixWorld(true);
+ const out=panel?.querySelector('[data-v109-value]');if(out)out.textContent=Math.round(deg)+'°';
+ const range=panel?.querySelector('[data-v109-range]');if(range)range.value=String(deg);
+ selected.value=deg;
+}
+function select(j){
+ pause();
+ selected=j;
+ const title=panel?.querySelector('[data-v109-joint]');
+ if(title)title.textContent=t(j.label,j.ar);
+ const slider=panel?.querySelector('[data-v109-range]');
+ if(slider){slider.max=String(j.max);slider.value=String(j.value||0)}
+ const out=panel?.querySelector('[data-v109-value]');if(out)out.textContent=Math.round(j.value||0)+'°';
+ setStatus(t('Drag the highlighted joint marker, or use the angle slider.','اسحب علامة المفصل المضيئة أو استخدم شريط الزاوية.'));
+ for(const item of joints){const b=overlay?.querySelector('[data-v109-joint="'+item.id+'"]');if(b)b.classList.toggle('active',item===j)}
+}
+function resetPose(){
+ pause();
+ if(!body)return;
+ body.traverse(n=>{if(n.isBone&&n.userData.v109Rest)n.quaternion.copy(n.userData.v109Rest)});
+ joints.forEach(j=>j.value=0);
+ if(selected)angle(0);
+ setStatus(t('Original rig pose restored.','تمت استعادة الوضع الأصلي للهيكل.'));
+}
+function dispose(){
+ pause();drag=null;
+ if(body){resetPose();body.parent?.remove(body);body=null}
+ if(original)original.visible=true;
+ if(a&&cameraSave){
+  a.camera.position.copy(cameraSave.position);
+  if(a.controls&&cameraSave.target){a.controls.target.copy(cameraSave.target);a.controls.update()}
+ }
+ overlay?.remove();overlay=null;panel?.remove();panel=null;
+ if(buttons){buttons.textContent=t('4D body · Move arms & legs','4D · تحريك اليد والرجل');buttons.disabled=false}
+ a=null;original=null;cameraSave=null;selected=null;loading=false;
+}
+function makeUI(){
+ const stage=root()?.querySelector('.v61-stagewrap');if(!stage)return;
+ panel=document.createElement('section');panel.id='v109-rig-panel';
+ panel.innerHTML=`
+ <div class="v109-top"><strong>${t('4D BODY · DRAG TO MOVE','جسم 4D · اسحب للتحريك')}</strong><button type="button" data-v109-close>×</button></div>
+ <p>${t('Rigged superficial anatomy (56 bones). Drag a blue joint marker to move the limb on the model itself. Educational preview; not clinical ROM.','نموذج تشريحي سطحي به 56 عظمة تحكم. اسحب علامة المفصل الزرقاء لتحريك الطرف على الجسم نفسه. تجربة تعليمية وليست قياسًا طبيًا.')}</p>
+ <div class="v109-joint-name" data-v109-joint>${t('Select a blue joint marker','اختر علامة مفصل زرقاء')}</div>
+ <label>${t('Movement angle','زاوية الحركة')} <output data-v109-value>0°</output><input data-v109-range type="range" min="0" max="120" value="0"></label>
+ <div class="v109-actions"><button type="button" data-v109-play>▶ ${t('Animate','تشغيل الحركة')}</button><button type="button" data-v109-reset>${t('Reset pose','إعادة الوضع')}</button><button type="button" data-v109-close>${t('Back to HD','العودة إلى HD')}</button></div>
+ <div data-v109-status role="status">${t('Loading rigged model…','تحميل النموذج المتحرك…')}</div>`;
+ stage.append(panel);
+ overlay=document.createElement('div');overlay.id='v109-rig-markers';stage.append(overlay);
+ panel.querySelectorAll('[data-v109-close]').forEach(b=>b.addEventListener('click',dispose));
+ panel.querySelector('[data-v109-range]').addEventListener('input',e=>{pause();angle(e.target.value)});
+ panel.querySelector('[data-v109-reset]').addEventListener('click',resetPose);
+ panel.querySelector('[data-v109-play]').addEventListener('click',()=>{
+  if(play){pause();return}
+  if(!selected){setStatus(t('Select a joint marker first.','اختر علامة مفصل أولًا.'));return}
+  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches){setStatus(t('Reduced motion enabled. Use the slider.','تقليل الحركة مفعل. استخدم الشريط.'));return}
+  play=true;last=0;phase=0;panel.querySelector('[data-v109-play]').textContent=t('❚❚ Pause','❚❚ إيقاف');
+  const tick=now=>{
+   if(!play)return;
+   if(!panel?.isConnected||current()!==a){dispose();return}
+   const dt=last?Math.min(.05,(now-last)/1000):0;last=now;phase+=dt*1.5;
+   angle((1-Math.cos(phase))*selected.max*.5);
+   animation=requestAnimationFrame(tick);
+  };
+  animation=requestAnimationFrame(tick);
+ });
+ for(const j of joints){
+  const b=document.createElement('button');b.type='button';b.className='v109-hotspot';
+  b.dataset.v109Joint=j.id;b.innerHTML='<span>+</span>';
+  b.title=t(j.label,j.ar);b.setAttribute('aria-label',t(j.label,j.ar));
+  b.addEventListener('pointerdown',e=>{
+   e.preventDefault();e.stopPropagation();select(j);
+   drag={id:e.pointerId,start:e.clientY,angle:j.value||0,j};
+   b.setPointerCapture(e.pointerId);
+  });
+  b.addEventListener('pointermove',e=>{
+   if(!drag||drag.id!==e.pointerId||drag.j!==j)return;
+   angle(drag.angle+(drag.start-e.clientY)*.65);
+  });
+  b.addEventListener('pointerup',()=>{drag=null});
+  b.addEventListener('pointercancel',()=>{drag=null});
+  b.addEventListener('click',()=>select(j));
+  overlay.append(b);
+ }
+}
+async function open(){
+ if(loading||body)return;
+ const v=current();if(!v)return;
+ loading=true;a=v;original=v.model;
+ cameraSave={position:v.camera.position.clone(),target:v.controls?.target?.clone()};
+ buttons.disabled=true;buttons.textContent=t('Loading 4D…','تحميل 4D…');
+ try{
+  const {GLTFLoader,THREE}=window.__V61_THREE||{};
+  if(!GLTFLoader||!THREE)throw Error('Three.js GLTFLoader not ready');
+  const loader=new GLTFLoader();
+  const gltf=await new Promise((resolve,reject)=>loader.load('./assets/body_superficial.app5m.glb',resolve,undefined,reject));
+  if(current()!==v)throw Error('Anatomy viewer changed while loading');
+  body=gltf.scene;body.name='MYAIMS_V109_RIGGED_BODY';
+  const skins=[];body.traverse(n=>{if(n.isSkinnedMesh)skins.push(n);if(n.isBone)n.userData.v109Rest=n.quaternion.clone()});
+  if(!skins.length)throw Error('No skinned mesh found in 4D asset');
+  // Preserve the rest pose: normalize scale/position only at scene root.
+  body.updateMatrixWorld(true);
+  const bbox=new THREE.Box3().setFromObject(body),size=bbox.getSize(new THREE.Vector3());
+  if(!size.y||!Number.isFinite(size.y))throw Error('Invalid rigged model bounds');
+  body.scale.multiplyScalar(30/size.y);body.updateMatrixWorld(true);
+  const center=new THREE.Box3().setFromObject(body).getCenter(new THREE.Vector3());
+  body.position.sub(center);body.updateMatrixWorld(true);
+  v.scene.add(body);original.visible=false;
+  // V102/V108 rigs should be restored before entering rig mode, if active.
+  makeUI();select(joints[0]);setStatus(t('Rig loaded. Select and drag any of the 8 blue joint markers.','تم تحميل الهيكل. اختر واسحب أيًا من علامات المفاصل الزرقاء الثماني.'));
+  const target=new THREE.Box3().setFromObject(body).getCenter(new THREE.Vector3());
+  v.camera.position.set(0,1,62);
+  if(v.controls){v.controls.target.copy(target);v.controls.update()}
+  buttons.disabled=false;buttons.textContent=t('Exit 4D body','إغلاق جسم 4D');
+ }catch(e){dispose();buttons&&(buttons.disabled=false);window.alert(t('Could not load rigged model: ','تعذر تحميل النموذج المتحرك: ')+e.message)}
+ finally{loading=false}
+}
+function ensureButton(){
+ const r=root(),stage=r?.querySelector('.v61-stagewrap');
+ if(!stage||!r.classList.contains('open'))return;
+ if(!buttons||!buttons.isConnected){
+  buttons=document.createElement('button');buttons.type='button';buttons.id='v109-switch';
+  buttons.textContent=t('4D body · Move arms & legs','4D · تحريك اليد والرجل');
+  buttons.addEventListener('click',()=>body?dispose():open());
+  stage.append(buttons);
+ }
+}
+function project(){
+ if(!body||!a||!overlay)return;
+ const rect=a.renderer.domElement.getBoundingClientRect(),parent=overlay.getBoundingClientRect();
+ if(!rect.width||!rect.height)return;
+ for(const j of joints){
+  const bone=body.getObjectByName(j.bone),button=overlay.querySelector('[data-v109-joint="'+j.id+'"]');
+  if(!bone||!button)continue;
+  const p=bone.getWorldPosition(new a.THREE.Vector3()).project(a.camera);
+  const x=rect.left-parent.left+(p.x+1)*rect.width*.5;
+  const y=rect.top-parent.top+(1-p.y)*rect.height*.5;
+  button.hidden=!(p.z>-1&&p.z<1&&x>=0&&x<=parent.width&&y>=0&&y<=parent.height);
+  button.style.left=x+'px';button.style.top=y+'px';
+ }
+}
+const css=document.createElement('style');css.id='v109-rig-style';
+css.textContent=`
+#v109-switch{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:31;background:#086d7d!important;color:white!important;border:1px solid #ffffff9c!important;border-radius:20px!important;padding:9px 14px!important;font-size:11px!important;font-weight:800!important;cursor:pointer}
+#v109-rig-panel{position:absolute;z-index:33;bottom:45px;left:10px;width:min(315px,calc(100% - 20px));padding:12px;background:#ffffffed;border:1px solid #b7dce1;border-radius:12px;color:#205565;box-shadow:0 8px 30px #123d5133;box-sizing:border-box;font-size:11px}
+#v109-rig-panel .v109-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#v109-rig-panel p{font-size:10px;line-height:1.5;color:#66828a}
+#v109-rig-panel .v109-joint-name{font-weight:800;color:#008aa0;margin:8px 0}
+#v109-rig-panel label{display:block;font-weight:700}
+#v109-rig-panel input{display:block;width:100%;margin:7px 0;accent-color:#008e9c}
+#v109-rig-panel button{background:#e6f4f5!important;border:1px solid #b7d6dc!important;border-radius:6px!important;color:#235968!important;padding:6px 9px!important;font-size:10px!important;cursor:pointer}
+#v109-rig-panel .v109-actions{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0}
+#v109-rig-panel [data-v109-status]{font-size:10px;line-height:1.5;color:#507780}
+#v109-rig-markers{position:absolute;inset:0;pointer-events:none;z-index:30;overflow:hidden}
+#v109-rig-markers .v109-hotspot{position:absolute;transform:translate(-50%,-50%);width:35px;height:35px;display:grid;place-items:center;pointer-events:auto;touch-action:none;cursor:ns-resize;border:2px solid white!important;border-radius:50%!important;background:#009bb9!important;color:white!important;box-shadow:0 0 0 5px #009bb94d,0 2px 9px #164c5e77!important;font-size:24px!important;font-weight:800!important;padding:0!important;user-select:none}
+#v109-rig-markers .v109-hotspot.active{background:#db9d20!important;box-shadow:0 0 0 6px #db9d2055!important}
+#v109-rig-markers .v109-hotspot[hidden]{display:none!important}
+#v61-real3d:has(#v109-rig-panel) .v106-hotspots,#v61-real3d:has(#v109-rig-panel) .v107-layer,#v61-real3d:has(#v109-rig-panel) #v102-hd-motion,#v61-real3d:has(#v109-rig-panel) #v108-elbow-controls{display:none!important}
+`;document.head.append(css);
+const observer=new MutationObserver(()=>{
+ if(body&&(!current()||current()!==a)){dispose();return}
+ ensureButton();
+});
+observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+ensureButton();
+function loop(){
+ if(body&&a&&current()===a)project();
+ requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+window.MYAIMS_4D_FOUNDATION_VERSION='V109';
+})();
