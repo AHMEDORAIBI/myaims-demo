@@ -14129,3 +14129,122 @@ const css=document.createElement("style");css.id="v85-clinical-quick-nav-css";cs
 if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>=20)clearInterval(timer)},150)}
 window.MYAIMS_PATIENT_UI_VERSION="V85";
 })();
+
+
+/* ============================================================
+ myAIMS V86 — CLINICAL PATIENT DASHBOARD
+ Additive clinical snapshot inside V81 card grid. Uses only
+ existing patient-linked records, no storage writes or migrations.
+ ============================================================ */
+(function(){
+"use strict";
+const S=()=>window.state||window.appState||{};
+const w=()=>document.getElementById("v31-workspace");
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ar=()=>document.documentElement.lang==="ar"||document.documentElement.dir==="rtl";
+const tr=(en,arabic)=>ar()?arabic:en;
+const forPatient=(list,pid)=>Array.isArray(list)?list.filter(x=>String(x.patientId||"")===String(pid)):[];
+function snapshot(){
+ const box=w()?.querySelector("#v81-dashboard"),pid=box?.dataset.v81Pid;
+ if(!box||!pid)return;
+ const data=S(),p=(data.patients||[]).find(x=>String(x.id)===String(pid));
+ if(!p)return;
+ const notes=forPatient(data.sessionNotes,pid).slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+ const goals=forPatient(data.treatmentGoals,pid);
+ const plans=forPatient(data.treatmentPlans,pid).filter(x=>x.status!=="Closed");
+ const updates=forPatient(data.clinicalUpdates,pid).slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+ const plan=plans[0],latest=notes[0],update=updates[0];
+ const complete=goals.filter(g=>String(g.status||"").toLowerCase().includes("achiev")).length;
+ const severity=latest&&latest.painScore!==""&&latest.painScore!=null&&Number.isFinite(Number(latest.painScore))?Number(latest.painScore):null;
+ const pain=severity===null?"—":`${severity}/10`;
+ const percent=goals.length?Math.round(complete/goals.length*100):null;
+ const signature=JSON.stringify([pid,ar(),notes.length,goals.length,complete,plans.length,updates.length,plan?.title,plan?.comments,latest?.date,latest?.painScore,update?.title,update?.note]);
+ let panel=box.querySelector("#v86-clinical-snapshot");
+ if(panel?.dataset.signature===signature)return;
+ if(!panel){
+  panel=document.createElement("section");panel.id="v86-clinical-snapshot";
+  const target=box.querySelector(".v81-bottom")||box.querySelector(".v81-legacy");
+  if(target)target.insertAdjacentElement("beforebegin",panel);
+  else box.appendChild(panel);
+ }
+ panel.dataset.signature=signature;
+ panel.innerHTML=`
+  <div class="v86-heading"><div><small>${tr("CLINICAL OVERVIEW","نظرة سريرية")}</small><h3>${tr("Clinical Snapshot","ملخص الحالة العلاجية")}</h3></div><span>${tr("From existing patient records","من بيانات المريض المسجلة")}</span></div>
+  <div class="v86-grid">
+   <article class="v86-card v86-plan">
+    <div class="v86-card-head"><span class="v86-symbol">✧</span><small>${tr("ACTIVE TREATMENT PLAN","الخطة العلاجية النشطة")}</small></div>
+    <h4>${esc(plan?.title||tr("No active plan","لا توجد خطة نشطة"))}</h4>
+    <p>${esc(plan?.comments||tr("Treatment plan details will appear here once documented.","تظهر تفاصيل الخطة بعد تسجيلها."))}</p>
+    <button type="button" data-v86-tab="plan">${tr("View Treatment Plan","عرض الخطة العلاجية")} ↗</button>
+   </article>
+   <article class="v86-card v86-pain">
+    <div class="v86-card-head"><span class="v86-symbol">◎</span><small>${tr("LATEST PAIN SCORE","آخر درجة ألم")}</small></div>
+    <div class="v86-pain-value">${esc(pain)}</div>
+    <div class="v86-meter"><i style="width:${severity===null?0:Math.max(0,Math.min(100,severity*10))}%"></i></div>
+    <p>${esc(latest?.date||tr("No recorded session","لا توجد جلسة مسجلة"))}</p>
+    <button type="button" data-v86-tab="progress">${tr("View Progress","عرض التقدم")} ↗</button>
+   </article>
+   <article class="v86-card v86-goals">
+    <div class="v86-card-head"><span class="v86-symbol">◈</span><small>${tr("TREATMENT GOALS","الأهداف العلاجية")}</small></div>
+    <div class="v86-goal-value">${complete}<span> / ${goals.length}</span></div>
+    <div class="v86-meter"><i style="width:${percent??0}%"></i></div>
+    <p>${tr("Goals marked achieved","الأهداف المسجلة كمحققة")}</p>
+    <button type="button" data-v86-tab="progress">${tr("Review Goals","مراجعة الأهداف")} ↗</button>
+   </article>
+   <article class="v86-card v86-update">
+    <div class="v86-card-head"><span class="v86-symbol">▤</span><small>${tr("LATEST CLINICAL UPDATE","آخر تحديث سريري")}</small></div>
+    <h4>${esc(update?.title||tr("No clinical update","لا يوجد تحديث سريري"))}</h4>
+    <p>${esc(update?.note||tr("Updates recorded by the care team will appear here.","تظهر هنا التحديثات المسجلة من الفريق العلاجي."))}</p>
+    <button type="button" data-v86-tab="timeline">${tr("Clinical Timeline","التسلسل الزمني")} ↗</button>
+   </article>
+  </div>`;
+}
+function render(){try{snapshot()}catch(e){console.warn("V86 snapshot skipped:",e)}}
+function install(){
+ const fn=window.openV31PatientWorkspace;
+ if(typeof fn!=="function"||fn.__v86)return false;
+ function wrapped(){const ret=fn.apply(this,arguments);render();return ret}
+ wrapped.__v86=true;window.openV31PatientWorkspace=wrapped;
+ const tab=window.v31Tab;
+ if(typeof tab==="function"&&!tab.__v86){
+  function wrappedTab(){const ret=tab.apply(this,arguments);render();return ret}
+  wrappedTab.__v86=true;window.v31Tab=wrappedTab;
+ }
+ render();return true;
+}
+document.addEventListener("click",function(e){
+ const btn=e.target.closest("#v86-clinical-snapshot button[data-v86-tab]");
+ if(!btn)return;
+ const pid=w()?.dataset.pid,tab=btn.dataset.v86Tab;
+ if(!pid||!["plan","progress","timeline"].includes(tab))return;
+ e.preventDefault();e.stopPropagation();
+ if(typeof window.v31Tab==="function")window.v31Tab(pid,tab);
+},false);
+const style=document.createElement("style");style.id="v86-clinical-snapshot-style";style.textContent=`
+#v86-clinical-snapshot{margin-top:19px;color:#23465d}
+#v86-clinical-snapshot *{box-sizing:border-box}
+#v86-clinical-snapshot .v86-heading{display:flex;justify-content:space-between;align-items:end;gap:10px;margin:0 3px 12px}
+#v86-clinical-snapshot .v86-heading small{font-size:10px;color:#ad824b;font-weight:900;letter-spacing:.07em}
+#v86-clinical-snapshot .v86-heading h3{font-size:18px!important;color:#173e56!important;margin:4px 0 0!important}
+#v86-clinical-snapshot .v86-heading>span{font-size:11px;color:#8ba0ae}
+#v86-clinical-snapshot .v86-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+#v86-clinical-snapshot .v86-card{display:flex;flex-direction:column;min-height:205px;background:#fff;border:1px solid #e1eaf2;border-radius:15px;padding:16px;box-shadow:0 5px 19px rgba(30,71,100,.04)}
+#v86-clinical-snapshot .v86-card-head{display:flex;align-items:center;gap:9px}
+#v86-clinical-snapshot .v86-card-head small{font-size:10px!important;letter-spacing:.025em;color:#8499a9!important;font-weight:850}
+#v86-clinical-snapshot .v86-symbol{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#eaf4fb;color:#2a77a5;font-size:18px;flex:none}
+#v86-clinical-snapshot .v86-card h4{font-size:14px!important;color:#214b64!important;margin:15px 0 6px!important;line-height:1.35}
+#v86-clinical-snapshot .v86-card p{font-size:11px!important;line-height:1.6!important;color:#8499a7!important;margin:5px 0 14px!important;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+#v86-clinical-snapshot .v86-card button{margin-top:auto!important;align-self:flex-start;border:0!important;background:transparent!important;color:#2366aa!important;font-size:11px!important;font-weight:850!important;padding:5px 0!important}
+#v86-clinical-snapshot .v86-pain-value,#v86-clinical-snapshot .v86-goal-value{font-size:29px;font-weight:900;margin-top:13px;color:#dc6878;line-height:1.25}
+#v86-clinical-snapshot .v86-goal-value{color:#2b8b84}
+#v86-clinical-snapshot .v86-goal-value span{font-size:17px;color:#a0b1bb}
+#v86-clinical-snapshot .v86-meter{height:6px;background:#edf2f5;border-radius:6px;overflow:hidden;margin-top:12px}
+#v86-clinical-snapshot .v86-meter i{display:block;height:100%;background:#e77a86;border-radius:6px}
+#v86-clinical-snapshot .v86-goals .v86-meter i{background:#4bb6a5}
+#v86-clinical-snapshot .v86-update{background:linear-gradient(145deg,#fff,#f4f9fe)}
+@media(max-width:1100px){#v86-clinical-snapshot .v86-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){#v86-clinical-snapshot .v86-grid{gap:8px}#v86-clinical-snapshot .v86-card{padding:11px;min-height:185px}#v86-clinical-snapshot .v86-card-head{gap:5px}#v86-clinical-snapshot .v86-symbol{width:26px;height:26px}#v86-clinical-snapshot .v86-card-head small{font-size:9px!important}#v86-clinical-snapshot .v86-heading>span{display:none}#v86-clinical-snapshot .v86-card h4{font-size:12px!important}#v86-clinical-snapshot .v86-card button{font-size:10px!important}}
+`;document.head.appendChild(style);
+if(!install()){let tries=0;const timer=setInterval(()=>{if(install()||++tries>=20)clearInterval(timer)},150)}
+window.MYAIMS_PATIENT_UI_VERSION="V86";
+})();
