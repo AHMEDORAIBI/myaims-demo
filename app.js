@@ -13605,3 +13605,213 @@ const st=document.createElement("style");st.textContent=`
 `;document.head.appendChild(st);
 window.MYAIMS_BUILD="V80 CLINICAL BODY MAP SUMMARY";
 })();
+
+
+/* ============================================================
+ myAIMS V81 — PATIENT RECORD / CARD BASED GRID (SAFE UI LAYER)
+ Presentation only. Does not replace the existing patient
+ workspace, handlers, records, forms or clinical workflows.
+ ============================================================ */
+(function(){
+"use strict";
+const VERSION="V81";
+const T=(en,ar)=>document.documentElement.lang==="ar"?ar:en;
+const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const S=()=>window.state||window.appState||{};
+const patient=pid=>(S().patients||[]).find(p=>String(p.id)===String(pid));
+const related=(arr,p)=>Array.isArray(arr)?arr.filter(x=>String(x.patientId||"")===String(p.id)||(!x.patientId&&x.patient===p.name)):[];
+const latestDate=x=>String(x.date||x.createdAt||"");
+const icons={
+ profile:'♙',notes:'▤',body:'◎',plan:'✧',progress:'▥',appointments:'▦',documents:'▧',billing:'◈'
+};
+let currentTab="overview";
+function getData(pid){
+ const d=S(),p=patient(pid);if(!p)return null;
+ const ap=related(d.appointments,p).sort((a,b)=>latestDate(b).localeCompare(latestDate(a)));
+ const notes=(d.sessionNotes||[]).filter(n=>String(n.patientId||"")===String(pid)||ap.some(a=>String(a.id)===String(n.appointmentId))).sort((a,b)=>latestDate(b).localeCompare(latestDate(a)));
+ const goals=(d.treatmentGoals||[]).filter(g=>String(g.patientId)===String(pid));
+ const updates=(d.clinicalUpdates||[]).filter(g=>String(g.patientId)===String(pid));
+ const invoices=related(d.invoices,p);
+ const future=ap.filter(a=>String(a.date||"")>=new Date().toISOString().slice(0,10)&&!/cancel/i.test(a.status||"")).sort((a,b)=>latestDate(a).localeCompare(latestDate(b)));
+ return {p,ap,notes,goals,updates,invoices,next:future[0],latest:notes[0]};
+}
+function tile(key,label,sub,extra=""){
+ return `<button type="button" class="v81-tile ${extra}" data-v81="${key}">
+ <span class="v81-tile-icon">${icons[key]}</span><b>${label}</b><small>${sub}</small><span class="v81-chevron">↗</span></button>`;
+}
+function dashboard(pid){
+ const x=getData(pid);if(!x)return "";
+ const {p,ap,notes,goals,updates,invoices,next,latest}=x;
+ const pain=latest&&Number.isFinite(Number(latest.painScore))?Number(latest.painScore):null;
+ const initials=String(p.name||"P").trim().split(/\s+/).slice(0,2).map(n=>n[0]||"").join("").toUpperCase();
+ const recent=[...ap.slice(0,4).map(a=>({date:a.date||"",title:a.service||a.visitType||"Clinical Session",sub:a.status||"",kind:"appointment"})),...updates.slice(0,3).map(a=>({date:a.date||String(a.createdAt||"").slice(0,10),title:a.title||"Clinical Update",sub:a.note||"",kind:"update"}))].sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,5);
+ const chronological=notes.filter(n=>Number.isFinite(Number(n.painScore))).sort((a,b)=>latestDate(a).localeCompare(latestDate(b))).slice(-7);
+ const points=chronological.map((n,i)=>{const xx=30+(i*(290/Math.max(1,chronological.length-1))),yy=112-Math.min(10,Math.max(0,Number(n.painScore)))*9;return `${xx},${yy}`}).join(" ");
+ const nowPain=pain===null?"—":`${pain}/10`;
+ return `<section id="v81-dashboard" data-v81-pid="${safe(pid)}">
+ <div class="v81-hero">
+  <div class="v81-avatar">${safe(initials)}</div>
+  <div class="v81-person"><small>${T("PATIENT RECORD","ملف المريض")} · ${safe(p.id||"")}</small><h2>${safe(p.name||"")}</h2><p>${safe(p.phone||p.mobile||"")} <span class="v81-active">● ${safe(p.status||"Active")}</span></p></div>
+  <div class="v81-next"><small>${T("NEXT APPOINTMENT","الموعد القادم")}</small><strong>${safe(next?.date||T("Not scheduled","غير محدد"))}</strong><span>${safe(next?.time||"")} ${safe(next?.service||"")}</span></div>
+  <button type="button" class="v81-start" data-v81="start">${T("Start Session","بدء الجلسة")} ↗</button>
+ </div>
+ <div class="v81-section-head"><div><small>${T("PATIENT WORKSPACE","مساحة ملف المريض")}</small><h3>${T("Quick Access","الوصول السريع")}</h3></div><span>${T("Choose a clinical module","اختر القسم المطلوب")}</span></div>
+ <div class="v81-tiles">
+ ${tile("profile",T("Profile","الملف الشخصي"),T("Patient information & history","بيانات المريض وسجله"))}
+ ${tile("notes",T("Clinical Notes","الملاحظات السريرية"),T("SOAP notes & assessments","ملاحظات وتقييمات الجلسات"))}
+ ${tile("body",T("Body Map","خريطة الجسم"),T("Pain points & regions","مناطق ونقاط الألم"),"v81-featured")}
+ ${tile("plan",T("Treatment Plan","الخطة العلاجية"),T("Goals & exercises","الأهداف والتمارين"))}
+ ${tile("progress",T("Progress","التقدم العلاجي"),T("Clinical progress & metrics","التقدم والمؤشرات"))}
+ ${tile("appointments",T("Appointments","المواعيد"),T("Upcoming & previous sessions","الجلسات السابقة والقادمة"))}
+ ${tile("documents",T("Documents","المستندات"),T("Patient documents & reports","المرفقات والتقارير"))}
+ ${tile("billing",T("Billing","الفواتير"),T("Invoices & payments","الفواتير والمدفوعات"))}
+ </div>
+ <div class="v81-bottom">
+  <section class="v81-panel"><header><b>${T("Recent Activity","آخر الأنشطة")}</b><button type="button" data-v81="appointments">${T("View All","عرض الكل")} ↗</button></header>
+  ${recent.length?recent.map(a=>`<div class="v81-activity"><span class="v81-dot ${a.kind}"></span><div><b>${safe(a.title)}</b><small>${safe(a.sub)}</small></div><time>${safe(a.date)}</time></div>`).join(""):`<p class="v81-empty">${T("No clinical activity yet","لا توجد أنشطة مسجلة")}</p>`}
+  </section>
+  <section class="v81-panel"><header><b>${T("Pain Progress","تطور مستوى الألم")}</b><button type="button" data-v81="progress">${T("View Progress","عرض التقدم")} ↗</button></header>
+   <div class="v81-pain-stat"><strong>${nowPain}</strong><span>${T("Latest recorded pain score","آخر درجة ألم مسجلة")}</span></div>
+   ${chronological.length?`<svg class="v81-chart" viewBox="0 0 350 145" role="img" aria-label="Pain score history">
+   <path d="M30 22H320 M30 67H320 M30 112H320" stroke="#e4ebf0" stroke-width="1" stroke-dasharray="4 5" fill="none"/>
+   <text x="6" y="25">10</text><text x="12" y="70">5</text><text x="15" y="115">0</text>
+   <polyline points="${points}" fill="none" stroke="#257aa9" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+   ${points.split(" ").map(pt=>`<circle cx="${pt.split(",")[0]}" cy="${pt.split(",")[1]}" r="4" fill="#fff" stroke="#257aa9" stroke-width="2"/>`).join("")}
+   </svg>`:`<p class="v81-empty">${T("Pain history will appear when session notes are recorded.","يظهر الرسم بعد تسجيل درجات الألم في الجلسات.")}</p>`}
+  </section>
+ </div>
+ <details class="v81-legacy"><summary>${T("Detailed clinical overview","التفاصيل السريرية الإضافية")}</summary><div id="v81-original-slot"></div></details>
+ </section>`;
+}
+function show(pid,tab){
+ const w=document.getElementById("v31-workspace"),b=w?.querySelector("#v31-body");
+ if(!w?.classList.contains("open")||!b||!patient(pid))return;
+ currentTab=tab;
+ w.classList.add("v81-modern");
+ if(tab!=="overview"){w.classList.remove("v81-overview");return;}
+ w.classList.add("v81-overview");
+ if(b.querySelector("#v81-dashboard"))return;
+ const holder=document.createElement("div");holder.innerHTML=dashboard(pid);
+ const el=holder.firstElementChild;
+ if(!el)return;
+ const slot=el.querySelector("#v81-original-slot");
+ while(b.firstChild)slot.appendChild(b.firstChild);
+ b.appendChild(el);
+}
+function go(key,pid){
+ const d=getData(pid);if(!d)return;
+ if(key==="profile"){
+   const el=document.getElementById("v81-dashboard");
+   el?.querySelector(".v81-legacy")?.setAttribute("open","");
+   el?.querySelector(".v81-legacy")?.scrollIntoView({behavior:"smooth",block:"nearest"});
+   return;
+ }
+ if(key==="body"){
+   const a=d.ap.find(a=>String(a.id))||null;
+   if(typeof window.openV55ClinicalLauncher==="function"){
+     window.openV55ClinicalLauncher(d.p,a);return;
+   }
+   if(typeof window.v31Tab==="function")window.v31Tab(pid,"sessions");
+   return;
+ }
+ if(key==="start"||key==="notes"){
+   const a=d.ap.find(a=>String(a.id))||null;
+   if(a&&typeof window.openV24ClinicalNote==="function"){window.openV24ClinicalNote(a.id);return;}
+   if(typeof window.openV28AddSession==="function")window.openV28AddSession(pid);
+   return;
+ }
+ if(key==="plan"){window.v31Tab?.(pid,"plan");return;}
+ if(key==="progress"){window.v31Tab?.(pid,"progress");return;}
+ if(key==="appointments"){window.v31Tab?.(pid,"sessions");return;}
+ if(key==="documents"){window.v31Tab?.(pid,"reports");return;}
+ if(key==="billing"){
+   const btn=document.querySelector('.nav-item[data-page="billing"]');
+   if(btn)btn.click();return;
+ }
+}
+function enhance(){
+ if(typeof window.openV31PatientWorkspace!=="function"||window.openV31PatientWorkspace.__v81)return false;
+ const original=window.openV31PatientWorkspace;
+ function wrapped(pid,tab="overview"){
+   const result=original.apply(this,arguments);
+   try{show(pid,tab)}catch(e){console.warn("V81 presentation skipped:",e)}
+   return result;
+ }
+ wrapped.__v81=true;window.openV31PatientWorkspace=wrapped;
+ if(typeof window.v31Tab==="function"&&!window.v31Tab.__v81){
+   const oldTab=window.v31Tab;
+   function newTab(pid,tab,btn){
+     const result=oldTab.apply(this,arguments);
+     try{show(pid,tab)}catch(e){console.warn("V81 tab presentation skipped:",e)}
+     return result;
+   }
+   newTab.__v81=true;window.v31Tab=newTab;
+ }
+ return true;
+}
+document.addEventListener("click",e=>{
+ const btn=e.target.closest("#v81-dashboard [data-v81]");
+ if(!btn)return;
+ e.preventDefault();e.stopPropagation();
+ const pid=btn.closest("#v81-dashboard")?.dataset.v81Pid;
+ if(pid)go(btn.dataset.v81,pid);
+});
+const style=document.createElement("style");style.id="v81-safe-patient-grid";style.textContent=`
+#v31-workspace.v81-modern{background:#f4f8fb!important;padding:16px!important}
+#v31-workspace.v81-modern .v31-top{background:#fff!important;border:1px solid #e1e9f0!important;border-radius:14px!important;color:#153c52!important}
+#v31-workspace.v81-modern .v31-top h2{color:#143b52!important}
+#v31-workspace.v81-modern .v31-tabs{background:#fff;border:1px solid #e1e9f0;border-radius:12px;padding:6px;margin:12px 0}
+#v31-workspace.v81-modern #v31-body{padding:0!important;background:transparent!important}
+#v81-dashboard{font-family:inherit;color:#1c3e55}
+#v81-dashboard *{box-sizing:border-box}
+#v81-dashboard .v81-hero{display:flex;align-items:center;gap:17px;background:#fff;border:1px solid #e2eaf1;border-radius:16px;padding:20px 23px;box-shadow:0 6px 22px rgba(28,68,96,.04)}
+#v81-dashboard .v81-avatar{display:grid;place-items:center;flex:none;width:68px;height:68px;border-radius:18px;background:linear-gradient(140deg,#dcebf4,#bdd7e7);color:#1d5673;font-size:22px;font-weight:900}
+#v81-dashboard .v81-person{flex:1;min-width:0}#v81-dashboard .v81-person small,#v81-dashboard .v81-next small{display:block;color:#7d94a6;font-size:10px;letter-spacing:.04em;font-weight:800}
+#v81-dashboard .v81-person h2{margin:4px 0!important;color:#153b54!important;font-size:24px!important}
+#v81-dashboard .v81-person p{margin:0;color:#7890a0;font-size:12px}
+#v81-dashboard .v81-active{display:inline-block;margin-inline-start:9px;border-radius:20px;background:#e6f7ee;color:#178257;padding:4px 9px;font-size:10px;font-weight:800}
+#v81-dashboard .v81-next{border-inline-start:1px solid #e7edf2;padding-inline-start:18px;min-width:155px}
+#v81-dashboard .v81-next strong{display:block;font-size:15px;color:#214b65;margin-top:5px}
+#v81-dashboard .v81-next span{font-size:11px;color:#7890a0}
+#v81-dashboard .v81-start{border:0!important;border-radius:10px!important;background:#205eae!important;color:#fff!important;padding:12px 17px!important;font-weight:850!important;font-size:12px!important;min-height:43px!important}
+#v81-dashboard .v81-section-head{display:flex;align-items:end;justify-content:space-between;margin:23px 3px 12px}
+#v81-dashboard .v81-section-head small{display:block;font-size:10px;color:#a17a39;font-weight:900;letter-spacing:.06em}
+#v81-dashboard .v81-section-head h3{font-size:19px!important;margin:3px 0 0!important;color:#173e56!important}
+#v81-dashboard .v81-section-head>span{font-size:11px;color:#8398a8}
+#v81-dashboard .v81-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+#v81-dashboard .v81-tile{position:relative;display:flex!important;flex-direction:column!important;align-items:flex-start!important;min-height:148px!important;text-align:start!important;border:1px solid #e0e9f1!important;border-radius:15px!important;background:#fff!important;padding:17px!important;box-shadow:0 6px 20px rgba(31,75,105,.045)!important;transition:transform .16s,box-shadow .16s!important;color:#1b425c!important}
+#v81-dashboard .v81-tile:hover{transform:translateY(-3px)!important;box-shadow:0 14px 28px rgba(31,75,105,.11)!important}
+#v81-dashboard .v81-tile.v81-featured{border-color:#7eaff2!important;background:#eff6ff!important}
+#v81-dashboard .v81-tile-icon{display:grid;place-items:center;width:39px;height:39px;border-radius:11px;background:#eaf2f9;color:#286ca8;font-size:22px;font-weight:800;margin-bottom:12px}
+#v81-dashboard .v81-featured .v81-tile-icon{background:#d8e9ff;color:#205eae}
+#v81-dashboard .v81-tile b{font-size:14px!important;color:#173e56!important}
+#v81-dashboard .v81-tile small{font-size:11px!important;line-height:1.5!important;color:#8298a7!important;margin-top:5px}
+#v81-dashboard .v81-chevron{position:absolute;inset-inline-end:13px;top:14px;font-size:14px;color:#a2b5c3}
+#v81-dashboard .v81-bottom{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:17px}
+#v81-dashboard .v81-panel{background:#fff;border:1px solid #e1eaf1;border-radius:15px;padding:17px;min-height:245px}
+#v81-dashboard .v81-panel header{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}
+#v81-dashboard .v81-panel header b{font-size:15px;color:#173e56}
+#v81-dashboard .v81-panel header button{border:0!important;background:none!important;color:#2466b4!important;font-size:11px!important;font-weight:800!important}
+#v81-dashboard .v81-activity{display:flex;align-items:center;gap:11px;padding:11px 3px;border-bottom:1px solid #edf2f5}
+#v81-dashboard .v81-dot{width:9px;height:9px;border-radius:50%;background:#e16a7b;flex:none}
+#v81-dashboard .v81-dot.update{background:#2e90bf}
+#v81-dashboard .v81-activity>div{flex:1;min-width:0}
+#v81-dashboard .v81-activity b,#v81-dashboard .v81-activity small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#v81-dashboard .v81-activity b{font-size:12px;color:#2c5269}#v81-dashboard .v81-activity small{font-size:10px;color:#90a2af;margin-top:3px}
+#v81-dashboard .v81-activity time{font-size:10px;color:#8ca1ae}
+#v81-dashboard .v81-pain-stat{display:flex;align-items:baseline;gap:11px;margin:10px 0 0}
+#v81-dashboard .v81-pain-stat strong{font-size:25px;color:#e46a75}#v81-dashboard .v81-pain-stat span{font-size:11px;color:#8da1ad}
+#v81-dashboard .v81-chart{width:100%;max-height:155px;margin-top:8px}#v81-dashboard .v81-chart text{font-size:11px;fill:#a0afba}
+#v81-dashboard .v81-empty{font-size:12px;color:#8a9eab;padding:20px 4px}
+#v81-dashboard .v81-legacy{margin-top:14px;background:#fff;border:1px solid #e1eaf1;border-radius:12px;overflow:hidden}
+#v81-dashboard .v81-legacy summary{padding:14px 17px;cursor:pointer;font-size:12px;color:#456a80;font-weight:800}
+#v81-dashboard #v81-original-slot{padding:12px}
+@media(max-width:1080px){#v81-dashboard .v81-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}#v81-dashboard .v81-hero{flex-wrap:wrap}}
+@media(max-width:650px){#v31-workspace.v81-modern{padding:8px!important}#v81-dashboard .v81-hero{padding:13px;gap:10px}#v81-dashboard .v81-avatar{width:52px;height:52px}#v81-dashboard .v81-person h2{font-size:18px!important}#v81-dashboard .v81-next{border:0;padding:0;min-width:0;flex:1}#v81-dashboard .v81-start{width:100%}#v81-dashboard .v81-tiles{gap:8px}#v81-dashboard .v81-tile{min-height:130px!important;padding:12px!important}#v81-dashboard .v81-tile b{font-size:12px!important}#v81-dashboard .v81-tile small{font-size:10px!important}#v81-dashboard .v81-bottom{grid-template-columns:1fr}#v81-dashboard .v81-section-head>span{display:none}}
+`;document.head.appendChild(style);
+if(!enhance()){
+ let count=0;
+ const timer=setInterval(()=>{if(enhance()||++count>30)clearInterval(timer)},100);
+}
+window.MYAIMS_PATIENT_UI_VERSION=VERSION;
+})();
