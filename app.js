@@ -13872,3 +13872,72 @@ const nav=document.querySelector('.nav-item[data-page="patients"]');
 nav?.addEventListener("click",()=>setTimeout(init,0));
 window.MYAIMS_PATIENT_UI_VERSION="V82";
 })();
+
+
+/* ==========================================================
+ myAIMS V83 — PATIENT WORKSPACE STABILITY PASS
+ Scoped, reversible fixes for V81/V82. No data migrations.
+ ========================================================== */
+(function(){
+"use strict";
+const page=()=>document.getElementById("page-patients");
+const workspace=()=>document.getElementById("v31-workspace");
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function refreshHeading(){
+ const p=page(),w=workspace();if(!p)return;
+ const h=p.querySelector(".v82-heading");if(!h)return;
+ const open=!!w?.classList.contains("open");
+ h.style.display=open?"none":"";
+ const n=h.querySelector("[data-v82-count]");
+ if(n)n.textContent=(window.state?.patients||window.appState?.patients||[]).length;
+ const ar=document.documentElement.lang==="ar"||document.documentElement.dir==="rtl";
+ const sm=h.querySelector("small"),title=h.querySelector("h2"),desc=h.querySelector("p"),unit=h.querySelector(".v82-count span");
+ if(sm)sm.textContent=ar?"MY AIMS · إدارة المرضى":"MY AIMS · PATIENT MANAGEMENT";
+ if(title)title.textContent=ar?"دليل المرضى":"Patient Directory";
+ if(desc)desc.textContent=ar?"الملفات الطبية والتاريخ السريري ومتابعة العلاج":"Patient records, clinical history and treatment journeys";
+ if(unit)unit.textContent=ar?"مريض":"Patients";
+}
+function markPatientContext(){
+ const w=workspace();if(!w?.classList.contains("open"))return;
+ const pid=w.dataset.pid;
+ if(!pid)return;
+ // V31 is the sole owner of active patient identity.
+ const dash=w.querySelector("#v81-dashboard");
+ if(dash && dash.dataset.v81Pid!==pid){
+   // Never display cached cards from a different patient.
+   window.openV31PatientWorkspace?.(pid,"overview");
+ }
+}
+function safeActions(){
+ const w=workspace();if(!w)return;
+ const dash=w.querySelector("#v81-dashboard");if(!dash)return;
+ // Keep the original V31 overview accessible, including its edit buttons.
+ const details=dash.querySelector(".v81-legacy");
+ if(details&&!details.querySelector("#v81-original-slot"))return;
+ // Clearly identify clinical content that is shown from existing records.
+ if(!dash.querySelector(".v83-context-note")){
+  const p=document.createElement("p");p.className="v83-context-note";
+  p.textContent="Patient information is displayed from the current clinical record.";
+  dash.querySelector(".v81-section-head")?.after(p);
+ }
+}
+function run(){try{refreshHeading();markPatientContext();safeActions()}catch(e){console.warn("V83 patient UI:",e)}}
+document.addEventListener("click",e=>{
+ const t=e.target;
+ if(t.closest('#page-patients .v31-back, #page-patients [onclick*="closeV31PatientWorkspace"], .nav-item[data-page="patients"]'))queueMicrotask(run);
+ if(t.closest('#page-patients .v31-tabs button, #page-patients [data-v81]'))setTimeout(run,0);
+},false);
+const css=document.createElement("style");css.id="v83-patient-stability";css.textContent=`
+#page-patients.v82-patients .v82-heading{position:relative}
+#v31-workspace.v81-modern .v31-tabs{display:flex;gap:6px;flex-wrap:wrap}
+#v31-workspace.v81-modern .v31-tabs button{min-height:36px;border-radius:8px}
+#v31-workspace.v81-modern .v31-tabs button.active{background:#e8f2fa!important;color:#1d5d8a!important}
+#v81-dashboard .v83-context-note{margin:-5px 3px 13px;font-size:11px;color:#8b9eaa}
+#v81-dashboard .v81-tile:focus-visible,#v81-dashboard .v81-start:focus-visible{outline:3px solid #7bb8e6!important;outline-offset:2px}
+#v81-dashboard .v81-legacy[open] summary{border-bottom:1px solid #e6edf2}
+#page-patients.v82-patients .v82-heading[style*="display: none"]{display:none!important}
+@media(max-width:650px){#v31-workspace.v81-modern .v31-tabs{overflow-x:auto;flex-wrap:nowrap}#v31-workspace.v81-modern .v31-tabs button{flex:0 0 auto;white-space:nowrap}}
+`;document.head.appendChild(css);
+run();
+window.MYAIMS_PATIENT_UI_VERSION="V83";
+})();
