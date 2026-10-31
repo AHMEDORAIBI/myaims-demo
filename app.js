@@ -13941,3 +13941,113 @@ const css=document.createElement("style");css.id="v83-patient-stability";css.tex
 run();
 window.MYAIMS_PATIENT_UI_VERSION="V83";
 })();
+
+
+/* ============================================================
+ myAIMS V84 — PREMIUM PATIENT PROFILE / CARD GRID
+ Safe presentation-only layer for existing V31/V81 workspace.
+ No replacement of session handlers, patient data or 3D engine.
+ ============================================================ */
+(function(){
+"use strict";
+const W=()=>document.getElementById("v31-workspace");
+const S=()=>window.state||window.appState||{};
+const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const ar=()=>document.documentElement.lang==="ar"||document.documentElement.dir==="rtl";
+const t=(en,arabic)=>ar()?arabic:en;
+function patient(){const id=W()?.dataset.pid;return (S().patients||[]).find(p=>String(p.id)===String(id))}
+function context(){
+ const w=W(),p=patient();
+ if(!w?.classList.contains("open")||!p)return;
+ const top=w.querySelector(".v31-top");if(!top)return;
+ w.classList.add("v84-patient-profile");
+ // Non-destructive contextual information: no DOM reparenting.
+ let strip=w.querySelector("#v84-patient-context");
+ if(!strip){
+  strip=document.createElement("section");strip.id="v84-patient-context";
+  top.insertAdjacentElement("afterend",strip);
+ }
+ const appointments=(S().appointments||[]).filter(a=>String(a.patientId||"")===String(p.id)||(!a.patientId&&a.patient===p.name));
+ const notes=(S().sessionNotes||[]).filter(n=>String(n.patientId||"")===String(p.id));
+ const completed=appointments.filter(a=>String(a.status||"").toLowerCase()==="completed").length;
+ const plans=(S().treatmentPlans||[]).filter(x=>String(x.patientId)===String(p.id)&&x.status!=="Closed");
+ const next=appointments.filter(a=>String(a.date||"")>=new Date().toISOString().slice(0,10)&&!/cancel/i.test(a.status||"")).sort((a,b)=>String(a.date).localeCompare(String(b.date)))[0];
+ const entries=[
+  [t("Patient ID","رقم المريض"),p.id||"—","id"],
+  [t("Sessions completed","الجلسات المكتملة"),completed,"sessions"],
+  [t("Clinical notes","الملاحظات السريرية"),notes.length,"notes"],
+  [t("Active treatment plans","الخطط العلاجية النشطة"),plans.length,"plans"]
+ ];
+ const signature=[p.id,completed,notes.length,plans.length,next?.date,ar()].join("|");
+ if(strip.dataset.signature===signature)return;
+ strip.dataset.signature=signature;
+ strip.innerHTML=`<div class="v84-context-main"><div class="v84-context-eyebrow">${t("PATIENT SNAPSHOT","ملخص ملف المريض")}</div><div class="v84-context-grid">${entries.map(([label,val,kind])=>`<article><small>${esc(label)}</small><b>${esc(val)}</b></article>`).join("")}</div></div><div class="v84-next-visit"><small>${t("NEXT SCHEDULED VISIT","الموعد القادم")}</small><b>${esc(next?.date||t("Not scheduled","غير محدد"))}</b><span>${esc([next?.time,next?.service].filter(Boolean).join(" · "))}</span></div>`;
+}
+function updateActiveTab(){
+ const w=W();if(!w?.classList.contains("open"))return;
+ w.querySelectorAll(".v31-tabs button").forEach(b=>{
+  b.setAttribute("aria-current",b.classList.contains("active")?"page":"false");
+ });
+}
+function sync(){
+ try{context();updateActiveTab()}catch(e){console.warn("V84 patient view:",e)}
+}
+function install(){
+ const fn=window.openV31PatientWorkspace;
+ if(typeof fn!=="function"||fn.__v84)return false;
+ function wrapped(){const ret=fn.apply(this,arguments);sync();return ret}
+ wrapped.__v84=true;window.openV31PatientWorkspace=wrapped;
+ const tab=window.v31Tab;
+ if(typeof tab==="function"&&!tab.__v84){
+  function wrappedTab(){const ret=tab.apply(this,arguments);sync();return ret}
+  wrappedTab.__v84=true;window.v31Tab=wrappedTab;
+ }
+ const close=window.closeV31PatientWorkspace;
+ if(typeof close==="function"&&!close.__v84){
+  function wrappedClose(){const ret=close.apply(this,arguments);const w=W();w?.classList.remove("v84-patient-profile");return ret}
+  wrappedClose.__v84=true;window.closeV31PatientWorkspace=wrappedClose;
+ }
+ sync();return true;
+}
+const style=document.createElement("style");style.id="v84-patient-profile-css";style.textContent=`
+/* Everything scoped to the opened patient workspace */
+#v31-workspace.v84-patient-profile{background:#f5f8fc!important;padding:20px!important;border:1px solid #e5edf3;border-radius:19px!important}
+#v31-workspace.v84-patient-profile .v31-top{background:linear-gradient(115deg,#fff 0%,#fff 67%,#f0f6fd 100%)!important;border:1px solid #dfeaf2!important;border-radius:17px!important;padding:20px!important;box-shadow:0 9px 27px rgba(24,71,107,.05)!important}
+#v31-workspace.v84-patient-profile .v31-identity>span{width:66px!important;height:66px!important;border-radius:17px!important;background:linear-gradient(145deg,#cce3f4,#e8f3fc)!important;color:#235f88!important;font-size:20px!important}
+#v31-workspace.v84-patient-profile .v31-identity small{font-size:11px!important;letter-spacing:.07em;color:#b08346!important}
+#v31-workspace.v84-patient-profile .v31-identity h2{font-size:23px!important;color:#163f59!important;line-height:1.25!important}
+#v31-workspace.v84-patient-profile .v31-identity p{font-size:12px!important;color:#7892a5!important}
+#v31-workspace.v84-patient-profile .v31-top-actions{display:flex;flex-wrap:wrap;gap:7px}
+#v31-workspace.v84-patient-profile .v31-top-actions button{border-radius:10px!important;min-height:39px!important;padding:9px 12px!important;font-size:11px!important;font-weight:800!important}
+#v31-workspace.v84-patient-profile .v31-top-actions button.gold{background:#205fae!important;color:#fff!important;border-color:#205fae!important}
+#v31-workspace.v84-patient-profile .v31-back{font-size:12px!important;min-height:34px!important;border-radius:9px!important}
+#v84-patient-context{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:13px;margin:13px 0}
+#v84-patient-context .v84-context-main,#v84-patient-context .v84-next-visit{background:#fff;border:1px solid #e0eaf2;border-radius:14px;padding:16px;box-shadow:0 5px 18px rgba(28,69,100,.035)}
+#v84-patient-context .v84-context-eyebrow{font-size:10px;font-weight:900;letter-spacing:.07em;color:#ae844c;margin-bottom:12px}
+#v84-patient-context .v84-context-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+#v84-patient-context .v84-context-grid article{border-inline-end:1px solid #e9eff4;padding-inline-end:8px}
+#v84-patient-context .v84-context-grid article:last-child{border:0}
+#v84-patient-context small,#v84-patient-context b,#v84-patient-context span{display:block}
+#v84-patient-context small{font-size:10px!important;color:#859cac}
+#v84-patient-context b{font-size:18px!important;color:#205878;margin-top:6px}
+#v84-patient-context .v84-next-visit{background:linear-gradient(130deg,#f3f8ff,#fff);border-color:#d6e7f7}
+#v84-patient-context .v84-next-visit b{font-size:16px!important}
+#v84-patient-context .v84-next-visit span{font-size:11px;color:#7b95a5;margin-top:5px}
+#v31-workspace.v84-patient-profile .v31-tabs{margin:0 0 14px!important;padding:7px!important;border-radius:13px!important;gap:5px!important;box-shadow:0 5px 18px rgba(28,69,100,.03)}
+#v31-workspace.v84-patient-profile .v31-tabs button{font-size:11px!important;padding:10px 14px!important;border-radius:9px!important;color:#6a8598!important;font-weight:750!important}
+#v31-workspace.v84-patient-profile .v31-tabs button.active{background:#e6f1fc!important;color:#205fae!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-card{border-radius:14px!important;border-color:#e0eaf2!important;padding:17px!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-card-head h3{font-size:16px!important;color:#204c66!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-card p{font-size:12px!important;line-height:1.7!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-mini-row b{font-size:12px!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-mini-row small{font-size:10px!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-goal b{font-size:12px!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-goal small{font-size:10px!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-card button{font-size:11px!important;min-height:30px!important}
+#v31-workspace.v84-patient-profile #v31-body .v31-section-head h3{font-size:18px!important}
+@media(max-width:1050px){#v84-patient-context{grid-template-columns:1fr}#v84-patient-context .v84-next-visit{padding:12px 16px}}
+@media(max-width:650px){#v31-workspace.v84-patient-profile{padding:8px!important}#v31-workspace.v84-patient-profile .v31-top{padding:12px!important}#v31-workspace.v84-patient-profile .v31-identity h2{font-size:18px!important}#v84-patient-context .v84-context-grid{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:14px}#v84-patient-context .v84-context-grid article:nth-child(2){border:0}#v31-workspace.v84-patient-profile .v31-top-actions button{font-size:10px!important}#v31-workspace.v84-patient-profile .v31-tabs button{font-size:10px!important;padding:9px 10px!important}}
+`;document.head.appendChild(style);
+if(!install()){let tries=0;const timer=setInterval(()=>{if(install()||++tries>=20)clearInterval(timer)},150)}
+window.MYAIMS_PATIENT_UI_VERSION="V84";
+})();
