@@ -11988,6 +11988,7 @@ async function init3D(h){
  const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;
  const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2(),meshes=[],original=new Map();
  app={THREE,scene,camera,renderer,controls,raycaster,mouse,meshes,original,model:null,mount,raf:0,hd:true};
+ window.__MYAIMS_HD_VIEWER=app; // V102: read-only access to active HD viewer instance
 
  v64Stage(h,T("Loading myAIMS HD anatomy…","تحميل تشريح myAIMS عالي الدقة…"),12);
 
@@ -15857,4 +15858,192 @@ const observer=new MutationObserver(()=>{if(root()&&!root().querySelector('[data
 observer.observe(document.body,{subtree:true,childList:true});
 build();
 window.MYAIMS_4D_FOUNDATION_VERSION='V101';
+})();
+
+
+/* ============================================================
+ myAIMS V102 — NATIVE HD ANATOMY KNEE MOTION (EXPERIMENTAL)
+ Animates a selected lower-leg region of the actual HD GLB
+ inside the original viewer. Reversible. No clinical data writes.
+ Not a biomechanically validated rig or muscle deformation.
+ ============================================================ */
+(function(){
+'use strict';
+const getRoot=()=>document.getElementById('v61-real3d');
+const ar=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const t=(en,arabic)=>ar()?arabic:en;
+let rig=null,observer=null,raf=0,last=0,playing=false,dir=1;
+const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e};
+function stop(){playing=false;if(raf)cancelAnimationFrame(raf);raf=0;last=0;const b=document.querySelector('[data-v102-play]');if(b)b.textContent=t('▶ Play','▶ تشغيل')}
+function reset(){
+ stop();
+ if(!rig)return;
+ const {pivot,records,scene}=rig;
+ pivot.rotation.set(0,0,0);pivot.updateMatrixWorld(true);
+ for(const r of records){
+  if(!r.mesh||!r.parent)continue;
+  r.parent.attach(r.mesh);
+  r.mesh.position.copy(r.position);r.mesh.quaternion.copy(r.quaternion);r.mesh.scale.copy(r.scale);
+ }
+ scene.remove(pivot);rig=null;
+ const slider=document.querySelector('[data-v102-angle]');if(slider)slider.value='0';
+ const label=document.querySelector('[data-v102-value]');if(label)label.textContent='0°';
+ const status=document.querySelector('[data-v102-status]');
+ if(status)status.textContent=t('Original anatomical pose restored.','تمت استعادة الوضع التشريحي الأصلي.');
+}
+function activeApp(){
+ const a=window.__MYAIMS_HD_VIEWER;
+ return a?.model?.parent&&a?.renderer?.domElement?.isConnected&&getRoot()?.classList.contains('open')?a:null;
+}
+function setup(side){
+ reset();
+ const a=activeApp();if(!a)return {error:t('Open the HD anatomical model and wait until loading completes.','افتح النموذج التشريحي عالي الدقة وانتظر اكتمال التحميل.')};
+ const T=a.THREE;
+ a.model.updateMatrixWorld(true);
+ const candidates=[];
+ for(const m of a.meshes){
+  if(!m.isMesh||!m.geometry)continue;
+  const name=(m.name||'').toLowerCase();
+  if(!/^(tibia|fibula|femur)(\.\d+)?$/.test(name))continue;
+  const box=new T.Box3().setFromObject(m);
+  if(box.isEmpty())continue;
+  const center=box.getCenter(new T.Vector3());
+  candidates.push({m,name,center,box});
+ }
+ const tibias=candidates.filter(x=>/^tibia(\.\d+)?$/.test(x.name)).sort((a,b)=>a.center.x-b.center.x);
+ if(tibias.length<2)return {error:t('Two distinct tibia meshes were not detected. No animation applied.','لم يُعثر على عظمتَي ظنبوب منفصلتين. لم تُطبّق الحركة.')};
+ const chosen=side==='left'?tibias[0]:tibias[tibias.length-1];
+ const other=side==='left'?tibias[tibias.length-1]:tibias[0];
+ const centerX=chosen.center.x;
+ const separation=Math.abs(chosen.center.x-other.center.x);
+ if(separation<.01)return {error:t('Left/right leg separation is ambiguous.','تعذر تمييز الساق اليمنى عن اليسرى.')};
+ // A deliberately conservative pivot: proximal end of the tibia.
+ const kneeY=chosen.box.max.y-.025*chosen.box.getSize(new T.Vector3()).y;
+ const footY=chosen.box.min.y;
+ const bodyHeight=new T.Box3().setFromObject(a.model).getSize(new T.Vector3()).y;
+ const pivotPoint=new T.Vector3(centerX,kneeY,chosen.center.z);
+ const pivot=new T.Group();pivot.name='MYAIMS_V102_KNEE_DEMO_PIVOT';
+ pivot.position.copy(pivotPoint);a.scene.add(pivot);pivot.updateMatrixWorld(true);
+ const records=[];
+ // Move only self-contained meshes below the knee, on one side.
+ // This is a rigid educational preview; cross-joint muscles remain static.
+ const sideSign=Math.sign(centerX-other.center.x);
+ const xMargin=Math.max(.25,separation*.17);
+ for(const m of a.meshes){
+  if(!m.isMesh||!m.geometry)continue;
+  const box=new T.Box3().setFromObject(m);
+  if(box.isEmpty())continue;
+  const center=box.getCenter(new T.Vector3());
+  if((center.x-(centerX+other.center.x)/2)*sideSign<=xMargin)continue;
+  if(center.y>kneeY-.025*bodyHeight)continue;
+  if(box.max.y>kneeY+.02*bodyHeight)continue;
+  if(center.y<footY-.35*bodyHeight)continue;
+  const record={mesh:m,parent:m.parent,position:m.position.clone(),quaternion:m.quaternion.clone(),scale:m.scale.clone()};
+  records.push(record);
+  pivot.attach(m);
+ }
+ if(!records.some(r=>r.mesh===chosen.m)){
+  // If the tibia's bounding box crosses the pivot tolerance, attach it explicitly.
+  const m=chosen.m;
+  if(!records.some(r=>r.mesh===m)){
+   records.push({mesh:m,parent:m.parent,position:m.position.clone(),quaternion:m.quaternion.clone(),scale:m.scale.clone()});
+   pivot.attach(m);
+  }
+ }
+ if(records.length<2){
+  for(const r of records){r.parent.attach(r.mesh);r.mesh.position.copy(r.position);r.mesh.quaternion.copy(r.quaternion);r.mesh.scale.copy(r.scale)}
+  a.scene.remove(pivot);
+  return {error:t('Insufficient lower-leg meshes detected. Original model unchanged.','لم تُكتشف أجزاء كافية من الساق. بقي النموذج دون تغيير.')};
+ }
+ rig={pivot,records,scene:a.scene,app:a,side};
+ return {count:records.length};
+}
+function angle(value){
+ if(!rig)return;
+ const degrees=Math.max(0,Math.min(90,Number(value)||0));
+ // Knee bends backwards (away from anterior camera) in this demonstration.
+ rig.pivot.rotation.x=degrees*Math.PI/180;
+ rig.pivot.updateMatrixWorld(true);
+ const l=document.querySelector('[data-v102-value]');if(l)l.textContent=Math.round(degrees)+'°';
+}
+function renderControls(){
+ const root=getRoot(),stage=root?.querySelector('.v61-stagewrap');
+ if(!root?.classList.contains('open')||!stage||root.querySelector('#v102-hd-motion'))return;
+ const box=el('section','v102-hd-motion');box.id='v102-hd-motion';
+ box.innerHTML=`
+ <div class="v102-title"><div><small>V102 · NATIVE HD ANATOMY</small><strong>${t('Knee Motion · Experimental','حركة الركبة · تجريبية')}</strong></div><button type="button" data-v102-toggle aria-expanded="false">${t('Enable motion','تفعيل الحركة')}</button></div>
+ <div class="v102-body" hidden>
+  <p>${t('Moves selected lower-leg meshes in the ORIGINAL 826-structure anatomical viewer. This is a rigid demonstration, not realistic muscle deformation or a clinical ROM measurement.','يحرك أجزاء مختارة من الساق داخل العارض التشريحي الأصلي ذي 826 بنية. هذه محاكاة صلبة وليست تشوهًا عضليًا واقعيًا أو قياسًا سريريًا لنطاق الحركة.')}</p>
+  <div class="v102-line"><label>${t('Leg','الساق')}<select data-v102-side><option value="right">${t('Model right','يمين النموذج')}</option><option value="left">${t('Model left','يسار النموذج')}</option></select></label>
+  <label>${t('Knee flexion','ثني الركبة')} <output data-v102-value>0°</output><input type="range" data-v102-angle min="0" max="90" value="0" step="1"></label></div>
+  <div class="v102-buttons"><button type="button" data-v102-play>▶ ${t('Play','تشغيل')}</button><button type="button" data-v102-restore>${t('Restore original pose','استعادة الوضع الأصلي')}</button></div>
+  <div class="v102-status" data-v102-status role="status">${t('Press Enable motion to begin.','اضغط تفعيل الحركة للبدء.')}</div>
+ </div>`;
+ stage.append(box);
+ const body=box.querySelector('.v102-body'),toggle=box.querySelector('[data-v102-toggle]');
+ const status=box.querySelector('[data-v102-status]'),slider=box.querySelector('[data-v102-angle]');
+ function enable(){
+  const result=setup(box.querySelector('[data-v102-side]').value);
+  if(result.error){status.textContent=result.error;return false}
+  slider.value='0';angle(0);
+  status.textContent=t('Moving ','تحريك ')+result.count+t(' original anatomical meshes.',' مجسمًا تشريحيًا أصليًا.');
+  return true;
+ }
+ toggle.addEventListener('click',()=>{
+  const open=body.hidden;body.hidden=!open;
+  toggle.setAttribute('aria-expanded',String(open));
+  toggle.textContent=open?t('Close motion','إغلاق الحركة'):t('Enable motion','تفعيل الحركة');
+  if(open)enable();else reset();
+ });
+ box.querySelector('[data-v102-side]').addEventListener('change',()=>{if(!body.hidden)enable()});
+ slider.addEventListener('input',()=>{stop();if(!rig)enable();angle(slider.value)});
+ box.querySelector('[data-v102-restore]').addEventListener('click',()=>{reset();status.textContent=t('Original pose restored.','تمت استعادة الوضع الأصلي.')});
+ box.querySelector('[data-v102-play]').addEventListener('click',()=>{
+  if(playing){stop();return}
+  if(!rig&&!enable())return;
+  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches){
+   status.textContent=t('Reduced-motion preference active. Use the angle slider.','إعداد تقليل الحركة مفعل. استخدم شريط الزاوية.');return;
+  }
+  playing=true;last=0;dir=1;
+  box.querySelector('[data-v102-play]').textContent=t('❚❚ Pause','❚❚ إيقاف');
+  function tick(now){
+   if(!playing)return;
+   if(!box.isConnected||!root.classList.contains('open')||activeApp()!==rig?.app){reset();return}
+   const dt=last?Math.min((now-last)/1000,.05):0;last=now;
+   let v=Number(slider.value)+dir*dt*28;
+   if(v>=90){v=90;dir=-1}
+   if(v<=0){v=0;dir=1}
+   slider.value=String(v);angle(v);
+   raf=requestAnimationFrame(tick);
+  }
+  raf=requestAnimationFrame(tick);
+ });
+}
+const style=document.createElement('style');style.id='v102-hd-motion-style';
+style.textContent=`
+#v102-hd-motion{position:absolute;z-index:19;left:50%;bottom:47px;transform:translateX(-50%);width:min(390px,calc(100% - 105px));border:1px solid #cce0e4;background:rgba(255,255,255,.97);box-shadow:0 8px 24px #1a53601b;border-radius:11px;padding:10px;color:#235564;box-sizing:border-box}
+#v102-hd-motion .v102-title{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#v102-hd-motion .v102-title small,#v102-hd-motion .v102-title strong{display:block}
+#v102-hd-motion .v102-title small{font-size:8px;color:#198e92;font-weight:900}
+#v102-hd-motion .v102-title strong{font-size:12px;margin-top:3px}
+#v102-hd-motion button{border:1px solid #b8d7dc!important;background:#edf8f9!important;color:#23606a!important;border-radius:7px!important;padding:7px 9px!important;font-size:10px!important;font-weight:700;cursor:pointer}
+#v102-hd-motion .v102-body[hidden]{display:none!important}
+#v102-hd-motion .v102-body p{font-size:10px;line-height:1.5;color:#6b8188}
+#v102-hd-motion .v102-line{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+#v102-hd-motion label{font-size:10px;font-weight:700}
+#v102-hd-motion select,#v102-hd-motion input{display:block;width:100%;box-sizing:border-box;margin-top:5px}
+#v102-hd-motion select{padding:7px;border:1px solid #d5e4e8;border-radius:6px}
+#v102-hd-motion input{accent-color:#15959a}
+#v102-hd-motion .v102-buttons{display:flex;gap:8px;margin-top:10px}
+#v102-hd-motion .v102-status{font-size:9px;color:#557d85;margin-top:9px}
+@media(max-width:720px){#v102-hd-motion{width:calc(100% - 35px);bottom:52px}}
+`;document.head.append(style);
+observer=new MutationObserver(()=>{
+ const root=getRoot();
+ if(rig&&(!root?.classList.contains('open')||activeApp()!==rig.app))reset();
+ if(root?.classList.contains('open')&&!root.querySelector('#v102-hd-motion'))renderControls();
+});
+observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+renderControls();
+window.MYAIMS_4D_FOUNDATION_VERSION='V102';
 })();
