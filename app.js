@@ -15065,3 +15065,82 @@ css.textContent=`
 if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>25)clearInterval(timer)},120)}
 window.MYAIMS_PATIENT_UI_VERSION='V95';
 })();
+
+
+/* ============================================================
+ myAIMS V96 — PATIENT TIMELINE SAFETY & FILTER UX
+ - Prevent stale search/date filters carrying to another patient.
+ - Display an explicit patient-specific export reminder.
+ - Show an accessible count of visible timeline events.
+ Presentation only; no changes to clinical storage.
+ ============================================================ */
+(function(){
+ 'use strict';
+ const workspace=()=>document.getElementById('v31-workspace');
+ const arabic=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+ const tr=(en,ar)=>arabic()?ar:en;
+ let lastPatient=null;
+ function clearOldFilters(){
+  const controls=workspace()?.querySelector('#v92-timeline-controls');
+  if(!controls)return;
+  const clear=controls.querySelector('[data-v93-clear]');
+  if(clear)clear.click();
+  const all=controls.querySelector('[data-v92-filter="all"]');
+  if(all&&all.getAttribute('aria-pressed')!=='true')all.click();
+ }
+ function decorate(){
+  const w=workspace(),controls=w?.querySelector('#v92-timeline-controls');
+  if(!w?.classList.contains('open')||!controls)return;
+  if(!controls.querySelector('[data-v96-privacy]')){
+   const note=document.createElement('p');
+   note.dataset.v96Privacy='';
+   note.className='v96-privacy-note';
+   note.textContent=tr(
+    'Patient information is confidential. Review the selected patient and filters before printing or exporting.',
+    'بيانات المريض سرية. يرجى مراجعة المريض المحدد والفلاتر قبل الطباعة أو التصدير.'
+   );
+   controls.append(note);
+  }
+  const count=controls.querySelector('[data-v93-count]');
+  if(count)count.setAttribute('role','status');
+ }
+ function install(){
+  const open=window.openV31PatientWorkspace;
+  if(typeof open!=='function'||open.__v96)return false;
+  function wrapped(){
+   const pid=String(arguments[0]??'');
+   const changed=lastPatient!==null&&pid!==lastPatient;
+   const result=open.apply(this,arguments);
+   if(changed)clearOldFilters();
+   lastPatient=pid;
+   decorate();
+   return result;
+  }
+  wrapped.__v96=true;
+  window.openV31PatientWorkspace=wrapped;
+  const tab=window.v31Tab;
+  if(typeof tab==='function'&&!tab.__v96){
+   function wrappedTab(){const result=tab.apply(this,arguments);decorate();return result}
+   wrappedTab.__v96=true;
+   window.v31Tab=wrappedTab;
+  }
+  decorate();
+  return true;
+ }
+ const css=document.createElement('style');
+ css.id='v96-timeline-ux-css';
+ css.textContent=`
+ #v92-timeline-controls .v96-privacy-note{font-size:11px;line-height:1.6;color:#6b8290;margin:10px 2px 0;padding-inline-start:9px;border-inline-start:2px solid #c3d9e5}
+ @media(max-width:650px){
+  #v92-timeline-controls .v93-tools .v94-print-button,
+  #v92-timeline-controls .v93-tools .v95-export-button{flex:1 1 145px;min-height:40px}
+  #v92-timeline-controls .v93-tools [data-v93-count]{width:100%;text-align:start;margin:3px 0 0}
+ }
+ `;
+ document.head.append(css);
+ if(!install()){
+  let tries=0;
+  const timer=setInterval(()=>{if(install()||++tries>=25)clearInterval(timer)},120);
+ }
+ window.MYAIMS_PATIENT_UI_VERSION='V96';
+})();
