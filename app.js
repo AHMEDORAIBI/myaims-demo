@@ -14987,3 +14987,81 @@ const css=document.createElement('style');css.id='v94-timeline-print-css';css.te
 if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>25)clearInterval(timer)},120)}
 window.MYAIMS_PATIENT_UI_VERSION='V94';
 })();
+
+
+/* ============================================================
+ myAIMS V95 — FILTERED CLINICAL TIMELINE CSV EXPORT
+ Read-only export of visible events, using existing V92/V93
+ filters. No database changes, no additional dependencies.
+ ============================================================ */
+(function(){
+'use strict';
+const workspace=()=>document.getElementById('v31-workspace');
+const isArabic=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const t=(en,ar)=>isArabic()?ar:en;
+function csvCell(value){
+ let v=String(value??'').replace(/\r\n?/g,'\n');
+ // Prevent spreadsheet programs from treating exported notes as formulas.
+ if(/^[\s\uFEFF]*[=+\-@]/.test(v))v="'"+v;
+ return '"'+v.replace(/"/g,'""')+'"';
+}
+function createButton(){
+ const w=workspace(),controls=w?.querySelector('#v92-timeline-controls');
+ if(!w?.classList.contains('open')||!controls||controls.querySelector('[data-v95-export]'))return;
+ const b=document.createElement('button');b.type='button';
+ b.dataset.v95Export='';
+ b.className='v95-export-button';
+ b.textContent=t('Export filtered CSV','تصدير النتائج CSV');
+ b.setAttribute('aria-label',t('Export visible timeline events as CSV','تصدير أحداث التسلسل الزمني الظاهرة إلى CSV'));
+ (controls.querySelector('.v93-tools')||controls).append(b);
+}
+function exportVisible(){
+ const w=workspace(),timeline=w?.querySelector('#v31-body .v29-timeline');
+ if(!timeline)return;
+ const pid=w.dataset.pid||'unknown';
+ const db=window.state||window.appState||{};
+ const patient=(db.patients||[]).find(p=>String(p.id)===String(pid));
+ const items=[...timeline.querySelectorAll('.v29-time-item')].filter(e=>!e.hidden&&getComputedStyle(e).display!=='none');
+ const header=['Patient ID','Patient Name','Event Type','Date','Title','Notes','Pain Score'];
+ const rows=items.map(item=>{
+  const kind=item.classList.contains('session')?'Session':item.classList.contains('update')?'Clinical Update':'Event';
+  const date=(item.textContent||'').match(/\b20\d\d-\d\d-\d\d\b/)?.[0]||'';
+  const title=(item.querySelector('.v29-time-head h4')?.textContent||'').trim();
+  const notes=(item.querySelector('.v29-time-card p')?.textContent||'').trim();
+  const pain=(item.querySelector('.v29-pain-chip')?.textContent||'').trim();
+  return [pid,patient?.name||'',kind,date,title,notes,pain];
+ });
+ const content='\uFEFF'+[header,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n');
+ const blob=new Blob([content],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement('a');a.href=url;
+ a.download='myAIMS_Clinical_Timeline_'+String(pid).replace(/[^a-zA-Z0-9_-]/g,'_')+'.csv';
+ document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+document.addEventListener('click',event=>{
+ if(!event.target.closest('#v92-timeline-controls [data-v95-export]'))return;
+ event.preventDefault();event.stopPropagation();
+ exportVisible();
+});
+function install(){
+ const fn=window.v31Tab;
+ if(typeof fn!=='function'||fn.__v95)return false;
+ function wrapped(){const result=fn.apply(this,arguments);createButton();return result}
+ wrapped.__v95=true;window.v31Tab=wrapped;
+ const open=window.openV31PatientWorkspace;
+ if(typeof open==='function'&&!open.__v95){
+  function wrappedOpen(){const result=open.apply(this,arguments);createButton();return result}
+  wrappedOpen.__v95=true;window.openV31PatientWorkspace=wrappedOpen;
+ }
+ createButton();return true;
+}
+const css=document.createElement('style');css.id='v95-timeline-csv-css';
+css.textContent=`
+#v92-timeline-controls .v95-export-button{border:1px solid #c5e1da!important;border-radius:9px!important;background:#e8f7f2!important;color:#16775f!important;font-size:11px!important;font-weight:800!important;padding:9px 13px!important;cursor:pointer}
+#v92-timeline-controls .v95-export-button:hover{background:#d6f0e7!important}
+#v92-timeline-controls .v95-export-button:focus-visible{outline:2px solid #2b9982;outline-offset:2px}
+`;document.head.append(css);
+if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>25)clearInterval(timer)},120)}
+window.MYAIMS_PATIENT_UI_VERSION='V95';
+})();
