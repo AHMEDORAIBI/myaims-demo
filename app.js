@@ -13706,17 +13706,18 @@ function go(key,pid){
    el?.querySelector(".v81-legacy")?.scrollIntoView({behavior:"smooth",block:"nearest"});
    return;
  }
- if(key==="body"){
-   const a=d.ap.find(a=>String(a.id))||null;
-   if(typeof window.openV55ClinicalLauncher==="function"){
-     window.openV55ClinicalLauncher(d.p,a);return;
+ if(key==="body"||key==="start"||key==="notes"){
+   // Open an existing appointment through the tested V58 entry point.
+   // Never pass an undefined appointment into the clinical launcher.
+   const a=d.ap.find(a=>a.id&&String(a.date||"")>=new Date().toISOString().slice(0,10))||d.ap.find(a=>a.id);
+   if(a&&typeof window.openV24ClinicalNote==="function"){
+     window.openV24ClinicalNote(a.id);return;
    }
-   if(typeof window.v31Tab==="function")window.v31Tab(pid,"sessions");
-   return;
- }
- if(key==="start"||key==="notes"){
-   const a=d.ap.find(a=>String(a.id))||null;
-   if(a&&typeof window.openV24ClinicalNote==="function"){window.openV24ClinicalNote(a.id);return;}
+   if(key==="body"&&typeof window.openV55ClinicalLauncher==="function"){
+     // A new patient may have no appointment yet; create one first.
+     if(typeof window.openV28AddSession==="function")window.openV28AddSession(pid);
+     return;
+   }
    if(typeof window.openV28AddSession==="function")window.openV28AddSession(pid);
    return;
  }
@@ -13814,4 +13815,60 @@ if(!enhance()){
  const timer=setInterval(()=>{if(enhance()||++count>30)clearInterval(timer)},100);
 }
 window.MYAIMS_PATIENT_UI_VERSION=VERSION;
+})();
+
+
+/* ===========================================================
+ myAIMS V82 — PATIENTS VISUAL POLISH & SAFE NAVIGATION
+ Additive UI only. Patient table and all original event
+ handlers remain in place. No changes to stored data.
+ =========================================================== */
+(function(){
+"use strict";
+const style=document.createElement("style");
+style.id="v82-patients-safe-polish";
+style.textContent=`
+/* Scoped to the patients page only — never touches billing,
+   appointments, clinical modals or the HD anatomy renderer. */
+#page-patients.v82-patients{background:linear-gradient(180deg,#f8fbfd,#f2f7fa);border-radius:18px;padding:15px}
+#page-patients.v82-patients .v82-heading{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:17px 19px;margin-bottom:14px;background:#fff;border:1px solid #e1eaf1;border-radius:15px;box-shadow:0 5px 17px rgba(26,72,100,.035)}
+#page-patients.v82-patients .v82-heading small{display:block;font-size:11px;letter-spacing:.08em;font-weight:850;color:#b18a50}
+#page-patients.v82-patients .v82-heading h2{margin:4px 0 2px;font-size:24px;color:#163e58}
+#page-patients.v82-patients .v82-heading p{margin:0;font-size:12px;color:#8299a8}
+#page-patients.v82-patients .v82-heading .v82-count{display:flex;align-items:center;gap:8px;padding:9px 13px;background:#eef6fb;border-radius:12px;color:#2d6485;font-weight:850;font-size:12px}
+#page-patients.v82-patients .v82-heading .v82-count b{font-size:21px}
+#page-patients.v82-patients .v82-patient-list{background:#fff;border:1px solid #e1eaf1;border-radius:15px;padding:12px;box-shadow:0 5px 17px rgba(26,72,100,.035)}
+#page-patients.v82-patients table{border-collapse:separate;border-spacing:0 7px;width:100%}
+#page-patients.v82-patients table thead th{border:0!important;background:transparent!important;color:#8297a7!important;font-size:11px!important;letter-spacing:.02em;padding:10px 12px!important}
+#page-patients.v82-patients table tbody tr{background:#f9fbfd;transition:background .18s,box-shadow .18s}
+#page-patients.v82-patients table tbody tr:hover{background:#edf6fd;box-shadow:0 4px 14px rgba(26,72,100,.07)}
+#page-patients.v82-patients table tbody td{border-top:1px solid #e6edf3!important;border-bottom:1px solid #e6edf3!important;padding:13px 12px!important;color:#355a70!important;font-size:12px!important}
+#page-patients.v82-patients table tbody td:first-child{border-left:1px solid #e6edf3!important;border-radius:10px 0 0 10px}
+#page-patients.v82-patients table tbody td:last-child{border-right:1px solid #e6edf3!important;border-radius:0 10px 10px 0}
+#page-patients.v82-patients .v82-patient-list input[type="search"],#page-patients.v82-patients .v82-patient-list input[type="text"]{border-radius:10px!important;border:1px solid #dce7ef!important;background:#fbfdff!important;min-height:39px}
+#page-patients.v82-patients .v82-patient-list button{border-radius:9px}
+#page-patients.v82-patients #v31-workspace{box-shadow:none}
+#page-patients.v82-patients #v31-workspace.open~.v82-heading{display:none}
+@media(max-width:700px){#page-patients.v82-patients{padding:7px}#page-patients.v82-patients .v82-heading{padding:12px}#page-patients.v82-patients .v82-heading h2{font-size:19px}#page-patients.v82-patients .v82-heading p{font-size:10px}#page-patients.v82-patients table tbody td{font-size:11px!important;padding:9px 6px!important}}
+`;
+document.head.appendChild(style);
+function init(){
+ const page=document.getElementById("page-patients");
+ if(!page)return;
+ page.classList.add("v82-patients");
+ if(!page.querySelector(".v82-heading")){
+  const heading=document.createElement("div");
+  heading.className="v82-heading";
+  heading.innerHTML=`<div><small>MY AIMS · PATIENT MANAGEMENT</small><h2>Patient Directory</h2><p>Patient records, clinical history and treatment journeys</p></div><div class="v82-count"><b data-v82-count>0</b><span>Patients</span></div>`;
+  page.insertBefore(heading,page.firstChild);
+ }
+ const count=page.querySelector("[data-v82-count]");
+ if(count)count.textContent=(window.state?.patients||window.appState?.patients||[]).length;
+ // Do not reparent the existing patient table: V31 controls visibility
+ // through direct children of #page-patients.
+}
+init();
+const nav=document.querySelector('.nav-item[data-page="patients"]');
+nav?.addEventListener("click",()=>setTimeout(init,0));
+window.MYAIMS_PATIENT_UI_VERSION="V82";
 })();
