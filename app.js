@@ -15962,7 +15962,7 @@ function angle(value){
  if(!rig)return;
  const degrees=Math.max(0,Math.min(90,Number(value)||0));
  // Knee bends backwards (away from anterior camera) in this demonstration.
- rig.pivot.rotation.x=degrees*Math.PI/180;
+ rig.pivot.rotation.x=(document.querySelector('[data-v105-direction]')?.value==='reverse'?-1:1)*degrees*Math.PI/180;
  rig.pivot.updateMatrixWorld(true);
  const l=document.querySelector('[data-v102-value]');if(l)l.textContent=Math.round(degrees)+'°';
 }
@@ -15996,7 +15996,7 @@ function renderControls(){
   if(open)enable();else reset();
  });
  box.querySelector('[data-v102-side]').addEventListener('change',()=>{if(!body.hidden)enable()});
- slider.addEventListener('input',()=>{stop();if(!rig)enable();angle(slider.value)});
+ slider.addEventListener('input',()=>{const requested=slider.value;stop();if(!rig&&!enable())return;slider.value=requested;angle(requested)});
  box.querySelector('[data-v102-restore]').addEventListener('click',()=>{reset();status.textContent=t('Original pose restored.','تمت استعادة الوضع الأصلي.')});
  box.querySelector('[data-v102-play]').addEventListener('click',()=>{
   if(playing){stop();return}
@@ -16229,4 +16229,320 @@ const obs=new MutationObserver(()=>{const b=root()?.querySelector('#v102-hd-moti
 obs.observe(document.body,{subtree:true,childList:true});
 add();
 window.MYAIMS_4D_FOUNDATION_VERSION='V104';
+})();
+
+
+/* ============================================================
+ myAIMS V105 — HD KNEE MOTION DIRECTION & SAFETY
+ Adds reversible flexion direction, visual knee pivot marker,
+ fixes first-drag slider reset in V102, and provides a safe
+ 0-degree check. All edits are reversible and educational only.
+ ============================================================ */
+(function(){
+'use strict';
+const root=()=>document.getElementById('v61-real3d');
+const tr=(en,ar)=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl'?ar:en;
+let marker=null,markerApp=null;
+function app(){const a=window.__MYAIMS_HD_VIEWER;return a?.model?.parent&&a?.renderer?.domElement?.isConnected?a:null}
+function removeMarker(){
+ if(!marker)return;
+ marker.parent?.remove(marker);
+ marker.traverse(o=>{o.geometry?.dispose?.();if(o.material){const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>m.dispose?.())}});
+ marker=null;markerApp=null;
+}
+function markPivot(){
+ removeMarker();
+ const a=app(),box=root()?.querySelector('#v102-hd-motion'),status=box?.querySelector('[data-v105-status]');
+ if(!a){if(status)status.textContent=tr('Anatomy is not ready.','النموذج التشريحي غير جاهز.');return}
+ const T=a.THREE,ts=[];
+ a.model.updateMatrixWorld(true);
+ a.model.traverse(m=>{
+  if(!m.isMesh||!/^tibia(?:\.\d+)?$/i.test(m.name||''))return;
+  const b=new T.Box3().setFromObject(m);
+  if(!b.isEmpty())ts.push({mesh:m,box:b,center:b.getCenter(new T.Vector3())});
+ });
+ ts.sort((x,y)=>x.center.x-y.center.x);
+ if(ts.length<2){if(status)status.textContent=tr('Two tibia meshes are required to locate the knee.','يلزم وجود عظمتَي ظنبوب لتحديد موضع الركبة.');return}
+ const side=box.querySelector('[data-v102-side]')?.value;
+ const chosen=side==='left'?ts[0]:ts[ts.length-1];
+ const height=new T.Box3().setFromObject(a.model).getSize(new T.Vector3()).y;
+ const pivot=new T.Vector3(chosen.center.x,chosen.box.max.y-.025*chosen.box.getSize(new T.Vector3()).y,chosen.center.z);
+ marker=new T.Group();marker.name='V105_KNEE_PIVOT_VISUAL_ONLY';
+ const radius=Math.max(.1,height*.007);
+ const sphere=new T.Mesh(new T.SphereGeometry(radius,12,8),new T.MeshBasicMaterial({color:0x00b6a5,depthTest:false,transparent:true,opacity:.92}));
+ sphere.renderOrder=999;marker.add(sphere);
+ const ring=new T.Mesh(new T.TorusGeometry(radius*2.1,radius*.16,8,40),new T.MeshBasicMaterial({color:0x1b9ac9,depthTest:false,transparent:true,opacity:.9}));
+ ring.renderOrder=999;marker.add(ring);
+ marker.position.copy(pivot);a.scene.add(marker);markerApp=a;
+ if(status)status.textContent=tr('Turquoise marker shows the approximate knee pivot. It is not a validated joint center.','العلامة الفيروزية توضح محور الركبة التقريبي، وليست مركز مفصل معتمدًا.');
+}
+function install(){
+ const box=root()?.querySelector('#v102-hd-motion');
+ if(!box||box.querySelector('[data-v105-direction]'))return;
+ const body=box.querySelector('.v102-body');if(!body)return;
+ const group=document.createElement('div');group.className='v105-row';
+ const label=document.createElement('label');label.textContent=tr('Flexion direction','اتجاه الثني');
+ const select=document.createElement('select');select.dataset.v105Direction='';
+ for(const [v,en,ar] of [['forward','Default','الافتراضي'],['reverse','Reverse','عكس الاتجاه']]){
+  const o=document.createElement('option');o.value=v;o.textContent=tr(en,ar);select.append(o);
+ }
+ label.append(select);group.append(label);
+ const mark=document.createElement('button');mark.type='button';mark.textContent=tr('Show pivot','إظهار محور المفصل');
+ mark.dataset.v105Mark='';
+ mark.addEventListener('click',()=>{if(marker){removeMarker();mark.textContent=tr('Show pivot','إظهار محور المفصل')}else{markPivot();mark.textContent=tr('Hide pivot','إخفاء المحور')}});
+ group.append(mark);
+ const status=document.createElement('div');status.dataset.v105Status='';status.className='v105-status';
+ status.textContent=tr('Direction can be reversed if the preview bends the wrong way.','يمكن عكس اتجاه الثني إذا ظهرت الحركة بعكس الاتجاه المتوقع.');
+ body.append(group,status);
+ const slider=box.querySelector('[data-v102-angle]');
+ select.addEventListener('change',()=>{if(slider)slider.dispatchEvent(new Event('input',{bubbles:true}))});
+ box.querySelector('[data-v102-side]')?.addEventListener('change',()=>{if(marker)markPivot()});
+ box.querySelector('[data-v102-toggle]')?.addEventListener('click',()=>{if(body.hidden){removeMarker();mark.textContent=tr('Show pivot','إظهار محور المفصل')}});
+}
+const style=document.createElement('style');style.id='v105-knee-direction-css';
+style.textContent=`
+#v102-hd-motion .v105-row{display:flex;align-items:end;gap:9px;margin-top:10px}
+#v102-hd-motion .v105-row label{flex:1}
+#v102-hd-motion .v105-row button{flex-shrink:0}
+#v102-hd-motion .v105-status{font-size:9px;line-height:1.6;color:#426d79;margin-top:6px}
+`;document.head.append(style);
+const obs=new MutationObserver(()=>{
+ if(marker&&(!markerApp||app()!==markerApp||!root()?.classList.contains('open')))removeMarker();
+ const b=root()?.querySelector('#v102-hd-motion');
+ if(b&&!b.querySelector('[data-v105-direction]'))install();
+});
+obs.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+install();
+window.MYAIMS_4D_FOUNDATION_VERSION='V105';
+})();
+
+
+/* ============================================================
+ myAIMS V106 — CLICKABLE ANATOMICAL MOTION HOTSPOTS
+ On-model interactive markers on the two detected knees.
+ Click a marker to open native HD knee controls, select side,
+ and focus the selected joint. No fake movement for other joints.
+ ============================================================ */
+(function(){
+'use strict';
+const root=()=>document.getElementById('v61-real3d');
+const tr=(en,ar)=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl'?ar:en;
+let active=null,points=[],overlay=null,frame=0,visible=true,previous=0;
+function getApp(){
+ const a=window.__MYAIMS_HD_VIEWER,r=root();
+ return r?.classList.contains('open')&&a?.model?.parent&&a?.renderer?.domElement?.isConnected?a:null;
+}
+function getKnees(a){
+ const T=a.THREE,arr=[];
+ a.model.updateMatrixWorld(true);
+ a.model.traverse(m=>{
+  if(!m.isMesh||!/^tibia(?:\.\d+)?$/i.test(m.name||''))return;
+  const b=new T.Box3().setFromObject(m);if(b.isEmpty())return;
+  const c=b.getCenter(new T.Vector3());
+  arr.push({x:c.x,point:new T.Vector3(c.x,b.max.y-.025*b.getSize(new T.Vector3()).y,c.z)});
+ });
+ arr.sort((x,y)=>x.x-y.x);
+ if(arr.length<2)return [];
+ return [{side:'left',point:arr[0].point},{side:'right',point:arr[arr.length-1].point}];
+}
+function cleanup(){
+ if(frame)cancelAnimationFrame(frame);frame=0;
+ overlay?.remove();overlay=null;active=null;points=[];previous=0;
+}
+function clickJoint(side){
+ const r=root(),box=r?.querySelector('#v102-hd-motion');
+ if(!box)return;
+ const body=box.querySelector('.v102-body');
+ if(body?.hidden)box.querySelector('[data-v102-toggle]')?.click();
+ const select=box.querySelector('[data-v102-side]');
+ if(select){select.value=side;select.dispatchEvent(new Event('change',{bubbles:true}))}
+ const status=box.querySelector('[data-v106-status]');
+ if(status)status.textContent=tr('Knee selected on the anatomical model. Use the slider or Play.','تم تحديد الركبة من النموذج التشريحي. استخدم شريط الزاوية أو التشغيل.');
+ // Focus is deferred one frame so the native motion rig can initialize.
+ requestAnimationFrame(()=>box.querySelector('[data-v103-focus]')?.click());
+}
+function build(a){
+ const r=root(),stage=r?.querySelector('.v61-stagewrap');
+ if(!stage)return;
+ const knees=getKnees(a);if(knees.length!==2)return;
+ cleanup();active=a;
+ overlay=document.createElement('div');overlay.className='v106-hotspots';
+ overlay.setAttribute('aria-label',tr('Interactive joint motion markers','علامات تحريك المفاصل'));
+ stage.append(overlay);
+ points=knees.map(({side,point})=>{
+  const b=document.createElement('button');b.type='button';b.className='v106-joint-dot';
+  b.dataset.v106Side=side;
+  b.innerHTML='<span class="v106-dot">+</span><span class="v106-tag"></span>';
+  b.querySelector('.v106-tag').textContent=tr(side==='left'?'Left knee':'Right knee',side==='left'?'الركبة اليسرى':'الركبة اليمنى');
+  b.setAttribute('aria-label',tr('Move ','تحريك ')+tr(side==='left'?'left knee':'right knee',side==='left'?'الركبة اليسرى':'الركبة اليمنى'));
+  b.title=tr('Click to move this knee','اضغط لتحريك هذه الركبة');
+  b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();clickJoint(side)});
+  overlay.append(b);return {side,point,button:b};
+ });
+ const toggle=document.createElement('button');toggle.type='button';toggle.className='v106-marker-toggle';
+ toggle.textContent=tr('Hide joint markers','إخفاء علامات المفاصل');
+ toggle.addEventListener('click',()=>{
+  visible=!visible;
+  overlay.querySelectorAll('.v106-joint-dot').forEach(b=>b.style.display=visible?'':'none');
+  toggle.textContent=visible?tr('Hide joint markers','إخفاء علامات المفاصل'):tr('Show joint markers','إظهار علامات المفاصل');
+ });
+ overlay.append(toggle);
+ const box=r.querySelector('#v102-hd-motion');
+ if(box&&!box.querySelector('[data-v106-status]')){
+  const info=document.createElement('div');info.dataset.v106Status='';info.className='v106-status';
+  info.textContent=tr('Click the glowing knee markers on the anatomical body to select a movable joint.','اضغط على علامة الركبة المضيئة في الرسم التشريحي لاختيار المفصل المتحرك.');
+  box.querySelector('.v102-body')?.append(info);
+ }
+ previous=0;
+ function tick(now){
+  frame=requestAnimationFrame(tick);
+  if(!overlay?.isConnected||getApp()!==a){cleanup();return}
+  if(now-previous<33)return;previous=now;
+  const canvas=a.renderer.domElement,canvasRect=canvas.getBoundingClientRect(),layerRect=overlay.getBoundingClientRect();
+  if(!canvasRect.width||!canvasRect.height)return;
+  const T=a.THREE;
+  for(const item of points){
+   const projected=item.point.clone().project(a.camera);
+   const inFront=projected.z>-1&&projected.z<1;
+   const x=canvasRect.left-layerRect.left+(projected.x+1)*canvasRect.width/2;
+   const y=canvasRect.top-layerRect.top+(1-projected.y)*canvasRect.height/2;
+   const inside=x>=0&&x<=layerRect.width&&y>=0&&y<=layerRect.height;
+   item.button.style.display=visible&&inFront&&inside?'flex':'none';
+   item.button.style.left=x+'px';item.button.style.top=y+'px';
+  }
+ }
+ frame=requestAnimationFrame(tick);
+}
+const css=document.createElement('style');css.id='v106-hotspot-css';
+css.textContent=`
+#v61-real3d .v61-stagewrap{position:relative}
+#v61-real3d .v106-hotspots{position:absolute;inset:0;z-index:16;pointer-events:none;overflow:hidden}
+#v61-real3d .v106-joint-dot{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:auto;border:0!important;background:transparent!important;cursor:pointer;white-space:nowrap;padding:8px!important;filter:drop-shadow(0 1px 4px #073d58a8)}
+#v61-real3d .v106-dot{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#0e9baf;color:white;border:2px solid white;box-shadow:0 0 0 5px #0e9baf55;font-size:21px;font-weight:700;line-height:1}
+#v61-real3d .v106-joint-dot:hover .v106-dot,#v61-real3d .v106-joint-dot:focus-visible .v106-dot{background:#d59b20;box-shadow:0 0 0 6px #d59b2060}
+#v61-real3d .v106-tag{font-size:10px;font-weight:800;background:#fffefa;color:#135667;border:1px solid #bcdde0;border-radius:5px;padding:2px 5px}
+#v61-real3d .v106-marker-toggle{position:absolute;top:12px;right:12px;pointer-events:auto;z-index:1;border:1px solid #c6dee2!important;border-radius:7px!important;background:#fffffff0!important;color:#205b68!important;padding:6px 8px!important;font-size:10px!important;font-weight:700;cursor:pointer}
+#v102-hd-motion .v106-status{font-size:10px;color:#217481;line-height:1.5;margin-top:8px}
+@media(max-width:650px){#v61-real3d .v106-tag{font-size:9px}#v61-real3d .v106-dot{width:24px;height:24px}}
+`;document.head.append(css);
+const observer=new MutationObserver(()=>{
+ const a=getApp();
+ if(active&&active!==a)cleanup();
+ if(a&&!active&&root()?.querySelector('.v61-stagewrap'))build(a);
+});
+observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+const a=getApp();if(a)build(a);
+window.MYAIMS_4D_FOUNDATION_VERSION='V106';
+})();
+
+
+/* ============================================================
+ myAIMS V107 — MULTI-JOINT ANATOMY MARKER MAP
+ Adds informative, spatially anchored shoulder/elbow/hip/ankle
+ markers without claiming unimplemented motion. Knee markers
+ remain the only active motion controls (V106).
+ ============================================================ */
+(function(){
+'use strict';
+const root=()=>document.getElementById('v61-real3d');
+const tr=(en,ar)=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl'?ar:en;
+let active=null,layer=null,markers=[],frame=0,last=0;
+function app(){const a=window.__MYAIMS_HD_VIEWER;return root()?.classList.contains('open')&&a?.model?.parent&&a?.renderer?.domElement?.isConnected?a:null}
+function clear(){if(frame)cancelAnimationFrame(frame);frame=0;layer?.remove();layer=null;markers=[];active=null}
+function init(a){
+ const r=root(),stage=r?.querySelector('.v61-stagewrap');if(!stage)return;
+ a.model.updateMatrixWorld(true);
+ const T=a.THREE,items=[];
+ a.model.traverse(m=>{
+  if(!m.isMesh||!m.geometry)return;
+  const name=(m.name||'').toLowerCase();
+  if(!/^(humerus|ulna|radius|femur|talus)(?:\.\d+)?$/.test(name))return;
+  const box=new T.Box3().setFromObject(m);
+  if(box.isEmpty())return;
+  const c=box.getCenter(new T.Vector3());
+  items.push({name:name.split('.')[0],box,c});
+ });
+ const config=[
+  {key:'shoulder',mesh:'humerus',anchor:'top',en:'Shoulder',ar:'الكتف'},
+  {key:'elbow',mesh:'ulna',anchor:'top',en:'Elbow',ar:'المرفق'},
+  {key:'hip',mesh:'femur',anchor:'top',en:'Hip',ar:'الورك'},
+  {key:'ankle',mesh:'talus',anchor:'center',en:'Ankle',ar:'الكاحل'}
+ ];
+ const positions=[];
+ for(const c of config){
+  const matches=items.filter(i=>i.name===c.mesh).sort((x,y)=>x.c.x-y.c.x);
+  if(matches.length<2)continue;
+  for(const [index,side] of [[0,'left'],[matches.length-1,'right']]){
+   const m=matches[index],p=m.c.clone();
+   if(c.anchor==='top')p.y=m.box.max.y-.025*m.box.getSize(new T.Vector3()).y;
+   positions.push({...c,side,point:p});
+  }
+ }
+ if(!positions.length)return;
+ clear();active=a;
+ layer=document.createElement('div');layer.className='v107-layer';stage.append(layer);
+ for(const pos of positions){
+  const b=document.createElement('button');b.type='button';b.className='v107-marker';
+  b.innerHTML='<span class="v107-circle">·</span><span class="v107-label"></span>';
+  const title=tr(pos.en,pos.ar)+' · '+tr(pos.side==='left'?'Left':'Right',pos.side==='left'?'يسار':'يمين');
+  b.querySelector('.v107-label').textContent=title;
+  b.setAttribute('aria-label',title+' — '+tr('motion not yet available','الحركة غير متاحة بعد'));
+  b.title=tr('Anatomical reference point; movement is not yet available','علامة تشريحية إرشادية، الحركة غير متاحة بعد');
+  b.addEventListener('click',()=>{
+   const info=r.querySelector('[data-v107-message]');
+   if(info)info.textContent=title+': '+tr('Location identified. Actual joint movement will require additional rigging. Knee movement is currently available.','تم تحديد الموقع. تحريك المفصل يحتاج إلى تجهيز إضافي. حركة الركبة متاحة حاليًا.');
+   const panel=r.querySelector('#v102-hd-motion');
+   if(panel?.querySelector('.v102-body')?.hidden)panel.querySelector('[data-v102-toggle]')?.click();
+  });
+  layer.append(b);markers.push({button:b,point:pos.point});
+ }
+ const toggle=document.createElement('button');toggle.type='button';toggle.className='v107-toggle';
+ toggle.textContent=tr('Hide other joints','إخفاء بقية المفاصل');
+ let shown=true;
+ toggle.addEventListener('click',()=>{
+  shown=!shown;markers.forEach(m=>m.button.hidden=!shown);
+  toggle.textContent=shown?tr('Hide other joints','إخفاء بقية المفاصل'):tr('Show other joints','إظهار بقية المفاصل');
+ });
+ layer.append(toggle);
+ const panel=r.querySelector('#v102-hd-motion');
+ if(panel&&!panel.querySelector('[data-v107-message]')){
+  const msg=document.createElement('div');msg.dataset.v107Message='';msg.className='v107-message';
+  msg.textContent=tr('Blue + = movable knee. Gray dots = anatomical joint locations, not yet animated.','علامة + الزرقاء للركبة المتحركة. النقاط الرمادية لمواقع مفاصل لم تُفعّل حركتها بعد.');
+  panel.querySelector('.v102-body')?.append(msg);
+ }
+ function tick(now){
+  frame=requestAnimationFrame(tick);
+  if(app()!==a||!layer?.isConnected){clear();return}
+  if(now-last<40)return;last=now;
+  const canvas=a.renderer.domElement,rect=canvas.getBoundingClientRect(),parent=layer.getBoundingClientRect();
+  for(const m of markers){
+   if(m.button.hidden)continue;
+   const p=m.point.clone().project(a.camera);
+   const x=rect.left-parent.left+(p.x+1)*rect.width/2;
+   const y=rect.top-parent.top+(1-p.y)*rect.height/2;
+   m.button.style.display=p.z>-1&&p.z<1&&x>=0&&x<=parent.width&&y>=0&&y<=parent.height?'flex':'none';
+   m.button.style.left=x+'px';m.button.style.top=y+'px';
+  }
+ }
+ frame=requestAnimationFrame(tick);
+}
+const css=document.createElement('style');css.id='v107-joint-map-style';
+css.textContent=`
+#v61-real3d .v107-layer{position:absolute;inset:0;z-index:15;pointer-events:none;overflow:hidden}
+#v61-real3d .v107-marker{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;display:flex;align-items:center;gap:4px;background:transparent!important;border:0!important;cursor:pointer;padding:5px!important}
+#v61-real3d .v107-marker[hidden]{display:none!important}
+#v61-real3d .v107-circle{width:14px;height:14px;display:grid;place-items:center;border-radius:50%;background:#738993;color:white;border:2px solid white;font-size:17px;line-height:8px;box-shadow:0 0 0 3px #73899350}
+#v61-real3d .v107-label{background:#fffffff0;border:1px solid #d6e2e4;color:#4d6770;font-size:9px;font-weight:700;border-radius:4px;padding:2px 4px;white-space:nowrap}
+#v61-real3d .v107-marker:hover .v107-circle{background:#ba8b2c}
+#v61-real3d .v107-toggle{position:absolute;top:42px;right:12px;pointer-events:auto;z-index:1;background:#fffffff0!important;color:#48616b!important;border:1px solid #d3e0e3!important;border-radius:7px!important;padding:6px 8px!important;font-size:10px!important;cursor:pointer}
+#v102-hd-motion .v107-message{font-size:9px;line-height:1.5;color:#587781;margin-top:8px}
+`;document.head.append(css);
+const observer=new MutationObserver(()=>{
+ const a=app();
+ if(active&&a!==active)clear();
+ if(a&&!active&&root()?.querySelector('.v61-stagewrap'))init(a);
+});
+observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+if(app())init(app());
+window.MYAIMS_4D_FOUNDATION_VERSION='V107';
 })();
