@@ -16965,6 +16965,65 @@ function makeUI(){
  });
  panel.querySelector('.v109-actions').append(verifySkin);
 
+ // V114 — measure actual skinned vertex displacement (not just bone rotation).
+ const measure=document.createElement('button');
+ measure.type='button';measure.dataset.v114Measure='';
+ measure.textContent=t('Measure actual mesh motion','قياس حركة المجسم الفعلية');
+ measure.addEventListener('click',()=>{
+  pause();
+  if(!body||!a){setStatus(t('4D body not loaded.','لم يتم تحميل جسم 4D.'));return}
+  const T=a.THREE,skins=[];
+  body.traverse(n=>{if(n.isSkinnedMesh)skins.push(n)});
+  const skin=skins[0],bones=skin?.skeleton?.bones||[];
+  if(!skin||!skin.geometry?.attributes?.position){
+   setStatus(t('No valid skinned geometry detected.','لم يتم العثور على مجسم مرتبط صالح.'));return;
+  }
+  const names=['upperarm.L','forearm.L','thigh.R','shin.R'];
+  const missing=names.filter(name=>!bones.some(b=>b.name===name));
+  if(missing.length){setStatus(t('Missing bones: ','العظام غير الموجودة: ')+missing.join(', '));return}
+  const attr=skin.geometry.attributes.position;
+  const count=attr.count;
+  const indices=Array.from({length:Math.min(100,count)},(_,i)=>Math.floor(i*(count-1)/Math.max(1,Math.min(100,count)-1)));
+  // Sample before and after a controlled pose, preserving all current bone states.
+  const poses=bones.map(b=>b.quaternion.clone());
+  body.updateMatrixWorld(true);skin.skeleton.update();
+  function vertex(index){
+   const p=new T.Vector3().fromBufferAttribute(attr,index);
+   if(typeof skin.applyBoneTransform==='function')return skin.applyBoneTransform(index,p);
+   if(typeof skin.boneTransform==='function')return skin.boneTransform(index,p);
+   throw Error('SkinnedMesh vertex transform API is unavailable');
+  }
+  try{
+   const before=indices.map(i=>vertex(i).clone());
+   const spec=[['upperarm.L','z',1.0],['forearm.L','x',1.25],['thigh.R','x',.7],['shin.R','x',1.1]];
+   for(const [name,axis,angle] of spec){
+    const b=bones.find(x=>x.name===name);
+    b.quaternion.multiply(new T.Quaternion().setFromAxisAngle(
+      new T.Vector3(axis==='x'?1:0,0,axis==='z'?1:0),angle));
+   }
+   body.updateMatrixWorld(true);skin.skeleton.update();
+   const after=indices.map(i=>vertex(i));
+   let moved=0,max=0,sum=0;
+   for(let i=0;i<before.length;i++){
+    const d=before[i].distanceTo(after[i]);if(d>1e-6)moved++;max=Math.max(max,d);sum+=d;
+   }
+   const info=t('Vertex movement: ','حركة نقاط المجسم: ')+moved+'/'+indices.length+
+    ' · '+t('Max displacement: ','أكبر إزاحة: ')+max.toFixed(5)+
+    ' · '+t('Mean: ','المتوسط: ')+(sum/indices.length).toFixed(5);
+   const diag=panel.querySelector('[data-v111-diagnostic]');if(diag)diag.textContent=info;
+   setStatus(moved>0
+     ?t('Skinning responds to the skeleton. The remaining problem is likely rendering, visibility, or camera framing.','المجسم يستجيب للهيكل. يُرجح أن المشكلة المتبقية في العرض أو الرؤية أو زاوية الكاميرا.')
+     :t('No displacement in sampled vertices. More detailed bone-weight analysis is required.','لم تتحرك النقاط المختبرة. يلزم تحليل أوزان ارتباط العظام بمزيد من التفصيل.'));
+  }catch(e){
+   setStatus(t('Mesh test unavailable: ','تعذر اختبار المجسم: ')+e.message);
+  }finally{
+   bones.forEach((b,i)=>b.quaternion.copy(poses[i]));
+   body.updateMatrixWorld(true);skin.skeleton.update();
+  }
+ });
+ panel.querySelector('.v109-actions').append(measure);
+
+
 
 
  panel.querySelectorAll('[data-v109-close]').forEach(b=>b.addEventListener('click',dispose));
@@ -17095,5 +17154,5 @@ function loop(){
  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-window.MYAIMS_4D_FOUNDATION_VERSION='V113';
+window.MYAIMS_4D_FOUNDATION_VERSION='V114';
 })();
