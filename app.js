@@ -14689,3 +14689,96 @@ window.MYAIMS_PATIENT_UI_VERSION="V89";
  }
  window.MYAIMS_PATIENT_UI_VERSION='V91';
 })();
+/* ============================================================
+ myAIMS V92 — CLINICAL TIMELINE PRESENTATION
+ Existing V29 timeline remains authoritative. Presentation,
+ filtering and summary only; no data writes or handler changes.
+ ============================================================ */
+(function(){
+ 'use strict';
+ const root=()=>document.getElementById('v31-workspace');
+ const arabic=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+ const tr=(en,ar)=>arabic()?ar:en;
+ let currentFilter='all';
+ function enhance(){
+  const w=root();if(!w?.classList.contains('open'))return;
+  const timeline=w.querySelector('#v31-body .v29-timeline');
+  if(!timeline)return;
+  const parent=timeline.parentElement;
+  if(!parent||parent.querySelector('#v92-timeline-controls'))return;
+  const entries=[...timeline.querySelectorAll('.v29-time-item')];
+  const sessions=entries.filter(e=>e.classList.contains('session')).length;
+  const updates=entries.filter(e=>e.classList.contains('update')).length;
+  const controls=document.createElement('section');
+  controls.id='v92-timeline-controls';
+  const summary=document.createElement('div');summary.className='v92-timeline-summary';
+  [[tr('Total events','إجمالي الأحداث'),entries.length],[tr('Clinical sessions','الجلسات السريرية'),sessions],[tr('Clinical updates','التحديثات السريرية'),updates]].forEach(([label,count])=>{
+   const card=document.createElement('div');const small=document.createElement('small');small.textContent=label;
+   const strong=document.createElement('strong');strong.textContent=String(count);
+   card.append(small,strong);summary.append(card);
+  });
+  const filters=document.createElement('div');filters.className='v92-timeline-filters';
+  [['all',tr('All activity','جميع الأنشطة')],['session',tr('Sessions','الجلسات')],['update',tr('Updates','التحديثات')]].forEach(([key,label])=>{
+   const btn=document.createElement('button');btn.type='button';btn.dataset.v92Filter=key;btn.textContent=label;
+   btn.setAttribute('aria-pressed',String(currentFilter===key));
+   btn.addEventListener('click',()=>{
+    currentFilter=key;
+    filters.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v92Filter===key)));
+    entries.forEach(entry=>{entry.hidden=key!=='all'&&!entry.classList.contains(key)});
+    empty.hidden=entries.some(entry=>!entry.hidden);
+   });
+   filters.append(btn);
+  });
+  controls.append(summary,filters);
+  timeline.insertAdjacentElement('beforebegin',controls);
+  const empty=document.createElement('p');empty.className='v92-filter-empty';
+  empty.textContent=tr('No records in this category.','لا توجد سجلات في هذا التصنيف.');
+  empty.hidden=true;timeline.insertAdjacentElement('afterend',empty);
+  entries.forEach(entry=>{entry.hidden=currentFilter!=='all'&&!entry.classList.contains(currentFilter)});
+  empty.hidden=entries.some(entry=>!entry.hidden);
+ }
+ function install(){
+  const tab=window.v31Tab;
+  if(typeof tab!=='function'||tab.__v92)return false;
+  function wrapped(){const result=tab.apply(this,arguments);enhance();return result}
+  wrapped.__v92=true;window.v31Tab=wrapped;
+  const open=window.openV31PatientWorkspace;
+  if(typeof open==='function'&&!open.__v92){
+   function wrappedOpen(){const result=open.apply(this,arguments);enhance();return result}
+   wrappedOpen.__v92=true;window.openV31PatientWorkspace=wrappedOpen;
+  }
+  enhance();return true;
+ }
+ const style=document.createElement('style');style.id='v92-timeline-style';style.textContent=`
+ #v31-workspace #v31-body .v29-timeline-top{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 15px!important}
+ #v31-workspace #v31-body .v29-timeline-top small{font-size:11px!important;letter-spacing:.07em!important;color:#a47d4b!important}
+ #v31-workspace #v31-body .v29-timeline-top h3{font-size:21px!important;color:#1c4b67!important;margin:5px 0!important}
+ #v31-workspace #v31-body .v29-timeline-top button{font-size:12px!important;padding:11px 15px!important;border-radius:10px!important}
+ #v92-timeline-controls{margin-bottom:18px}
+ #v92-timeline-controls .v92-timeline-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+ #v92-timeline-controls .v92-timeline-summary>div{background:#fff;border:1px solid #e0eaf2;border-radius:13px;padding:14px 16px;box-shadow:0 4px 14px rgba(24,64,91,.035)}
+ #v92-timeline-controls .v92-timeline-summary small{display:block;font-size:11px;color:#8198a9}
+ #v92-timeline-controls .v92-timeline-summary strong{display:block;font-size:23px;color:#245c7d;margin-top:5px}
+ #v92-timeline-controls .v92-timeline-filters{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
+ #v92-timeline-controls .v92-timeline-filters button{border:1px solid #dce8f0!important;border-radius:20px!important;padding:8px 14px!important;background:#fff!important;color:#648197!important;font-size:12px!important;font-weight:750!important;cursor:pointer}
+ #v92-timeline-controls .v92-timeline-filters button[aria-pressed="true"]{background:#e5f1ff!important;border-color:#b9d8f5!important;color:#205fae!important}
+ #v31-workspace #v31-body .v29-timeline{padding-inline-start:30px!important;padding-left:30px!important}
+ #v31-workspace #v31-body .v29-timeline:before{left:10px!important;background:#cbdde9!important}
+ #v31-workspace #v31-body .v29-time-item{margin-bottom:13px!important}
+ #v31-workspace #v31-body .v29-time-item[hidden]{display:none!important}
+ #v31-workspace #v31-body .v29-time-dot{left:-24px!important;width:11px!important;height:11px!important;top:19px!important}
+ #v31-workspace #v31-body .v29-time-card{border:1px solid #e0eaf2!important;border-radius:14px!important;padding:17px 19px!important;box-shadow:0 5px 18px rgba(24,64,91,.04)!important}
+ #v31-workspace #v31-body .v29-time-head small{font-size:10px!important;color:#9a7c55!important}
+ #v31-workspace #v31-body .v29-time-head h4{font-size:16px!important;color:#1e4d67!important;margin:5px 0!important}
+ #v31-workspace #v31-body .v29-time-head>span{font-size:11px!important;color:#8da2b0!important}
+ #v31-workspace #v31-body .v29-time-card p{font-size:12px!important;line-height:1.75!important;color:#607c8e!important}
+ #v31-workspace #v31-body .v29-pain-chip{font-size:11px!important;padding:5px 10px!important}
+ #v31-workspace #v31-body .v29-time-actions{gap:8px!important;margin-top:12px!important}
+ #v31-workspace #v31-body .v29-time-actions button{font-size:11px!important;padding:8px 12px!important;border-radius:9px!important}
+ #v31-workspace #v31-body .v92-filter-empty{padding:20px;color:#839aab;text-align:center;font-size:12px}
+ #v31-workspace #v31-body .v92-filter-empty[hidden]{display:none!important}
+ @media(max-width:650px){#v92-timeline-controls .v92-timeline-summary>div{padding:10px}#v92-timeline-controls .v92-timeline-summary small{font-size:9px}#v92-timeline-controls .v92-timeline-summary strong{font-size:19px}#v31-workspace #v31-body .v29-time-card{padding:12px!important}#v31-workspace #v31-body .v29-time-head{flex-wrap:wrap}#v31-workspace #v31-body .v29-timeline-top h3{font-size:17px!important}}
+ `;document.head.append(style);
+ if(!install()){let n=0;const timer=setInterval(()=>{if(install()||++n>=25)clearInterval(timer)},120)}
+ window.MYAIMS_PATIENT_UI_VERSION='V92';
+})();
