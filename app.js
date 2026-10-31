@@ -16152,3 +16152,81 @@ obs.observe(document.body,{childList:true,subtree:true});
 install();
 window.MYAIMS_4D_FOUNDATION_VERSION='V103';
 })();
+
+
+/* ============================================================
+ myAIMS V104 — HD KNEE MOTION INSPECTION TOOLS
+ Read-only mesh diagnostics and quick angle presets for the
+ existing V102 motion. No asset or patient record modifications.
+ ============================================================ */
+(function(){
+'use strict';
+const root=()=>document.getElementById('v61-real3d');
+const tr=(en,ar)=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl'?ar:en;
+function viewer(){const a=window.__MYAIMS_HD_VIEWER;return a?.model?.parent&&a?.renderer?.domElement?.isConnected?a:null}
+function inspect(){
+ const a=viewer(),status=root()?.querySelector('[data-v104-info]');
+ if(!status)return;
+ if(!a){status.textContent=tr('HD model not loaded yet.','لم يكتمل تحميل النموذج التشريحي.');return}
+ const T=a.THREE;
+ const items=[];
+ a.model.traverse(obj=>{
+  if(!obj.isMesh)return;
+  const n=(obj.name||'').toLowerCase();
+  if(!/^(tibia|fibula|femur|patella)(?:\.\d+)?$/.test(n))return;
+  const box=new T.Box3().setFromObject(obj);
+  if(box.isEmpty())return;
+  const c=box.getCenter(new T.Vector3());
+  items.push({name:obj.name,x:c.x,y:c.y});
+ });
+ const counts={};
+ for(const o of items){const k=o.name.split('.')[0].toLowerCase();counts[k]=(counts[k]||0)+1}
+ status.textContent=tr('Detected anatomical structures: ','التراكيب التشريحية المكتشفة: ')+
+  ['femur','tibia','fibula','patella'].map(k=>k+' '+(counts[k]||0)).join(' · ')+
+  '. '+tr('Motion remains an experimental rigid-body preview.','الحركة لا تزال معاينة تجريبية للأجزاء الصلبة.');
+}
+function add(){
+ const box=root()?.querySelector('#v102-hd-motion');
+ if(!box||box.querySelector('[data-v104-presets]'))return;
+ const body=box.querySelector('.v102-body');if(!body)return;
+ const wrap=document.createElement('div');wrap.className='v104-presets';wrap.dataset.v104Presets='';
+ const title=document.createElement('span');title.textContent=tr('Quick angles','زوايا سريعة');
+ wrap.append(title);
+ [0,30,60,90].forEach(deg=>{
+  const b=document.createElement('button');b.type='button';b.textContent=deg+'°';
+  b.setAttribute('aria-label',tr('Set simulated knee flexion to ','ضبط ثني الركبة الافتراضي إلى ')+deg+'°');
+  b.addEventListener('click',()=>{
+   const slider=box.querySelector('[data-v102-angle]');
+   if(!slider)return;
+   slider.value=String(deg);
+   slider.dispatchEvent(new Event('input',{bubbles:true}));
+   wrap.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+  });
+  wrap.append(b);
+ });
+ const info=document.createElement('div');info.dataset.v104Info='';
+ info.className='v104-info';info.setAttribute('role','status');
+ const scan=document.createElement('button');scan.type='button';scan.dataset.v104Scan='';
+ scan.textContent=tr('Inspect anatomy','فحص التراكيب');
+ scan.addEventListener('click',inspect);
+ body.append(wrap,scan,info);
+ const toggle=box.querySelector('[data-v102-toggle]');
+ toggle?.addEventListener('click',()=>{
+  if(!body.hidden)inspect();
+ });
+ const side=box.querySelector('[data-v102-side]');
+ side?.addEventListener('change',()=>{if(!body.hidden)inspect()});
+}
+const style=document.createElement('style');style.id='v104-inspection-style';
+style.textContent=`
+#v102-hd-motion .v104-presets{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
+#v102-hd-motion .v104-presets>span{font-size:10px;color:#426e7a;font-weight:700;margin-inline-end:3px}
+#v102-hd-motion .v104-presets button[aria-pressed="true"]{background:#177f89!important;color:white!important}
+#v102-hd-motion [data-v104-scan]{margin-top:9px}
+#v102-hd-motion .v104-info{font-size:9px;line-height:1.6;color:#587783;margin-top:7px;overflow-wrap:anywhere}
+`;document.head.append(style);
+const obs=new MutationObserver(()=>{const b=root()?.querySelector('#v102-hd-motion');if(b&&!b.querySelector('[data-v104-presets]'))add()});
+obs.observe(document.body,{subtree:true,childList:true});
+add();
+window.MYAIMS_4D_FOUNDATION_VERSION='V104';
+})();
