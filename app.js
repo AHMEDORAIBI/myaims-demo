@@ -15729,3 +15729,132 @@ observer.observe(document.body,{childList:true,subtree:true});
 build();
 window.MYAIMS_4D_FOUNDATION_VERSION='V100';
 })();
+
+
+/* ============================================================
+ myAIMS V101 — PATIENT-LINKED ROM OBSERVATIONS (DEMO)
+ Explicit patient selection and clinician-entered ROM observations.
+ Stored separately under myaims-v101-rom-demo (localStorage).
+ NOT a clinical chart integration, not an authenticated EHR.
+ Does not modify the original patient/session records.
+ ============================================================ */
+(function(){
+'use strict';
+const STORAGE='myaims-v101-rom-demo';
+const ar=()=>document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';
+const tr=(en,arabic)=>ar()?arabic:en;
+const root=()=>document.getElementById('v97-motion-lab');
+const limit={shoulder:180,elbow:150,knee:150,hip:130};
+function read(){try{const x=JSON.parse(localStorage.getItem(STORAGE)||'[]');return Array.isArray(x)?x:[]}catch{return []}}
+function patients(){try{return (db.patients||[]).filter(p=>p&&p.id)}catch{return []}}
+function el(tag,text,cls){const e=document.createElement(tag);if(text!=null)e.textContent=text;if(cls)e.className=cls;return e}
+function build(){
+ const panel=root();if(!panel||panel.querySelector('[data-v101-records]'))return;
+ const anchor=panel.querySelector('[data-v100-rom]');if(!anchor)return;
+ const section=el('section',null,'v101-records');section.dataset.v101Records='';
+ const header=el('div',null,'v101-head');
+ header.append(el('h4',tr('ROM Observation Log · Demo','سجل ملاحظات نطاق الحركة · تجريبي')));
+ const desc=el('p',tr('Save clinician-entered ROM values for a selected demo patient. Records remain in this browser only and are separate from clinical session notes. Do not enter identifiable real patient data in a public demo.','حفظ قياسات نطاق الحركة المدخلة يدويًا لمريض تجريبي محدد. تُحفظ السجلات في هذا المتصفح فقط وبشكل منفصل عن ملاحظات الجلسات. لا تدخل بيانات مرضى حقيقيين في نسخة تجريبية عامة.'),'v101-note');
+ const grid=el('div',null,'v101-grid');
+ function field(title,input){const label=el('label',title);label.append(input);grid.append(label);return input}
+ const patient=field(tr('Demo patient','المريض التجريبي'),document.createElement('select'));
+ patient.dataset.v101Patient='';
+ patient.append(new Option(tr('Select patient','اختر المريض'),''));
+ patients().forEach(p=>patient.append(new Option(String(p.name||p.id)+' · '+p.id,String(p.id))));
+ const joint=field(tr('Joint','المفصل'),document.createElement('select'));
+ joint.dataset.v101Joint='';
+ for(const [key,en,arabic] of [['shoulder','Shoulder','الكتف'],['elbow','Elbow','المرفق'],['knee','Knee','الركبة'],['hip','Hip','الورك']]){
+  joint.append(new Option(tr(en,arabic),key));
+ }
+ const side=field(tr('Side','الجانب'),document.createElement('select'));
+ side.dataset.v101Side='';side.append(new Option(tr('Right','يمين'),'right'),new Option(tr('Left','يسار'),'left'));
+ const date=field(tr('Measurement date','تاريخ القياس'),document.createElement('input'));
+ date.type='date';date.dataset.v101Date='';date.value=new Date().toLocaleDateString('en-CA');
+ const angle=field(tr('Measured ROM (°)','نطاق الحركة المقاس (°)'),document.createElement('input'));
+ angle.type='number';angle.min='0';angle.max='180';angle.step='0.1';angle.placeholder='0–180';angle.dataset.v101Angle='';
+ const note=field(tr('Measurement context (optional)','ملاحظات القياس (اختياري)'),document.createElement('input'));
+ note.type='text';note.maxLength=160;note.placeholder=tr('e.g. active ROM','مثال: نطاق الحركة النشط');
+ const actions=el('div',null,'v101-actions');
+ const save=el('button',tr('Save demo observation','حفظ القياس التجريبي'));save.type='button';save.dataset.v101Save='';
+ const remove=el('button',tr('Delete selected observation','حذف القياس المحدد'));remove.type='button';remove.dataset.v101Delete='';remove.disabled=true;
+ actions.append(save,remove);
+ const status=el('p','', 'v101-status');status.setAttribute('role','status');
+ const list=el('div',null,'v101-list');
+ const heading=el('h5',tr('Saved observations and visit-to-visit change','القياسات المحفوظة والتغير بين الزيارات'));
+ section.append(header,desc,grid,actions,status,heading,list);
+ anchor.insertAdjacentElement('afterend',section);
+ let selected=null;
+ const safe=(v)=>String(v??'');
+ function render(){
+  list.replaceChildren();selected=null;remove.disabled=true;
+  const pid=patient.value;
+  if(!pid){list.append(el('p',tr('Select a patient to view their observations.','اختر المريض لعرض قياساته.')));return}
+  const rows=read().filter(r=>r.patientId===pid).sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt.localeCompare(b.createdAt));
+  if(!rows.length){list.append(el('p',tr('No ROM observations saved for this patient.','لا توجد قياسات محفوظة لهذا المريض.')));return}
+  const last={};
+  rows.forEach(r=>{
+   const key=r.joint+'|'+r.side;
+   const previous=last[key];last[key]=r;
+   const item=el('button',null,'v101-item');item.type='button';
+   const title=el('strong',r.date+' · '+r.joint+' / '+r.side+' · '+r.angle+'°');
+   const detail=el('span',previous?tr('Change from previous: ','التغير عن السابق: ')+((r.angle-previous.angle)>0?'+':'')+(r.angle-previous.angle).toFixed(1)+'°':tr('First recorded observation','أول قياس مسجل'));
+   item.append(title,detail);
+   if(r.note)item.append(el('small',r.note));
+   item.addEventListener('click',()=>{
+    selected=r.id;remove.disabled=false;
+    list.querySelectorAll('.v101-item').forEach(x=>x.classList.remove('selected'));
+    item.classList.add('selected');
+   });
+   list.append(item);
+  });
+ }
+ save.addEventListener('click',()=>{
+  const pid=patient.value,d=date.value,v=angle.value.trim(),n=Number(v),max=limit[joint.value];
+  if(!patients().some(p=>String(p.id)===pid)){status.textContent=tr('Choose a valid demo patient.','اختر مريضًا تجريبيًا صحيحًا.');return}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||Number.isNaN(Date.parse(d+'T12:00:00'))){
+   status.textContent=tr('Enter a valid measurement date.','أدخل تاريخ قياس صحيحًا.');return;
+  }
+  if(v===''||!Number.isFinite(n)||n<0||n>max){
+   status.textContent=tr('Enter a measured angle from 0 to ','أدخل زاوية مقاسة من 0 إلى ')+max+'°';return;
+  }
+  const records=read();
+  if(records.length>=1000){status.textContent=tr('Demo storage limit reached.','تم بلوغ حد التخزين التجريبي.');return}
+  const record={id:'rom-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),patientId:pid,
+   joint:joint.value,side:side.value,date:d,angle:Number(n.toFixed(1)),
+   note:note.value.trim().slice(0,160),createdAt:new Date().toISOString()};
+  try{localStorage.setItem(STORAGE,JSON.stringify([...records,record]));status.textContent=tr('Saved locally in demo ROM log only.','تم الحفظ محليًا في سجل ROM التجريبي فقط.');angle.value='';note.value='';render()}
+  catch(e){status.textContent=tr('Local storage unavailable. Observation not saved.','التخزين المحلي غير متاح. لم يتم حفظ القياس.')}
+ });
+ remove.addEventListener('click',()=>{
+  if(!selected||!patient.value)return;
+  if(!window.confirm(tr('Delete this demo ROM observation?','هل تريد حذف قياس نطاق الحركة التجريبي؟')))return;
+  try{
+   localStorage.setItem(STORAGE,JSON.stringify(read().filter(r=>!(r.id===selected&&r.patientId===patient.value))));
+   status.textContent=tr('Demo observation deleted.','تم حذف القياس التجريبي.');render();
+  }catch(e){status.textContent=tr('Could not delete observation.','تعذر حذف القياس.')}
+ });
+ patient.addEventListener('change',()=>{status.textContent='';render()});
+ render();
+}
+const style=document.createElement('style');style.id='v101-rom-log-css';style.textContent=`
+#v97-motion-lab .v101-records{margin-top:12px;padding:13px;border:1px solid #cddfe5;border-radius:11px;background:#fff}
+#v97-motion-lab .v101-head h4{margin:0;font-size:14px;color:#1f6174}
+#v97-motion-lab .v101-note{font-size:11px;line-height:1.6;color:#637e8b;background:#f4f8fa;padding:9px;border-radius:8px}
+#v97-motion-lab .v101-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#v97-motion-lab .v101-grid input{box-sizing:border-box;display:block;width:100%;padding:9px;margin-top:5px;border:1px solid #cbdfe5;border-radius:8px}
+#v97-motion-lab .v101-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+#v97-motion-lab .v101-actions button:disabled{opacity:.5;cursor:not-allowed}
+#v97-motion-lab .v101-status{font-size:11px;color:#2c7782;min-height:12px}
+#v97-motion-lab .v101-records h5{font-size:12px;margin:14px 0 8px}
+#v97-motion-lab .v101-list{display:grid;gap:7px;max-height:240px;overflow:auto}
+#v97-motion-lab .v101-item{display:flex;flex-direction:column;text-align:start;gap:3px;background:#f7fbfc;border:1px solid #dbe9ed;padding:9px}
+#v97-motion-lab .v101-item.selected{border-color:#198b99;background:#e9f8f8}
+#v97-motion-lab .v101-item strong{font-size:11px}
+#v97-motion-lab .v101-item span,#v97-motion-lab .v101-item small{font-size:10px;color:#66818c}
+@media(max-width:480px){#v97-motion-lab .v101-grid{grid-template-columns:1fr}}
+`;document.head.append(style);
+const observer=new MutationObserver(()=>{if(root()&&!root().querySelector('[data-v101-records]'))build()});
+observer.observe(document.body,{subtree:true,childList:true});
+build();
+window.MYAIMS_4D_FOUNDATION_VERSION='V101';
+})();
