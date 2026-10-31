@@ -16782,19 +16782,26 @@ function setStatus(message){const e=panel?.querySelector('[data-v109-status]');i
 function pause(){play=false;if(animation)cancelAnimationFrame(animation);animation=0;last=0;const b=panel?.querySelector('[data-v109-play]');if(b)b.textContent=t('▶ Animate','▶ تشغيل الحركة')}
 function angle(value){
  if(!selected||!body)return;
- const bone=body.getObjectByName(selected.bone);
- if(!bone)return;
+ const skinned=[];body.traverse(n=>{if(n.isSkinnedMesh)skinned.push(n)});
+ const bone=skinned.map(n=>n.skeleton?.bones?.find(b=>b.name===selected.bone)).find(Boolean)||body.getObjectByName(selected.bone);
+ if(!bone||!bone.isBone){setStatus(t('Bone not found in the active skeleton: ','العظمة غير موجودة في الهيكل: ')+selected.bone);return}
+ if(!bone.userData.v109Rest)bone.userData.v109Rest=bone.quaternion.clone();
  const deg=Math.max(0,Math.min(selected.max,Number(value)||0));
  const direction=selected.id.endsWith('.R')?-1:1;
- const axis=selected.axis;
+ // Apply motion around the local joint axis, preserving imported bind pose.
+ const ax=selected.axis;
+ const axis=new a.THREE.Vector3(ax==='x'?1:0,ax==='y'?1:0,ax==='z'?1:0);
  bone.quaternion.copy(bone.userData.v109Rest);
- const rotation=new a.THREE.Quaternion().setFromAxisAngle(new a.THREE.Vector3(axis==='x'?1:0,axis==='y'?1:0,axis==='z'?1:0),direction*deg*Math.PI/180);
- bone.quaternion.multiply(rotation);
+ bone.quaternion.multiply(new a.THREE.Quaternion().setFromAxisAngle(axis,direction*deg*Math.PI/180));
  bone.updateMatrixWorld(true);
+ skinned.forEach(n=>{n.skeleton?.update();n.frustumCulled=false});
  const out=panel?.querySelector('[data-v109-value]');if(out)out.textContent=Math.round(deg)+'°';
  const range=panel?.querySelector('[data-v109-range]');if(range)range.value=String(deg);
  selected.value=deg;
+ const diagnostic=panel?.querySelector('[data-v111-diagnostic]');
+ if(diagnostic)diagnostic.textContent=t('Bone: ','العظمة: ')+bone.name+' · '+t('Skinned meshes: ','المجسمات المرتبطة: ')+skinned.length+' · '+t('Angle: ','الزاوية: ')+Math.round(deg)+'°';
 }
+
 function select(j){
  pause();
  selected=j;
@@ -16846,6 +16853,33 @@ function makeUI(){
   chooser.append(b);
  });
  panel.querySelector('.v109-joint-name').before(chooser);
+ const diagnostic=document.createElement('div');diagnostic.dataset.v111Diagnostic='';
+ diagnostic.className='v111-diagnostic';diagnostic.setAttribute('role','status');
+ panel.querySelector('[data-v109-status]').before(diagnostic);
+ const test=document.createElement('button');test.type='button';test.dataset.v111Test='';
+ test.textContent=t('Test arm & leg movement','اختبار حركة اليد والرجل');
+ test.addEventListener('click',()=>{
+  resetPose();
+  const poses=[['upperarm.L','z',65],['forearm.L','x',95],['thigh.R','x',50],['shin.R','x',85]];
+  const T=a?.THREE;
+  let count=0;
+  if(!body||!T)return;
+  body.traverse(b=>{
+   if(!b.isBone)return;
+   const pose=poses.find(p=>p[0]===b.name);
+   if(!pose)return;
+   if(!b.userData.v109Rest)b.userData.v109Rest=b.quaternion.clone();
+   b.quaternion.copy(b.userData.v109Rest);
+   const axis=new T.Vector3(pose[1]==='x'?1:0,0,pose[1]==='z'?1:0);
+   b.quaternion.multiply(new T.Quaternion().setFromAxisAngle(axis,pose[2]*Math.PI/180));
+   b.updateMatrixWorld(true);count++;
+  });
+  body.traverse(n=>{if(n.isSkinnedMesh){n.skeleton?.update();n.frustumCulled=false}});
+  diagnostic.textContent=t('Pose test: ','اختبار الوضعية: ')+count+t(' of 4 bones rotated.',' من 4 عظام تم تدويرها.');
+  setStatus(t('Look for raised arm and bent leg. Press Reset pose to restore.','راقب ارتفاع الذراع وثني الرجل، ثم اضغط إعادة الوضع لاستعادته.'));
+ });
+ panel.querySelector('.v109-actions').append(test);
+
  panel.querySelectorAll('[data-v109-close]').forEach(b=>b.addEventListener('click',dispose));
  panel.querySelector('[data-v109-range]').addEventListener('input',e=>{pause();angle(e.target.value)});
  panel.querySelector('[data-v109-reset]').addEventListener('click',resetPose);
@@ -16930,7 +16964,8 @@ function project(){
  if(!rect.width||!rect.height)return;
  for(const j of joints){
   const bone=body.getObjectByName(j.bone),button=overlay.querySelector('[data-v109-joint="'+j.id+'"]');
-  if(!bone||!button)continue;
+  if(!button)continue;
+  if(!bone){button.hidden=true;continue;}
   const p=bone.getWorldPosition(new a.THREE.Vector3()).project(a.camera);
   const x=rect.left-parent.left+(p.x+1)*rect.width*.5;
   const y=rect.top-parent.top+(1-p.y)*rect.height*.5;
@@ -16959,6 +16994,8 @@ css.textContent=`
 #v109-rig-panel .v110-joint-chooser button{font-size:9px!important;padding:5px!important}
 #v109-rig-markers .v109-hotspot{overflow:visible!important}
 #v109-rig-markers .v109-hotspot small{position:absolute;top:37px;left:50%;transform:translateX(-50%);background:#ffffffed;color:#086678;border:1px solid #a9d5dd;border-radius:4px;padding:2px 4px;white-space:nowrap;font-size:9px;pointer-events:none}
+#v109-rig-panel .v111-diagnostic{font-size:10px;color:#136b75;line-height:1.5;margin-top:7px}
+#v109-rig-panel [data-v111-test]{font-weight:800!important;background:#d4efed!important}
 `;document.head.append(css);
 const observer=new MutationObserver(()=>{
  if(body&&(!current()||current()!==a)){dispose();return}
@@ -16971,5 +17008,5 @@ function loop(){
  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-window.MYAIMS_4D_FOUNDATION_VERSION='V110';
+window.MYAIMS_4D_FOUNDATION_VERSION='V111';
 })();
