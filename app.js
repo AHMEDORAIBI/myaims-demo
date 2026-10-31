@@ -16880,6 +16880,48 @@ function makeUI(){
  });
  panel.querySelector('.v109-actions').append(test);
 
+ // V112: independent, deterministic skeletal test with visible before/after pose diagnostics.
+ const verify=document.createElement('button');
+ verify.type='button';verify.dataset.v112Verify='';
+ verify.textContent=t('Verify 4D skeleton','فحص حركة هيكل 4D');
+ verify.addEventListener('click',()=>{
+  pause();
+  if(!body||!a){setStatus(t('4D model is not loaded.','لم يُحمّل نموذج 4D.'));return}
+  const T=a.THREE;
+  const skinned=[];
+  body.traverse(n=>{if(n.isSkinnedMesh)skinned.push(n)});
+  const skeleton=skinned[0]?.skeleton;
+  if(!skeleton){setStatus(t('No skinned skeleton detected.','لم يُعثر على هيكل تحريك مرتبط بالمجسم.'));return}
+  const names=['upperarm.L','forearm.L','thigh.R','shin.R'];
+  const matches=names.map(n=>skeleton.bones.find(b=>b.name===n)).filter(Boolean);
+  if(matches.length!==4){
+   setStatus(t('Missing bones: ','عظام غير موجودة: ')+names.filter(n=>!matches.some(b=>b.name===n)).join(', '));return;
+  }
+  // Reset then apply unmistakably large test pose using native bone quaternions.
+  body.traverse(n=>{if(n.isBone&&n.userData.v109Rest)n.quaternion.copy(n.userData.v109Rest)});
+  const before=matches.map(b=>b.getWorldQuaternion(new T.Quaternion()).clone());
+  const poses=[['upperarm.L',new T.Vector3(0,0,1),1.15],
+               ['forearm.L',new T.Vector3(1,0,0),1.55],
+               ['thigh.R',new T.Vector3(1,0,0),.85],
+               ['shin.R',new T.Vector3(1,0,0),1.4]];
+  for(const [name,axis,rad] of poses){
+   const b=skeleton.bones.find(x=>x.name===name);
+   b.quaternion.copy(b.userData.v109Rest||b.quaternion);
+   b.quaternion.multiply(new T.Quaternion().setFromAxisAngle(axis,rad));
+  }
+  body.updateMatrixWorld(true);
+  skeleton.update();
+  skinned.forEach(n=>{n.frustumCulled=false;n.updateMatrixWorld(true)});
+  const changes=matches.map((b,i)=>Math.round(before[i].angleTo(b.getWorldQuaternion(new T.Quaternion()))*180/Math.PI));
+  const diag=panel.querySelector('[data-v111-diagnostic]');
+  if(diag)diag.textContent=t('Rig test · ','فحص الهيكل · ')+
+   t('Skinned meshes ','مجسمات مرتبطة ')+skinned.length+' · '+
+   matches.map((b,i)=>b.name+': '+changes[i]+'°').join(' · ');
+  setStatus(t('Test pose applied. The limb should visibly bend. If the values change but the body stays still, send a screenshot of the diagnostic line.','تم تطبيق وضعية الاختبار. يفترض أن تتحرك الأطراف. إذا تغيرت الزوايا وبقي الجسم ثابتًا، أرسل صورة للسطر التشخيصي.'));
+ });
+ panel.querySelector('.v109-actions').append(verify);
+
+
  panel.querySelectorAll('[data-v109-close]').forEach(b=>b.addEventListener('click',dispose));
  panel.querySelector('[data-v109-range]').addEventListener('input',e=>{pause();angle(e.target.value)});
  panel.querySelector('[data-v109-reset]').addEventListener('click',resetPose);
@@ -17008,5 +17050,5 @@ function loop(){
  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-window.MYAIMS_4D_FOUNDATION_VERSION='V111';
+window.MYAIMS_4D_FOUNDATION_VERSION='V112';
 })();
