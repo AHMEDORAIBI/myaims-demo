@@ -15465,3 +15465,138 @@ obs.observe(document.body,{childList:true,subtree:true});
 enhance();
 window.MYAIMS_4D_FOUNDATION_VERSION='V98';
 })();
+
+
+/* =============================================================
+ myAIMS V99 — GUIDED REHABILITATION MOTION SEQUENCES
+ Illustrative preset motion sequences; one joint at a time.
+ Reuses V97 sliders and V98 preview without altering HD anatomy.
+ No patient data is read or written.
+ ============================================================= */
+(function(){
+'use strict';
+const translations={
+ shoulder:['Shoulder mobility','حركة الكتف'],
+ elbow:['Elbow mobility','حركة المرفق'],
+ knee:['Knee mobility','حركة الركبة'],
+ hip:['Hip mobility','حركة الورك']
+};
+const presets={
+ shoulder:{min:0,max:90,reps:3},
+ elbow:{min:10,max:125,reps:3},
+ knee:{min:5,max:90,reps:3},
+ hip:{min:0,max:80,reps:3}
+};
+const arabic=()=>document.documentElement.dir==='rtl'||document.documentElement.lang==='ar';
+const t=(en,ar)=>arabic()?ar:en;
+const lab=()=>document.getElementById('v97-motion-lab');
+let sequence=null;
+function stop(){
+ if(!sequence)return;
+ if(sequence.frame)cancelAnimationFrame(sequence.frame);
+ const panel=sequence.panel;
+ if(panel?.isConnected){
+  const b=panel.querySelector('[data-v99-run]');
+  if(b)b.textContent=t('Start guided sequence','بدء الحركة الموجهة');
+  const status=panel.querySelector('[data-v99-status]');
+  if(status)status.textContent=t('Ready','جاهز');
+ }
+ sequence=null;
+}
+function setAngle(panel,angle){
+ const slider=panel.querySelector('[data-v97-angle]');
+ if(!slider)return;
+ slider.value=String(Math.round(angle));
+ slider.dispatchEvent(new Event('input',{bubbles:true}));
+}
+function run(){
+ const panel=lab();if(!panel)return;
+ if(sequence){stop();return}
+ if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches){
+  const status=panel.querySelector('[data-v99-status]');
+  if(status)status.textContent=t('Motion is disabled by your accessibility setting. Adjust the angle manually.','الحركة معطلة وفق إعدادات إمكانية الوصول. يمكن ضبط الزاوية يدويًا.');
+  return;
+ }
+ const joint=panel.querySelector('[data-v99-preset]')?.value||'knee';
+ const cfg=presets[joint],select=panel.querySelector('[data-v97-joint]');
+ if(!cfg||!select)return;
+ // Prevent competing animation loops. V97 play button toggles off when playing.
+ const play=panel.querySelector('[data-v97-play]');
+ if(play&&play.textContent.includes('❚❚'))play.click();
+ select.value=joint;select.dispatchEvent(new Event('change',{bubbles:true}));
+ const slider=panel.querySelector('[data-v97-angle]');
+ slider.min=cfg.min;slider.max=cfg.max;
+ const status=panel.querySelector('[data-v99-status]');
+ const button=panel.querySelector('[data-v99-run]');
+ button.textContent=t('Stop sequence','إيقاف الحركة');
+ const s={panel,joint,frame:0,last:0,elapsed:0,completed:0,angle:cfg.min,forward:true};
+ sequence=s;
+ setAngle(panel,cfg.min);
+ function tick(now){
+  if(sequence!==s)return;
+  if(!panel.isConnected||panel.querySelector('#v97-content')?.hidden){stop();return}
+  const dt=s.last?Math.min((now-s.last)/1000,.05):0;s.last=now;
+  const speed=Number(panel.querySelector('[data-v97-speed]')?.value)||1;
+  const distance=38*dt*speed;
+  s.angle+=s.forward?distance:-distance;
+  if(s.angle>=cfg.max){s.angle=cfg.max;s.forward=false}
+  if(s.angle<=cfg.min&&!s.forward){
+   s.angle=cfg.min;s.forward=true;s.completed++;
+  }
+  setAngle(panel,s.angle);
+  status.textContent=t('Cycle','الدورة')+' '+Math.min(s.completed+1,cfg.reps)+' / '+cfg.reps+
+   ' · '+Math.round(s.angle)+'°';
+  if(s.completed>=cfg.reps){
+   stop();
+   status.textContent=t('Completed '+cfg.reps+' simulated cycles','اكتملت '+cfg.reps+' دورات افتراضية');
+   return;
+  }
+  s.frame=requestAnimationFrame(tick);
+ }
+ s.frame=requestAnimationFrame(tick);
+}
+function install(){
+ const panel=lab();
+ if(!panel||panel.querySelector('[data-v99-presets]'))return;
+ const actions=panel.querySelector('.v97-actions');
+ if(!actions)return;
+ const section=document.createElement('section');
+ section.className='v99-presets';section.dataset.v99Presets='';
+ const title=document.createElement('h4');title.textContent=t('Guided motion presets','حركات موجهة جاهزة');
+ const desc=document.createElement('p');
+ desc.textContent=t('Illustrative range-of-motion exercises only. These are not prescribed exercises or patient measurements.','تمارين توضيحية لنطاق الحركة فقط، وليست وصفة علاجية أو قياسات للمريض.');
+ const controls=document.createElement('div');controls.className='v99-row';
+ const label=document.createElement('label');label.textContent=t('Select movement','اختر الحركة');
+ const select=document.createElement('select');select.dataset.v99Preset='';
+ Object.entries(translations).forEach(([key,names])=>{
+  const o=document.createElement('option');o.value=key;o.textContent=t(names[0],names[1]);
+  select.append(o);
+ });
+ select.value='knee';label.append(select);
+ const button=document.createElement('button');button.type='button';button.dataset.v99Run='';
+ button.textContent=t('Start guided sequence','بدء الحركة الموجهة');
+ const status=document.createElement('span');status.dataset.v99Status='';status.setAttribute('role','status');
+ status.textContent=t('Ready','جاهز');
+ controls.append(label,button,status);
+ section.append(title,desc,controls);
+ actions.insertAdjacentElement('afterend',section);
+ button.addEventListener('click',run);
+ select.addEventListener('change',()=>{if(sequence)stop()});
+ const collapse=panel.querySelector('[data-v97-collapse]');
+ collapse?.addEventListener('click',()=>{if(panel.querySelector('#v97-content')?.hidden)stop()});
+}
+const style=document.createElement('style');style.id='v99-motion-sequences-css';
+style.textContent=`
+#v97-motion-lab .v99-presets{margin-top:13px;padding:13px;border:1px solid #dcebe8;border-radius:10px;background:#f8fcfb}
+#v97-motion-lab .v99-presets h4{margin:0 0 5px;font-size:13px;color:#236879}
+#v97-motion-lab .v99-presets p{font-size:11px;line-height:1.5;color:#69838d;margin:0 0 11px}
+#v97-motion-lab .v99-row{display:flex;align-items:end;flex-wrap:wrap;gap:9px}
+#v97-motion-lab .v99-row label{flex:1 1 170px}
+#v97-motion-lab .v99-row button{min-height:37px}
+#v97-motion-lab [data-v99-status]{flex:1 1 100px;font-size:11px;color:#547883}
+`;document.head.append(style);
+const observer=new MutationObserver(()=>{if(lab()&&!lab().querySelector('[data-v99-presets]'))install()});
+observer.observe(document.body,{childList:true,subtree:true});
+install();
+window.MYAIMS_4D_FOUNDATION_VERSION='V99';
+})();
