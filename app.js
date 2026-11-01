@@ -16999,14 +16999,14 @@ function openV132CalendarDrawer(idx,patient,initial='overview'){
  const shell=document.createElement('div');shell.id='v132-drawer';shell.className='v132-overlay';
  const name=String(patient.name||'');
  const identity=String(patient.id||'');
- const invoices=()=>db.invoices.map((v,i)=>({v,i})).filter(x=>x.v.patient===name);
- const receiptBalance=v=>{allocatePayments();return invBalance(v)};
+ const invoices=()=>db.invoices.map((v,i)=>({v,i})).filter(x=>x.v.patientId?String(x.v.patientId)===identity:x.v.patient===name && (db.patients||[]).filter(p=>p.name===name).length===1);
+ const receiptBalance=v=>{allocatePayments();return Math.max(0,Math.round(invBalance(v)*1000)/1000)};
  const money3=n=>Number(n||0).toFixed(3)+' BHD';
  const notify=(text,kind='ok')=>{const m=shell.querySelector('.v132-notice');if(m){m.textContent=text;m.dataset.kind=kind}};
  const renderPanel=mode=>{
   const area=shell.querySelector('.v132-content');if(!area)return;
   shell.querySelectorAll('[data-v132-tab]').forEach(b=>b.classList.toggle('active',b.dataset.v132Tab===mode));
-  if(mode==='invoice')area.innerHTML=`<h3>Create invoice</h3><p>Linked to ${safe(name)} · ${safe(appt.service||'Treatment')}</p><form id="v132-invoice-form"><label>Service / Description<input name="service" required value="${safe(appt.service||'Rehabilitation Service')}"></label><div class="v132-fields"><label>Total amount (BHD)<input name="amount" type="number" min="0.001" step="0.001" required placeholder="0.000"></label><label>Insurance covered (BHD)<input name="insurance" type="number" min="0" step="0.001" value="0"></label></div><div class="v132-info">The invoice is created only after you press Save. Review VAT classification separately before issuing a tax invoice.</div><button class="v132-save" type="submit">Save invoice</button></form>`;
+  if(mode==='invoice')area.innerHTML=`<h3>Create invoice</h3><p>Linked to ${safe(name)} · ${safe(appt.service||'Treatment')}</p><form id="v132-invoice-form"><label>Service / Description<input name="service" required value="${safe(appt.service||'Rehabilitation Service')}"></label><div class="v132-fields"><label>Total amount (BHD)<input name="amount" type="number" min="0.001" step="0.001" required placeholder="0.000"></label><label>Insurance covered (BHD)<input name="insurance" type="number" min="0" step="0.001" value="0"></label></div><div class="v132-info">Internal invoice entry only. VAT treatment, tax invoice details and insurance eligibility must be reviewed before issuing an official invoice. Any existing invoice for this appointment will be flagged for confirmation.</div><button class="v132-save" type="submit">Save invoice</button></form>`;
   else if(mode==='receipt'){
    const pending=invoices().filter(x=>receiptBalance(x.v)>0.0001);
    area.innerHTML=`<h3>Record payment</h3><p>Select the exact invoice to prevent applying a payment to another balance.</p>${pending.length?`<form id="v132-payment-form"><label>Outstanding invoice<select name="invoice" required>${pending.map(x=>`<option value="${safe(x.v.no)}">${safe(x.v.no)} · ${money3(receiptBalance(x.v))} due</option>`).join('')}</select></label><div class="v132-fields"><label>Payment amount (BHD)<input name="amount" type="number" min="0.001" step="0.001" required></label><label>Method<select name="method"><option>BenefitPay</option><option>Cash</option><option>Bank Transfer</option><option>Card</option></select></label></div><button class="v132-save" type="submit">Save linked receipt</button></form>`:'<div class="v132-empty">No outstanding invoice. Create an invoice first.</div>'}`;
@@ -17015,7 +17015,36 @@ function openV132CalendarDrawer(idx,patient,initial='overview'){
   }else if(mode==='overview'){
    const related=data().filter(x=>x.patient===name);area.innerHTML=`<h3>Appointment overview</h3><div class="v132-summary"><div><small>Selected visit</small><strong>${safe(appt.date)} · ${safe(appt.time)}</strong></div><div><small>Therapist</small><strong>${safe(appt.therapist||'Unassigned')}</strong></div><div><small>Service</small><strong>${safe(appt.service||'Treatment')}</strong></div><div><small>Recorded appointments</small><strong>${related.length}</strong></div></div><div class="v132-info">Clinical records are opened through the existing patient workspace. No clinical information is generated automatically.</div>`;
   }else{
-   area.innerHTML=`<h3>${mode==='assessment'?'Clinical assessment':mode==='notes'?'Clinical notes':'Patient clinical profile'}</h3><p>Open the verified patient workspace in this side panel. Clinical information is saved using the existing clinical tools.</p><button class="v132-save" type="button" data-v132-clinical="${mode}">Open clinical workspace</button><div class="v132-clinical-slot"></div>`;
+   // V136: read-only care journey sourced from the existing clinical records.
+   // Never infer identity from a name or create duplicate medical records.
+   const clinicalState=window.state||window.appState||{};
+   const samePatient=x=>x&&String(x.patientId||'')===identity;
+   const priorVisits=data().filter(x=>String(x.patientId||'')===identity&&String(x.id||'')!==String(appt.id||'')&&String(x.date||'')<=String(appt.date||'')).sort((a,b)=>(String(b.date||'')+String(b.time||'')).localeCompare(String(a.date||'')+String(a.time||''))).slice(0,6);
+   const sessionNotes=(clinicalState.sessionNotes||[]).filter(samePatient).sort((a,b)=>String(b.date||b.createdAt||'').localeCompare(String(a.date||a.createdAt||''))).slice(0,6);
+   const activePlan=(clinicalState.treatmentPlans||[]).filter(x=>samePatient(x)&&x.status!=='Closed').sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0];
+   const planGoals=(clinicalState.treatmentGoals||[]).filter(samePatient);
+   const clinicalUpdates=(clinicalState.clinicalUpdates||[]).filter(samePatient).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0,4);
+   // V137: measured goal progress and recorded pain scores only; no invented clinical outcomes.
+   const allGoals=planGoals.slice().sort((a,b)=>Number(a.order||0)-Number(b.order||0));
+   const goalStats={total:allGoals.length,achieved:allGoals.filter(g=>String(g.status||'').toLowerCase()==='achieved').length};
+   const validScore=n=>n!==''&&n!==null&&n!==undefined&&Number.isFinite(Number(n))&&Number(n)>=0&&Number(n)<=10;
+   const scoredNotes=(clinicalState.sessionNotes||[]).filter(samePatient).filter(n=>validScore(n.painScore)).sort((a,b)=>String(a.date||a.createdAt||'').localeCompare(String(b.date||b.createdAt||'')));
+   const firstScore=scoredNotes[0],lastScore=scoredNotes[scoredNotes.length-1];
+   const goalCards=allGoals.length?allGoals.map(g=>{
+    const measured=g.progress!==''&&g.progress!==null&&g.progress!==undefined&&Number.isFinite(Number(g.progress));
+    const pct=measured?Math.min(100,Math.max(0,Number(g.progress))):null;
+    return `<article class="v137-goal"><div class="v137-goal-top"><strong>${safe(g.title||'Treatment goal')}</strong><span>${safe(g.status||'Active')}</span></div><p>${safe(g.measurement||'No measurement recorded')}</p><div class="v137-progress-track" role="progressbar" aria-label="Recorded goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct===null?0:pct}"><i style="width:${pct===null?0:pct}%"></i></div><small>${pct===null?'Progress not recorded':pct+'% recorded by clinician'}${g.targetDate?' · Target '+safe(g.targetDate):''}</small></article>`
+   }).join(''):'<div class="v132-empty">No treatment goals recorded for this patient. Create a goal in the existing treatment plan.</div>';
+   const comparison=scoredNotes.length>=2?`<div class="v137-comparison"><div><small>First recorded pain score</small><strong>${Number(firstScore.painScore)}/10</strong><span>${safe(firstScore.date||firstScore.createdAt||'')}</span></div><div><small>Latest recorded pain score</small><strong>${Number(lastScore.painScore)}/10</strong><span>${safe(lastScore.date||lastScore.createdAt||'')}</span></div></div>`:scoredNotes.length===1?`<p>One pain score recorded (${Number(firstScore.painScore)}/10). At least two dated assessments are needed for a comparison.</p>`:'<p>No valid pain scores recorded in existing session notes.</p>';
+   const goalReview=`<section class="v137-goals" aria-label="Treatment goal monitoring"><div class="v137-head"><div><small>GOAL MONITORING</small><h4>Treatment goals &amp; clinical progress</h4></div><span>${goalStats.achieved} achieved / ${goalStats.total} recorded</span></div><div class="v137-goal-list">${goalCards}</div><h5>Recorded assessment comparison</h5>${comparison}<p class="v137-disclaimer">Scores and progress are displayed exactly as recorded by the clinician. A change in score alone does not establish clinical improvement or deterioration.</p><div class="v137-links"><button type="button" data-v134-treatment-plan>Manage treatment goals</button><button type="button" data-v134-progress-review>Record progress review</button></div></section>`;
+   const careJourney=`<section class="v136-journey" aria-label="Patient treatment history"><div class="v136-journey-heading"><div><small>CARE CONTINUITY</small><h4>Patient treatment journey</h4></div><span>Existing records only</span></div>
+    <div class="v136-care-stats"><div><small>Previous visits</small><strong>${priorVisits.length}${priorVisits.length===6?'+':''}</strong></div><div><small>Clinical notes</small><strong>${(clinicalState.sessionNotes||[]).filter(samePatient).length}</strong></div><div><small>Active goals</small><strong>${planGoals.length}</strong></div></div>
+    <div class="v136-care-grid"><section><h5>Current treatment plan</h5>${activePlan?`<strong>${safe(activePlan.title||'Treatment plan')}</strong><p>${safe(activePlan.goals||activePlan.comments||'No written goals recorded.')}</p><small>${safe(activePlan.plannedSessions||'—')} planned sessions · ${safe(activePlan.status||'Active')}</small>`:'<p>No active treatment plan found for this patient.</p>'}<button type="button" data-v134-treatment-plan>${activePlan?'Review treatment plan':'Create treatment plan'}</button></section>
+    <section><h5>Previous appointments</h5>${priorVisits.length?`<div class="v136-timeline">${priorVisits.map(v=>`<div><time>${safe(v.date||'—')} · ${safe(v.time||'')}</time><strong>${safe(v.service||'Treatment')}</strong><small>${safe(v.status||'Scheduled')} · ${safe(v.therapist||'—')}</small></div>`).join('')}</div>`:'<p>No earlier appointments linked to this patient ID.</p>'}</section>
+    <section><h5>Recent clinical documentation</h5>${sessionNotes.length?`<div class="v136-timeline">${sessionNotes.map(n=>`<div><time>${safe(n.date||n.createdAt||'Undated')}</time><strong>${safe(n.title||n.type||'Session note')}</strong><small>${safe(n.therapist||n.createdBy||'Recorded clinical note')}</small></div>`).join('')}</div>`:'<p>No clinical session notes recorded.</p>'}</section>
+    <section><h5>Progress follow-up</h5>${clinicalUpdates.length?`<div class="v136-timeline">${clinicalUpdates.map(u=>`<div><time>${safe(u.createdAt||'Undated')}</time><strong>${safe(u.title||u.type||'Clinical update')}</strong></div>`).join('')}</div>`:'<p>No progress updates recorded yet.</p>'}<button type="button" data-v134-progress-review>Review patient progress</button></section></div>
+    <div class="v136-privacy">Counts and history are based on saved records linked by patient ID. This view does not assess treatment outcomes automatically or create clinical entries.</div></section>`;
+   area.innerHTML=`<div class="v134-clinical-heading"><small>CLINICAL CARE · SELECTED APPOINTMENT</small><h3>${mode==='assessment'?'Clinical assessment':mode==='notes'?'Session notes':'Patient clinical profile'}</h3><p>${safe(appt.date)} · ${safe(appt.time)} · ${safe(appt.service||'Treatment')}</p></div><div class="v135-visit-strip"><div><small>SESSION</small><strong>${safe(appt.date)} · ${safe(appt.time)}</strong></div><div><small>THERAPIST</small><strong>${safe(appt.therapist||'Unassigned')}</strong></div><div><small>STATUS</small><strong>${safe(appt.status||'Scheduled')}</strong></div></div><div class="v135-workflow-head"><span>SESSION WORKFLOW</span><small>Complete using the existing clinical record tools</small></div><div class="v135-workflow-steps"><span><b>1</b> Review patient</span><span><b>2</b> Assess session</span><span><b>3</b> Record notes</span><span><b>4</b> Update plan</span></div><div class="v134-clinical-actions">${mode!=='profile'?`<button type="button" data-v134-session-note>✚ ${mode==='assessment'?'Start session assessment':'Open session note'}</button>`:''}<button type="button" data-v132-clinical="${mode}">◉ Patient clinical workspace</button><button type="button" data-v134-treatment-plan>▤ Treatment plan</button><button type="button" data-v134-progress-review>◇ Progress review</button></div>${careJourney}${goalReview}<div class="v135-note-guide"><div><strong>Structured session note guide</strong><small>Use this outline inside the existing clinical form. It is not a saved medical note.</small></div><div class="v135-guide-items"><span>Subjective / Patient report</span><span>Objective findings</span><span>Assessment / Response</span><span>Plan / Next session</span></div><button type="button" data-v135-copy-outline>Copy note outline</button></div><div class="v134-privacy">Clinical forms use the existing medical-record tools. This view does not create a separate, unverified patient record.</div><div class="v132-clinical-slot"></div>`;
   }
  };
  shell.innerHTML=`<div class="v132-shade" data-v132-close></div><aside class="v132-panel" role="dialog" aria-modal="true" aria-label="Appointment workspace"><header><div><small>MY AIMS · CONNECTED WORKFLOW</small><h2>Patient workspace</h2><p>${safe(name)} · ${safe(identity)}</p></div><button type="button" data-v132-close aria-label="Close">✕</button></header><div class="v132-context"><span>${safe(appt.date)} · ${safe(appt.time)}</span><strong>${safe(appt.service||'Treatment')}</strong><small>${safe(appt.therapist||'Unassigned')}</small></div><nav class="v132-tabs">${[['overview','Overview'],['invoice','Invoice'],['receipt','Payment'],['billing','Invoices'],['assessment','Assessment'],['notes','Notes'],['profile','Profile']].map(([k,v])=>`<button type="button" data-v132-tab="${k}">${v}</button>`).join('')}</nav><div class="v132-notice" role="status" aria-live="polite"></div><div class="v132-content"></div><footer>Changes are saved only when you submit a form. Close to return to the calendar.</footer></aside>`;
@@ -17026,6 +17055,28 @@ function openV132CalendarDrawer(idx,patient,initial='overview'){
   if(e.target.closest('[data-v132-close]')){close();return}
   const tab=e.target.closest('[data-v132-tab]');if(tab){renderPanel(tab.dataset.v132Tab);return}
   const print=e.target.closest('[data-v132-print]');if(print){window.printInvoice?.(Number(print.dataset.v132Print));return}
+  if(e.target.closest('[data-v135-copy-outline]')){
+   const outline='Subjective / Patient report:\n\nObjective findings:\n\nAssessment / Response:\n\nPlan / Next session:\n';
+   if(!navigator.clipboard?.writeText){notify('Clipboard unavailable. Use the four headings shown above in your clinical form.','error');return}
+   navigator.clipboard.writeText(outline).then(()=>notify('Structured note headings copied. Paste into the existing clinical form and save there.')).catch(()=>notify('Copy was blocked by the browser. Use the headings shown above.','error'));
+   return;
+  }
+  const sessionNote=e.target.closest('[data-v134-session-note]');
+  if(sessionNote){
+   if(!appt.id){notify('This appointment has no persistent identifier. Save the appointment before creating a linked clinical note.','error');return}
+   if(typeof window.openV24ClinicalNote!=='function'){notify('The session-note tool is unavailable.','error');return}
+   const current=data().find(x=>String(x.id||'')===String(appt.id));
+   if(!current||String(current.patientId||identity)!==identity){notify('The selected appointment no longer matches this patient. Reopen the appointment.','error');return}
+   window.openV24ClinicalNote(appt.id);
+   notify('Session note opened for this appointment. Save using the clinical form.');return;
+  }
+  const treatment=e.target.closest('[data-v134-treatment-plan]');
+  const progress=e.target.closest('[data-v134-progress-review]');
+  if(treatment||progress){
+   const fn=treatment?window.openV28PlanEditor:window.openV30ProgressReview;
+   if(typeof fn!=='function'){notify('This clinical tool is unavailable.','error');return}
+   fn(identity);notify('Clinical editor opened for the selected patient.');return;
+  }
   const clinical=e.target.closest('[data-v132-clinical]');if(clinical){
    if(typeof window.openV31PatientWorkspace!=='function'){notify('Clinical workspace is unavailable.','error');return}
    const tab=clinical.dataset.v132Clinical==='notes'?'sessions':'overview';
@@ -17038,12 +17089,21 @@ function openV132CalendarDrawer(idx,patient,initial='overview'){
   if(e.target.id==='v132-invoice-form'){
    e.preventDefault();const f=new FormData(e.target);const amount=Number(f.get('amount'));const insurance=Number(f.get('insurance')||0);
    if(!Number.isFinite(amount)||amount<=0||!Number.isFinite(insurance)||insurance<0||insurance>amount){notify('Enter a positive amount and insurance coverage between zero and the invoice total.','error');return}
-   const no=nextNo('INV',db.invoices,'no');db.invoices.push({no,patient:name,date:today(),service:String(f.get('service')||'Rehabilitation Service'),amount,insuranceCovered:insurance,paid:0});save();render();renderPanel('billing');notify('Invoice '+no+' saved and linked to the patient.');return;
+   const service=String(f.get('service')||'Rehabilitation Service').trim();
+   if(!service){notify('Service description is required.','error');return}
+   const rounded=Math.round(amount*1000)/1000,covered=Math.round(insurance*1000)/1000;
+   if(Math.abs(amount-rounded)>0.0000001||Math.abs(insurance-covered)>0.0000001){notify('Use a maximum of three decimal places for BHD amounts.','error');return}
+   const prior=invoices().filter(x=>String(x.v.appointmentId||'')===String(appt.id||'')&&appt.id);
+   if(prior.length&&!confirm('This appointment already has '+prior.length+' linked invoice(s). Create another invoice?'))return;
+   const no=nextNo('INV',db.invoices,'no');db.invoices.push({no,patient:name,patientId:identity,appointmentId:appt.id||'',date:today(),service,amount:rounded,insuranceCovered:covered,paid:0});save();render();renderPanel('billing');notify('Invoice '+no+' saved for the selected patient and appointment. Review VAT before issuing a tax invoice.');return;
   }
   if(e.target.id==='v132-payment-form'){
-   e.preventDefault();const f=new FormData(e.target);const inv=db.invoices.find(x=>x.no===f.get('invoice')&&x.patient===name);const amount=Number(f.get('amount'));
+   e.preventDefault();const f=new FormData(e.target);const inv=invoices().map(x=>x.v).find(x=>x.no===f.get('invoice'));const amount=Number(f.get('amount'));
    if(!inv||!Number.isFinite(amount)||amount<=0||amount>receiptBalance(inv)+0.00001){notify('Select a valid invoice and enter an amount not exceeding its outstanding balance.','error');return}
-   const no=nextNo('REC',db.receipts,'no');db.receipts.push({no,patient:name,date:today(),method:String(f.get('method')||'BenefitPay'),amount,invoiceNo:inv.no});save();render();renderPanel('billing');notify('Receipt '+no+' saved against invoice '+inv.no+'.');return;
+   const rounded=Math.round(amount*1000)/1000;
+   if(Math.abs(amount-rounded)>0.0000001){notify('Use a maximum of three decimal places for BHD amounts.','error');return}
+   if(rounded>receiptBalance(inv)){notify('The payment exceeds the outstanding balance.','error');return}
+   const no=nextNo('REC',db.receipts,'no');db.receipts.push({no,patient:name,patientId:identity,appointmentId:appt.id||'',date:today(),method:String(f.get('method')||'BenefitPay'),amount:rounded,invoiceNo:inv.no});save();render();renderPanel('billing');notify('Receipt '+no+' saved against invoice '+inv.no+'.');return;
   }
  });
  renderPanel(initial);
@@ -17084,6 +17144,9 @@ function edit(idx,time='09:00',staff=''){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(record.date)||iso(dateObj(record.date))!==record.date||!/^([01]\d|2[0-3]):[0-5]\d$/.test(record.time)){dlg.querySelector('.v116-form-error').textContent='Enter a valid date and time';return}
   if(!Number.isFinite(record.duration)||record.duration<5||record.duration>480){dlg.querySelector('.v116-form-error').textContent='Duration must be 5–480 minutes';return}
   const issue=canPlace(record,old);if(issue){dlg.querySelector('.v116-form-error').textContent=issue;return}
+  const matches=(db.patients||[]).filter(p=>String(p.name||'')===record.patient);
+  if(matches.length!==1){dlg.querySelector('.v116-form-error').textContent='Select a unique patient record before saving. Duplicate names must be resolved.';return}
+  record.patientId=String(matches[0].id);
   if(old)Object.assign(old,record);
   else{record.id='A-'+Date.now().toString(36).toUpperCase();data().push(record)}
   save();render();
@@ -17807,7 +17870,7 @@ document.addEventListener('submit',function(e){
 const oldAppointmentModal=document.getElementById('appointmentModal');
 if(oldAppointmentModal)oldAppointmentModal.setAttribute('aria-hidden','true');
 
-window.MYAIMS_APPOINTMENTS_VERSION='V132-IN-CALENDAR-WORKSPACE';
+window.MYAIMS_APPOINTMENTS_VERSION='V133-IDENTITY-LINKED-WORKFLOW';
 })();
 
 
@@ -17888,3 +17951,114 @@ window.MYAIMS_APPOINTMENTS_VERSION='V132-IN-CALENDAR-WORKSPACE';
 #v132-drawer footer{border-top:1px solid #e1eaed;background:white;padding:14px 26px;color:#8499a0;font-size:11px}
 @media(max-width:650px){#v132-drawer header{padding:20px}#v132-drawer .v132-content{padding:18px}#v132-drawer .v132-fields{grid-template-columns:1fr}#v132-drawer .v132-summary{grid-template-columns:1fr}#v132-drawer .v132-notice:not(:empty){margin:12px 18px 0}}
 `;document.head.appendChild(style)})();
+
+
+(function(){const style=document.createElement('style');style.textContent=`
+#v132-drawer .v134-clinical-heading{padding:19px 18px;background:linear-gradient(115deg,#0a4b5b,#127685);border-radius:15px;color:white;margin-bottom:14px}
+#v132-drawer .v134-clinical-heading small{font-size:10px;letter-spacing:.14em;color:#ead19e;font-weight:800}
+#v132-drawer .v134-clinical-heading h3{font-size:20px;color:white;margin:9px 0}
+#v132-drawer .v134-clinical-heading p{font-size:12px;color:#d0e7ea;margin:0}
+#v132-drawer .v134-clinical-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:13px 0}
+#v132-drawer .v134-clinical-actions button{border:1px solid #d8e8ea;border-radius:11px;padding:14px 12px;text-align:left;background:#f6fbfb;color:#195d6c;font-weight:750;font-size:12px;cursor:pointer;min-height:55px}
+#v132-drawer .v134-clinical-actions button:first-child{background:#0c7080;color:white;border-color:#0c7080}
+#v132-drawer .v134-clinical-actions button:hover{filter:brightness(.97)}
+#v132-drawer .v134-privacy{padding:12px 14px;background:#f9f6ef;border:1px solid #ece1ca;color:#7b6c4f;border-radius:10px;font-size:11px;line-height:1.6;margin:13px 0}
+@media(max-width:500px){#v132-drawer .v134-clinical-actions{grid-template-columns:1fr}}
+`;document.head.appendChild(style)})();
+
+
+(function(){const style=document.createElement('style');style.textContent=`
+/* V135 — clinical session UI. No shadow records or independent medical storage. */
+#v132-drawer .v134-clinical-heading{padding:25px 24px;border-radius:17px;box-shadow:0 13px 28px rgba(10,74,86,.14)}
+#v132-drawer .v134-clinical-heading h3{font-size:24px;letter-spacing:-.025em}
+#v132-drawer .v135-visit-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:15px 0 23px}
+#v132-drawer .v135-visit-strip>div{display:flex;flex-direction:column;gap:8px;background:#fff;border:1px solid #e1eaec;border-radius:12px;padding:14px 12px;min-width:0}
+#v132-drawer .v135-visit-strip small{color:#9b855d;font-size:9px;font-weight:850;letter-spacing:.12em}
+#v132-drawer .v135-visit-strip strong{color:#1b5361;font-size:12px;overflow-wrap:anywhere}
+#v132-drawer .v135-workflow-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:22px 0 11px}
+#v132-drawer .v135-workflow-head span{font-size:10px;letter-spacing:.13em;color:#b18b4f;font-weight:850}
+#v132-drawer .v135-workflow-head small{font-size:10px;color:#80969d}
+#v132-drawer .v135-workflow-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:0 0 18px}
+#v132-drawer .v135-workflow-steps span{font-size:10px;line-height:1.45;color:#55747d;background:#f4f9f9;border:1px solid #e0eaec;border-radius:10px;padding:10px 8px;display:flex;align-items:center;gap:6px}
+#v132-drawer .v135-workflow-steps b{flex:none;display:grid;place-items:center;width:22px;height:22px;background:#e0f0f1;color:#166c7a;border-radius:7px;font-size:10px}
+#v132-drawer .v134-clinical-actions{gap:11px}
+#v132-drawer .v134-clinical-actions button{border-radius:12px;min-height:65px;box-shadow:0 4px 13px rgba(22,73,83,.04)}
+#v132-drawer .v135-note-guide{background:#fff;border:1px solid #dfe9eb;border-radius:15px;padding:19px;margin-top:20px;box-shadow:0 6px 18px rgba(22,73,83,.035)}
+#v132-drawer .v135-note-guide strong{display:block;font-size:14px;color:#1b5260}
+#v132-drawer .v135-note-guide small{display:block;color:#829aa1;font-size:11px;line-height:1.6;margin-top:5px}
+#v132-drawer .v135-guide-items{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:15px 0}
+#v132-drawer .v135-guide-items span{background:#f5f9fa;border:1px solid #e4ecee;border-radius:9px;padding:12px;color:#55737b;font-size:11px}
+#v132-drawer .v135-note-guide button{border:1px solid #c7e0e3;background:#eaf6f6;color:#176a78;border-radius:10px;padding:11px 15px;font-weight:800;cursor:pointer}
+#v132-drawer .v135-note-guide button:hover{background:#dceff1}
+@media(max-width:650px){#v132-drawer .v135-visit-strip{grid-template-columns:1fr 1fr}#v132-drawer .v135-workflow-steps{grid-template-columns:1fr 1fr}#v132-drawer .v135-workflow-head{align-items:flex-start;flex-direction:column}}
+@media(max-width:390px){#v132-drawer .v135-guide-items{grid-template-columns:1fr}}
+`;document.head.appendChild(style)})();
+
+
+/* V136: treatment journey presentation, within the existing calendar drawer. */
+(function(){
+ 'use strict';
+ if(document.getElementById('myaims-v136-style'))return;
+ const el=document.createElement('style');el.id='myaims-v136-style';
+ el.textContent=`
+ #v132-drawer .v136-journey{margin:22px 0;padding:19px;border:1px solid #dae8eb;border-radius:16px;background:#fff}
+ #v132-drawer .v136-journey-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+ #v132-drawer .v136-journey-heading small{color:#b08b50;font-size:10px;letter-spacing:.12em;font-weight:800}
+ #v132-drawer .v136-journey-heading h4{color:#154c5a;font-size:18px;margin:5px 0}
+ #v132-drawer .v136-journey-heading>span{font-size:10px;color:#7a939c}
+ #v132-drawer .v136-care-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+ #v132-drawer .v136-care-stats>div{padding:13px;border-radius:11px;background:#f1f8f9;display:flex;flex-direction:column;gap:8px}
+ #v132-drawer .v136-care-stats small{font-size:10px;color:#63828a}
+ #v132-drawer .v136-care-stats strong{font-size:24px;color:#13596a}
+ #v132-drawer .v136-care-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+ #v132-drawer .v136-care-grid>section{border:1px solid #e2ecee;border-radius:12px;padding:15px;min-width:0}
+ #v132-drawer .v136-care-grid h5{font-size:12px;color:#225968;margin:0 0 12px}
+ #v132-drawer .v136-care-grid p{font-size:11px;color:#738d95;line-height:1.6;overflow-wrap:anywhere}
+ #v132-drawer .v136-care-grid strong{font-size:12px;color:#1b5665;overflow-wrap:anywhere}
+ #v132-drawer .v136-care-grid small{font-size:10px;color:#8399a0}
+ #v132-drawer .v136-care-grid button{border:1px solid #c7e0e4;background:#edf8f8;color:#16697a;border-radius:9px;padding:10px 12px;font-size:11px;font-weight:800;margin-top:12px;cursor:pointer}
+ #v132-drawer .v136-timeline{border-left:2px solid #d6e9ec;margin-left:5px;padding-left:12px;display:flex;flex-direction:column;gap:14px;max-height:220px;overflow-y:auto}
+ #v132-drawer .v136-timeline>div{display:flex;flex-direction:column;gap:4px;position:relative}
+ #v132-drawer .v136-timeline>div:before{content:'';position:absolute;left:-17px;top:5px;width:7px;height:7px;background:#1c8a96;border:2px solid white;border-radius:50%}
+ #v132-drawer .v136-timeline time{font-size:10px;color:#9d814d}
+ #v132-drawer .v136-privacy{margin-top:13px;padding:11px;border-radius:9px;background:#f9f6ef;color:#857352;font-size:10px;line-height:1.5}
+ @media(max-width:560px){#v132-drawer .v136-care-grid{grid-template-columns:1fr}#v132-drawer .v136-journey{padding:12px}#v132-drawer .v136-care-stats>div{padding:9px}#v132-drawer .v136-care-stats strong{font-size:20px}}
+ `;
+ document.head.appendChild(el);
+ window.MYAIMS_CLINICAL_VERSION='V136-TREATMENT-JOURNEY';
+})();
+
+/* V137 — Goal monitoring and recorded assessment comparisons. */
+(function(){
+ 'use strict';
+ if(document.getElementById('myaims-v137-style'))return;
+ const style=document.createElement('style');style.id='myaims-v137-style';
+ style.textContent=`
+ #v132-drawer .v137-goals{margin:18px 0;padding:19px;background:#fff;border:1px solid #d9e9eb;border-radius:16px}
+ #v132-drawer .v137-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+ #v132-drawer .v137-head small{font-size:10px;color:#ac8650;letter-spacing:.12em;font-weight:800}
+ #v132-drawer .v137-head h4{font-size:17px;color:#165969;margin:5px 0}
+ #v132-drawer .v137-head>span{font-size:11px;color:#66858e}
+ #v132-drawer .v137-goal-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ #v132-drawer .v137-goal{border:1px solid #e2ebed;border-radius:12px;padding:13px;min-width:0}
+ #v132-drawer .v137-goal-top{display:flex;justify-content:space-between;gap:8px;align-items:start}
+ #v132-drawer .v137-goal-top strong{color:#175a69;font-size:12px;overflow-wrap:anywhere}
+ #v132-drawer .v137-goal-top span{font-size:10px;color:#8b6b39;background:#fbf5e9;padding:4px 7px;border-radius:15px}
+ #v132-drawer .v137-goal p{font-size:11px;color:#70858b;line-height:1.6}
+ #v132-drawer .v137-progress-track{height:7px;border-radius:10px;background:#e8f0f1;overflow:hidden;margin:12px 0 6px}
+ #v132-drawer .v137-progress-track i{display:block;height:100%;background:#168595;border-radius:10px}
+ #v132-drawer .v137-goal small{font-size:10px;color:#748d95}
+ #v132-drawer .v137-goals h5{font-size:12px;color:#215f6c;margin:20px 0 10px}
+ #v132-drawer .v137-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ #v132-drawer .v137-comparison>div{display:flex;flex-direction:column;gap:7px;padding:13px;background:#f0f8f9;border-radius:11px}
+ #v132-drawer .v137-comparison small{font-size:10px;color:#63828a}
+ #v132-drawer .v137-comparison strong{font-size:24px;color:#176474}
+ #v132-drawer .v137-comparison span{font-size:10px;color:#80979e}
+ #v132-drawer .v137-disclaimer{font-size:10px;color:#806e50;background:#faf6ee;padding:11px;border-radius:9px;line-height:1.6}
+ #v132-drawer .v137-links{display:flex;gap:9px;flex-wrap:wrap;margin-top:13px}
+ #v132-drawer .v137-links button{background:#eaf6f7;color:#126779;border:1px solid #c8e3e6;padding:10px 12px;border-radius:9px;font-size:11px;font-weight:800;cursor:pointer}
+ @media(max-width:580px){#v132-drawer .v137-goal-list{grid-template-columns:1fr}#v132-drawer .v137-goals{padding:12px}#v132-drawer .v137-head{align-items:start;flex-direction:column}}
+ `;
+ document.head.appendChild(style);
+ window.MYAIMS_CLINICAL_VERSION='V137-GOAL-MONITORING';
+})();
