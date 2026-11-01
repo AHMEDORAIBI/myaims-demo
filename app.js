@@ -17044,7 +17044,14 @@ function openV132CalendarDrawer(idx,patient,initial='overview'){
     <section><h5>Recent clinical documentation</h5>${sessionNotes.length?`<div class="v136-timeline">${sessionNotes.map(n=>`<div><time>${safe(n.date||n.createdAt||'Undated')}</time><strong>${safe(n.title||n.type||'Session note')}</strong><small>${safe(n.therapist||n.createdBy||'Recorded clinical note')}</small></div>`).join('')}</div>`:'<p>No clinical session notes recorded.</p>'}</section>
     <section><h5>Progress follow-up</h5>${clinicalUpdates.length?`<div class="v136-timeline">${clinicalUpdates.map(u=>`<div><time>${safe(u.createdAt||'Undated')}</time><strong>${safe(u.title||u.type||'Clinical update')}</strong></div>`).join('')}</div>`:'<p>No progress updates recorded yet.</p>'}<button type="button" data-v134-progress-review>Review patient progress</button></section></div>
     <div class="v136-privacy">Counts and history are based on saved records linked by patient ID. This view does not assess treatment outcomes automatically or create clinical entries.</div></section>`;
-   area.innerHTML=`<div class="v134-clinical-heading"><small>CLINICAL CARE · SELECTED APPOINTMENT</small><h3>${mode==='assessment'?'Clinical assessment':mode==='notes'?'Session notes':'Patient clinical profile'}</h3><p>${safe(appt.date)} · ${safe(appt.time)} · ${safe(appt.service||'Treatment')}</p></div><div class="v135-visit-strip"><div><small>SESSION</small><strong>${safe(appt.date)} · ${safe(appt.time)}</strong></div><div><small>THERAPIST</small><strong>${safe(appt.therapist||'Unassigned')}</strong></div><div><small>STATUS</small><strong>${safe(appt.status||'Scheduled')}</strong></div></div><div class="v135-workflow-head"><span>SESSION WORKFLOW</span><small>Complete using the existing clinical record tools</small></div><div class="v135-workflow-steps"><span><b>1</b> Review patient</span><span><b>2</b> Assess session</span><span><b>3</b> Record notes</span><span><b>4</b> Update plan</span></div><div class="v134-clinical-actions">${mode!=='profile'?`<button type="button" data-v134-session-note>✚ ${mode==='assessment'?'Start session assessment':'Open session note'}</button>`:''}<button type="button" data-v132-clinical="${mode}">◉ Patient clinical workspace</button><button type="button" data-v134-treatment-plan>▤ Treatment plan</button><button type="button" data-v134-progress-review>◇ Progress review</button></div>${careJourney}${goalReview}<div class="v135-note-guide"><div><strong>Structured session note guide</strong><small>Use this outline inside the existing clinical form. It is not a saved medical note.</small></div><div class="v135-guide-items"><span>Subjective / Patient report</span><span>Objective findings</span><span>Assessment / Response</span><span>Plan / Next session</span></div><button type="button" data-v135-copy-outline>Copy note outline</button></div><div class="v134-privacy">Clinical forms use the existing medical-record tools. This view does not create a separate, unverified patient record.</div><div class="v132-clinical-slot"></div>`;
+   // V138: session review is read-only and derives only from persisted, patient-ID-linked records.
+   const sessionLinkedNotes=sessionNotes.filter(n=>String(n.appointmentId||'')===String(appt.id||'')&&!!appt.id);
+   const recordedGoals=allGoals.length;
+   const achievedGoals=goalStats.achieved;
+   const remainingGoals=allGoals.filter(g=>!['achieved','closed','completed'].includes(String(g.status||'').toLowerCase()));
+   const nextVisit=data().filter(x=>String(x.patientId||'')===identity&&String(x.id||'')!==String(appt.id||'')&&(String(x.date||'')+String(x.time||''))>(String(appt.date||'')+String(appt.time||''))).sort((a,b)=>(String(a.date||'')+String(a.time||'')).localeCompare(String(b.date||'')+String(b.time||'')))[0];
+   const sessionSummary=`<section class="v138-session-summary" aria-label="Session summary and next steps"><header><div><small>SESSION REVIEW · V138</small><h4>Session summary &amp; next steps</h4></div><span>Recorded data only</span></header><div class="v138-summary-grid"><div><small>Session documentation</small><strong>${sessionLinkedNotes.length} linked note(s)</strong><p>${sessionLinkedNotes.length?'Notes explicitly linked to this appointment':'No note explicitly linked to this appointment'}</p></div><div><small>Treatment goals</small><strong>${achievedGoals} / ${recordedGoals} achieved</strong><p>${recordedGoals?remainingGoals.length+' goal(s) not marked achieved':'No treatment goals recorded'}</p></div><div><small>Next recorded appointment</small><strong>${nextVisit?safe(nextVisit.date)+' · '+safe(nextVisit.time):'Not scheduled'}</strong><p>${nextVisit?safe(nextVisit.service||'Treatment'):'No later appointment found for this patient'}</p></div></div><div class="v138-followup"><h5>Before closing this session</h5><div class="v138-followup-items"><span>1 · Review clinical findings</span><span>2 · Save session assessment / notes</span><span>3 · Update treatment goals as appropriate</span><span>4 · Confirm follow-up appointment</span></div><p>Checklist is guidance only. It does not mark tasks complete, change appointment status or generate medical conclusions.</p></div><div class="v138-summary-actions"><button type="button" data-v134-session-note>Open session note</button><button type="button" data-v134-treatment-plan>Review treatment plan</button><button type="button" data-v138-next-appointment>Schedule follow-up</button></div></section>`;
+   area.innerHTML=`<div class="v134-clinical-heading"><small>CLINICAL CARE · SELECTED APPOINTMENT</small><h3>${mode==='assessment'?'Clinical assessment':mode==='notes'?'Session notes':'Patient clinical profile'}</h3><p>${safe(appt.date)} · ${safe(appt.time)} · ${safe(appt.service||'Treatment')}</p></div><div class="v135-visit-strip"><div><small>SESSION</small><strong>${safe(appt.date)} · ${safe(appt.time)}</strong></div><div><small>THERAPIST</small><strong>${safe(appt.therapist||'Unassigned')}</strong></div><div><small>STATUS</small><strong>${safe(appt.status||'Scheduled')}</strong></div></div><div class="v135-workflow-head"><span>SESSION WORKFLOW</span><small>Complete using the existing clinical record tools</small></div><div class="v135-workflow-steps"><span><b>1</b> Review patient</span><span><b>2</b> Assess session</span><span><b>3</b> Record notes</span><span><b>4</b> Update plan</span></div><div class="v134-clinical-actions">${mode!=='profile'?`<button type="button" data-v134-session-note>✚ ${mode==='assessment'?'Start session assessment':'Open session note'}</button>`:''}<button type="button" data-v132-clinical="${mode}">◉ Patient clinical workspace</button><button type="button" data-v134-treatment-plan>▤ Treatment plan</button><button type="button" data-v134-progress-review>◇ Progress review</button></div>${sessionSummary}${careJourney}${goalReview}<div class="v135-note-guide"><div><strong>Structured session note guide</strong><small>Use this outline inside the existing clinical form. It is not a saved medical note.</small></div><div class="v135-guide-items"><span>Subjective / Patient report</span><span>Objective findings</span><span>Assessment / Response</span><span>Plan / Next session</span></div><button type="button" data-v135-copy-outline>Copy note outline</button></div><div class="v134-privacy">Clinical forms use the existing medical-record tools. This view does not create a separate, unverified patient record.</div><div class="v132-clinical-slot"></div>`;
   }
  };
  shell.innerHTML=`<div class="v132-shade" data-v132-close></div><aside class="v132-panel" role="dialog" aria-modal="true" aria-label="Appointment workspace"><header><div><small>MY AIMS · CONNECTED WORKFLOW</small><h2>Patient workspace</h2><p>${safe(name)} · ${safe(identity)}</p></div><button type="button" data-v132-close aria-label="Close">✕</button></header><div class="v132-context"><span>${safe(appt.date)} · ${safe(appt.time)}</span><strong>${safe(appt.service||'Treatment')}</strong><small>${safe(appt.therapist||'Unassigned')}</small></div><nav class="v132-tabs">${[['overview','Overview'],['invoice','Invoice'],['receipt','Payment'],['billing','Invoices'],['assessment','Assessment'],['notes','Notes'],['profile','Profile']].map(([k,v])=>`<button type="button" data-v132-tab="${k}">${v}</button>`).join('')}</nav><div class="v132-notice" role="status" aria-live="polite"></div><div class="v132-content"></div><footer>Changes are saved only when you submit a form. Close to return to the calendar.</footer></aside>`;
@@ -17059,6 +17066,11 @@ function openV132CalendarDrawer(idx,patient,initial='overview'){
    const outline='Subjective / Patient report:\n\nObjective findings:\n\nAssessment / Response:\n\nPlan / Next session:\n';
    if(!navigator.clipboard?.writeText){notify('Clipboard unavailable. Use the four headings shown above in your clinical form.','error');return}
    navigator.clipboard.writeText(outline).then(()=>notify('Structured note headings copied. Paste into the existing clinical form and save there.')).catch(()=>notify('Copy was blocked by the browser. Use the headings shown above.','error'));
+   return;
+  }
+  if(e.target.closest('[data-v138-next-appointment]')){
+   close();
+   edit(-1);
    return;
   }
   const sessionNote=e.target.closest('[data-v134-session-note]');
@@ -18061,4 +18073,34 @@ window.MYAIMS_APPOINTMENTS_VERSION='V133-IDENTITY-LINKED-WORKFLOW';
  `;
  document.head.appendChild(style);
  window.MYAIMS_CLINICAL_VERSION='V137-GOAL-MONITORING';
+})();
+
+
+/* V138 — read-only session summary and follow-up actions within calendar workspace. */
+(function(){
+ 'use strict';
+ if(document.getElementById('myaims-v138-style'))return;
+ const el=document.createElement('style');el.id='myaims-v138-style';
+ el.textContent=`
+ #v132-drawer .v138-session-summary{margin:20px 0;padding:19px;background:#fff;border:1px solid #d7e8eb;border-radius:16px}
+ #v132-drawer .v138-session-summary>header{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:15px}
+ #v132-drawer .v138-session-summary>header small{color:#a98248;letter-spacing:.13em;font-size:10px;font-weight:850}
+ #v132-drawer .v138-session-summary h4{color:#155260;font-size:18px;margin:5px 0}
+ #v132-drawer .v138-session-summary>header span{font-size:10px;color:#80979e}
+ #v132-drawer .v138-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+ #v132-drawer .v138-summary-grid>div{padding:14px;background:#f2f9f9;border:1px solid #e2eff0;border-radius:11px;min-width:0}
+ #v132-drawer .v138-summary-grid small{display:block;font-size:10px;color:#63818a}
+ #v132-drawer .v138-summary-grid strong{display:block;font-size:13px;color:#155c6b;margin:10px 0;overflow-wrap:anywhere}
+ #v132-drawer .v138-summary-grid p{font-size:10px;color:#7d949b;line-height:1.5;margin:0}
+ #v132-drawer .v138-followup{margin-top:16px;padding:15px;border:1px solid #e7e8dd;background:#fcfaf5;border-radius:11px}
+ #v132-drawer .v138-followup h5{font-size:12px;color:#80683c;margin:0 0 11px}
+ #v132-drawer .v138-followup-items{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ #v132-drawer .v138-followup-items span{font-size:11px;color:#526d73;background:white;border:1px solid #ece8de;border-radius:8px;padding:10px}
+ #v132-drawer .v138-followup p{font-size:10px;line-height:1.6;color:#8b806e;margin:12px 0 0}
+ #v132-drawer .v138-summary-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
+ #v132-drawer .v138-summary-actions button{background:#e9f6f7;border:1px solid #c5e1e5;color:#146878;border-radius:9px;padding:11px 13px;font-size:11px;font-weight:800;cursor:pointer}
+ #v132-drawer .v138-summary-actions button:first-child{background:#0e7180;color:white;border-color:#0e7180}
+ @media(max-width:640px){#v132-drawer .v138-summary-grid{grid-template-columns:1fr}#v132-drawer .v138-followup-items{grid-template-columns:1fr}#v132-drawer .v138-session-summary{padding:12px}}
+ `;document.head.appendChild(el);
+ window.MYAIMS_CLINICAL_VERSION='V138-SESSION-SUMMARY';
 })();
