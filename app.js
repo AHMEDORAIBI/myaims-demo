@@ -17463,6 +17463,52 @@ style.textContent+=`
 #page-appointments #v22-orbit-calendar{display:none!important}
 #page-appointments > .page-title{display:none!important}
 `;
+
+style.textContent+=`
+/* V124 — visual refinement only; preserve V123 booking and validation logic */
+#page-appointments{background:linear-gradient(180deg,#f1f7f8 0%,#f6f9fa 360px,#f5f8f9 100%);min-height:calc(100vh - 85px)}
+#v116-scheduler{--v124-ink:#153b48;--v124-teal:#0b6878;--v124-gold:#bb9148;--v124-line:#e0eaed;color:var(--v124-ink);padding:4px 0 48px}
+#v116-scheduler .v116-head{position:relative;isolation:isolate;overflow:hidden;align-items:center;background:linear-gradient(112deg,#093f50 0%,#0c6473 65%,#127785 100%);padding:29px 30px;border-radius:22px;box-shadow:0 18px 40px rgba(6,67,81,.17);margin:0 0 18px;color:#fff}
+#v116-scheduler .v116-head::after{content:"";position:absolute;z-index:-1;right:-65px;top:-125px;width:360px;height:360px;border:1px solid rgba(255,255,255,.16);border-radius:50%;box-shadow:0 0 0 55px rgba(255,255,255,.035),0 0 0 110px rgba(255,255,255,.025);pointer-events:none}
+#v116-scheduler .v116-head h2{color:#fff;font-size:clamp(24px,2.4vw,34px);letter-spacing:-.035em;margin:9px 0 8px}
+#v116-scheduler .v116-head p{color:#c4e1e5;font-size:13px;line-height:1.6}
+#v116-scheduler .v116-head .v116-eyebrow{color:#f1d59b;letter-spacing:.19em}
+#v116-scheduler .v116-top-actions{position:relative;z-index:1}
+#v116-scheduler .v116-top-actions button{border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.1);color:white;backdrop-filter:blur(8px);padding:12px 16px}
+#v116-scheduler .v116-top-actions .v116-primary{background:#c69a50;color:#fff;border-color:#c69a50;box-shadow:0 8px 18px rgba(0,0,0,.12)}
+#v116-scheduler .v116-kpis{gap:14px;margin:0 0 18px}
+#v116-scheduler .v116-kpis>div{position:relative;overflow:hidden;background:linear-gradient(150deg,#fff,#fbfdfd);border:1px solid #e0e9ec;border-radius:17px;padding:20px 21px;box-shadow:0 8px 25px rgba(22,76,89,.045);transition:transform .2s ease,box-shadow .2s ease}
+#v116-scheduler .v116-kpis>div::before{content:"";position:absolute;top:0;left:19px;width:38px;height:3px;background:#b99351;border-radius:0 0 5px 5px}
+#v116-scheduler .v116-kpis>div:nth-child(2)::before{background:#2eaa91}
+#v116-scheduler .v116-kpis>div:nth-child(3)::before{background:#718ac8}
+#v116-scheduler .v116-kpis>div:nth-child(4)::before{background:#d78a78}
+#v116-scheduler .v116-kpis>div:hover{transform:translateY(-2px);box-shadow:0 14px 28px rgba(22,76,89,.08)}
+#v116-scheduler .v116-kpis strong{font-size:clamp(26px,2.5vw,36px);font-weight:800;letter-spacing:-.04em;color:#154d5b}
+#v116-scheduler .v116-kpis span{font-weight:650;color:#617d86}
+#v116-scheduler .v116-toolbar{padding:13px 15px;border-radius:16px;box-shadow:0 5px 22px rgba(25,72,82,.035);gap:12px}
+#v116-scheduler .v116-switch{border:1px solid #e3edef;background:#f2f6f7;border-radius:11px}
+#v116-scheduler .v116-switch button{border-radius:8px;transition:background .18s ease,color .18s ease}
+#v116-scheduler .v116-switch button.active{color:#086676;background:#fff;box-shadow:0 3px 11px rgba(10,72,85,.1);font-weight:800}
+#v116-scheduler .v116-date-controls button{min-width:39px}
+#v116-scheduler .v117-extras{padding:13px 14px;background:#fff;border:1px solid #e1ecee;border-radius:15px;margin-bottom:12px;box-shadow:0 4px 16px rgba(20,68,80,.035)}
+#v116-scheduler .v117-extras button{background:#f4f9fa;border:1px solid #e0ebed;color:#275e69;border-radius:10px;padding:10px 13px;transition:all .18s ease}
+#v116-scheduler .v117-extras button:hover{background:#e7f4f5;border-color:#b8dade;transform:translateY(-1px)}
+#v116-scheduler .v117-extras button[data-v123-analytics]{background:#e9f5f4;color:#087567;border-color:#cce6df}
+#v116-scheduler .v117-extras button[data-v121-series]{background:#fbf6ec;color:#886323;border-color:#efdfc1}
+#v116-scheduler .v116-filters{gap:10px;padding:3px 1px 5px}
+#v116-scheduler .v116-filters input,#v116-scheduler .v116-filters select{border-radius:11px;padding:12px 13px;border:1px solid #dce8eb;box-shadow:0 3px 10px rgba(18,64,76,.025)}
+#v116-scheduler .v116-filters input:focus,#v116-scheduler .v116-filters select:focus{border-color:#58aab3;outline:3px solid rgba(44,158,169,.12)}
+#v116-scheduler .v116-board{border-radius:17px;border-color:#dce9ec;box-shadow:0 10px 28px rgba(15,63,75,.045)}
+#v116-scheduler .v116-week-day{background:linear-gradient(180deg,#f4fafa,#f9fcfc)}
+#v116-scheduler .v116-appt{border-radius:11px;box-shadow:0 4px 13px rgba(18,83,93,.06);transition:transform .16s ease,box-shadow .16s ease}
+#v116-scheduler .v116-appt:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(18,83,93,.11)}
+#v116-scheduler .v116-legend{padding:14px 10px;gap:14px}
+#v116-scheduler button:focus-visible{outline:3px solid #d3aa62;outline-offset:2px}
+#v116-scheduler .v116-dialog-card{border-radius:20px;box-shadow:0 30px 90px rgba(8,48,60,.22)}
+@media(max-width:900px){#v116-scheduler .v116-head{padding:23px;flex-wrap:wrap}#v116-scheduler .v116-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#v116-scheduler .v116-top-actions{width:100%}}
+@media(max-width:600px){#page-appointments{padding:15px 12px 28px}#v116-scheduler .v116-head{padding:22px 17px;border-radius:17px}#v116-scheduler .v116-head h2{font-size:25px}#v116-scheduler .v116-kpis{gap:9px}#v116-scheduler .v116-kpis>div{padding:15px 12px;border-radius:13px}#v116-scheduler .v116-kpis strong{font-size:27px}#v116-scheduler .v116-toolbar{padding:10px}#v116-scheduler .v116-switch{flex-wrap:wrap}#v116-scheduler .v116-filters input{min-width:100%}#v116-scheduler .v117-extras{padding:10px}#v116-scheduler .v117-extras button{flex:1 1 auto}}
+@media(prefers-reduced-motion:reduce){#v116-scheduler .v116-kpis>div,#v116-scheduler .v116-appt,#v116-scheduler .v117-extras button{transition:none}}
+`;
 document.head.appendChild(style);
 function mount(){if(document.getElementById(PAGE))render()}
 document.addEventListener('click',e=>{if(e.target.closest('.nav-item[data-page="appointments"]'))setTimeout(mount,0)},true);
@@ -17492,5 +17538,5 @@ document.addEventListener('submit',function(e){
 const oldAppointmentModal=document.getElementById('appointmentModal');
 if(oldAppointmentModal)oldAppointmentModal.setAttribute('aria-hidden','true');
 
-window.MYAIMS_APPOINTMENTS_VERSION='V123-INTEGRATION-FIX';
+window.MYAIMS_APPOINTMENTS_VERSION='V124-VISUAL-REFINEMENT';
 })();
