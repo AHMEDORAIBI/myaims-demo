@@ -16895,7 +16895,7 @@ function render(){
  host.innerHTML=`<header class="v116-head"><div><div class="v116-eyebrow">MY AIMS · CLINICAL OPERATIONS</div><h2>Appointments Command Center</h2><p>Manage bookings, therapists, attendance and schedules in one place</p></div><div class="v116-top-actions"><button type="button" data-v116-export>Export CSV</button><button type="button" class="v116-primary" data-v116-new>+ New Appointment</button></div></header>
  <div class="v116-kpis"><div><span>Today's appointments</span><strong>${todays.length}</strong><small>${today}</small></div><div><span>Confirmed</span><strong>${todays.filter(a=>a.status==='Confirmed').length}</strong><small>Ready for treatment</small></div><div><span>In progress</span><strong>${todays.filter(a=>a.status==='In Progress').length}</strong><small>Active sessions</small></div><div><span>Schedule conflicts</span><strong>${conflictCount}</strong><small>${conflictCount?'Requires attention':'No overlapping bookings'}</small></div></div>
  <div class="v116-toolbar"><div class="v116-switch">${['day','week','month','list','reception'].map(x=>`<button type="button" data-v116-view="${x}" class="${state.view===x?'active':''}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div><div class="v116-date-controls"><button data-v116-prev type="button">‹</button><button data-v116-today type="button">Today</button><button data-v116-next type="button">›</button><input aria-label="Selected date" type="date" data-v116-date value="${state.date}"><b>${heading()}</b></div></div>
- <div class="v117-extras"><button type="button" data-v117-waitlist>◷ Waiting list <b>${waitlist().length}</b></button><button type="button" data-v117-hours>⚙ Clinic hours</button><button type="button" data-v118-resources>◫ Rooms & therapists</button><button type="button" data-v118-leave>▣ Time off</button><span>Drag an appointment to another day or time slot to reschedule</span></div>
+ <div class="v117-extras"><button type="button" data-v122-manage>▦ Manage plans</button><button type="button" data-v121-series>↻ Treatment series</button><button type="button" data-v117-waitlist>◷ Waiting list <b>${waitlist().length}</b></button><button type="button" data-v117-hours>⚙ Clinic hours</button><button type="button" data-v118-resources>◫ Rooms & therapists</button><button type="button" data-v118-leave>▣ Time off</button><span>Drag an appointment to another day or time slot to reschedule</span></div>
  <div class="v116-filters"><input type="search" data-v116-search placeholder="Search patient, service or ID..." value="${safe(state.search)}"><select data-v116-staff><option value="all">All therapists</option>${allStaff().map(x=>`<option value="${safe(x)}" ${state.staff===x?'selected':''}>${safe(x)}</option>`).join('')}</select><select data-v116-status><option value="all">All statuses</option>${statuses.map(x=>`<option ${state.status===x?'selected':''}>${x}</option>`).join('')}</select><span>${filtered().length} appointments</span></div>
  <div class="v116-board">${state.view==='day'?dayContent(state.date):state.view==='week'?weekContent():state.view==='month'?monthContent():state.view==='reception'?receptionContent():listContent()}</div>
  <div class="v116-legend">${statuses.map(x=>`<span><i class="v116-dot v116-${themeStatus(x)}"></i>${x}</span>`).join('')}</div>
@@ -16920,6 +16920,8 @@ function render(){
  if(b.hasAttribute('data-v116-add')){state.date=b.dataset.v116Add;edit(-1);return}
  if(b.classList.contains('v116-add-slot')){const cell=b.closest('[data-v116-date]');state.date=cell.dataset.v116Date;edit(-1,cell.dataset.v116Time,cell.dataset.v116Staff);return}
  if(b.hasAttribute('data-v116-export')){exportCsv();return}
+ if(b.hasAttribute('data-v122-manage')){showPlans();return}
+ if(b.hasAttribute('data-v121-series')){showSeries();return}
  if(b.hasAttribute('data-v117-waitlist')){showWaitlist();return}
  if(b.hasAttribute('data-v117-hours')){showHours();return}
  if(b.hasAttribute('data-v118-resources')){showResources();return}
@@ -17012,6 +17014,194 @@ function edit(idx,time='09:00',staff=''){
   if(typeof window.toast==='function')window.toast('Appointment saved');
  };
 }
+
+function showPlans(){
+ const dlg=document.querySelector('#v116-dialog');if(!dlg)return;
+ const plans=new Map();
+ data().filter(a=>a.seriesId).forEach(a=>{if(!plans.has(a.seriesId))plans.set(a.seriesId,[]);plans.get(a.seriesId).push(a)});
+ const ordered=[...plans.entries()].sort((a,b)=>(b[1][0]?.date||'').localeCompare(a[1][0]?.date||''));
+ dlg.hidden=false;
+ dlg.innerHTML=`<div class="v116-dialog-card v122-modal" role="dialog" aria-modal="true" aria-label="Treatment plan manager"><div class="v116-dialog-head"><div><div class="v116-eyebrow">CLINICAL SCHEDULING</div><h3>Treatment Plan Manager</h3></div><button type="button" data-v122-close>✕</button></div>
+ <p class="v117-help">Manage scheduled sessions and track completion. Changes affect appointments only, not medical treatment records.</p>
+ <div class="v122-plans">${ordered.map(([id,items])=>{
+ const a=items[0],complete=items.filter(x=>x.status==='Completed').length,cancelled=items.filter(x=>x.status==='Cancelled').length;
+ const next=items.filter(x=>x.status!=='Completed'&&x.status!=='Cancelled').sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time))[0];
+ return `<button type="button" class="v122-plan" data-v122-plan="${safe(id)}"><span><strong>${safe(a.patient)}</strong><small>${safe(a.service)} · ${safe(a.therapist)} · ${safe(id)}</small></span><span class="v122-plan-count"><b>${complete}/${items.length}</b><small>Completed · ${cancelled} cancelled</small></span><span class="v122-progress"><i style="width:${Math.round(complete/items.length*100)}%"></i></span><small>Next: ${next?safe(next.date+' '+next.time):'No pending sessions'}</small></button>`}).join('')||'<div class="v122-empty">No recurring treatment plans found. Create one using Treatment Series.</div>'}</div><div class="v116-form-actions"><button type="button" data-v122-close>Close</button><button type="button" class="v116-primary" data-v122-create>+ New treatment series</button></div></div>`;
+ dlg.onclick=e=>{
+  if(e.target===dlg||e.target.closest('[data-v122-close]')){dlg.hidden=true;return}
+  if(e.target.closest('[data-v122-create]')){showSeries();return}
+  const b=e.target.closest('[data-v122-plan]');if(b)showPlanDetail(b.dataset.v122Plan);
+ };
+}
+function showPlanDetail(id){
+ const dlg=document.querySelector('#v116-dialog');if(!dlg)return;
+ const list=data().filter(a=>a.seriesId===id).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+ if(!list.length){showPlans();return}
+ const first=list[0],completed=list.filter(a=>a.status==='Completed').length;
+ dlg.hidden=false;
+ dlg.innerHTML=`<div class="v116-dialog-card v122-modal" role="dialog" aria-modal="true" aria-label="Treatment plan details"><div class="v116-dialog-head"><div><div class="v116-eyebrow">${safe(id)}</div><h3>${safe(first.patient)} · Treatment plan</h3></div><button type="button" data-v122-close>✕</button></div>
+ <div class="v122-summary"><div><small>Total</small><strong>${list.length}</strong></div><div><small>Completed</small><strong>${completed}</strong></div><div><small>Remaining</small><strong>${list.filter(a=>!['Completed','Cancelled','No Show'].includes(a.status)).length}</strong></div><div><small>Cancelled / No-show</small><strong>${list.filter(a=>['Cancelled','No Show'].includes(a.status)).length}</strong></div></div>
+ <div class="v122-session-list">${list.map((a,i)=>`<div class="v122-session"><span><b>#${a.seriesNumber||i+1} · ${safe(a.date)} ${safe(a.time)}</b><small>${safe(a.therapist)} · ${safe(a.room||'Room unassigned')} · ${duration(a)} min</small></span><span class="v116-pill v116-${themeStatus(a.status)}">${safe(a.status)}</span><button type="button" data-v122-session="${safe(a.id)}">Manage</button></div>`).join('')}</div>
+ <div class="v116-form-actions"><button type="button" data-v122-back>Back</button><button type="button" data-v122-close>Close</button><button type="button" class="v116-primary" data-v122-bulk>Reschedule future sessions</button></div></div>`;
+ dlg.onclick=e=>{
+  if(e.target===dlg||e.target.closest('[data-v122-close]')){dlg.hidden=true;return}
+  if(e.target.closest('[data-v122-back]')){showPlans();return}
+  if(e.target.closest('[data-v122-bulk]')){showBulkReschedule(id);return}
+  const b=e.target.closest('[data-v122-session]');if(b)showSessionEdit(id,b.dataset.v122Session);
+ };
+}
+function showSessionEdit(id,appointmentId){
+ const dlg=document.querySelector('#v116-dialog'),a=data().find(x=>x.id===appointmentId&&x.seriesId===id);if(!dlg||!a)return;
+ dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card" role="dialog" aria-modal="true" aria-label="Manage treatment session"><div class="v116-dialog-head"><h3>Manage session #${a.seriesNumber||'—'}</h3><button type="button" data-v122-close>✕</button></div><p class="v117-help">${safe(a.patient)} · ${safe(a.service)}</p>
+ <form id="v122-single"><div class="v116-form-grid"><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Therapist<input name="therapist" required value="${safe(a.therapist)}"></label><label>Room<select name="room"><option value="">Unassigned</option>${resources().rooms.map(x=>`<option value="${safe(x)}" ${a.room===x?'selected':''}>${safe(x)}</option>`).join('')}</select></label><label>Status<select name="status">${statuses.map(x=>`<option value="${x}" ${a.status===x?'selected':''}>${x}</option>`).join('')}</select></label></div><div class="v116-form-error" role="alert"></div><div class="v116-form-actions"><button type="button" data-v122-back>Back</button><button type="submit" class="v116-primary">Save session</button></div></form></div>`;
+ dlg.onclick=e=>{if(e.target===dlg||e.target.closest('[data-v122-close]'))dlg.hidden=true;else if(e.target.closest('[data-v122-back]'))showPlanDetail(id)};
+ dlg.querySelector('form').onsubmit=e=>{
+  e.preventDefault();const f=new FormData(e.currentTarget);
+  const next={...a,date:String(f.get('date')),time:String(f.get('time')),therapist:String(f.get('therapist')).trim(),room:String(f.get('room')||''),status:String(f.get('status'))};
+  const issue=canPlace(next,a);if(issue){dlg.querySelector('.v116-form-error').textContent=issue;return}
+  if(!confirm('Save changes to this session only?'))return;
+  Object.assign(a,next);save();showPlanDetail(id);
+ };
+}
+function showBulkReschedule(id){
+ const dlg=document.querySelector('#v116-dialog');if(!dlg)return;
+ const list=data().filter(a=>a.seriesId===id&&!['Completed','Cancelled','No Show'].includes(a.status)).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+ if(!list.length){alert('No remaining active sessions to reschedule.');showPlanDetail(id);return}
+ dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card" role="dialog" aria-modal="true" aria-label="Reschedule future sessions"><div class="v116-dialog-head"><h3>Reschedule remaining sessions</h3><button type="button" data-v122-close>✕</button></div>
+ <p class="v117-help">Move all ${list.length} active sessions together by a number of days. Completed, cancelled and no-show sessions remain unchanged. All conflicts must be resolved before saving.</p>
+ <form id="v122-bulk-form"><div class="v116-form-grid"><label>Shift by days<input type="number" name="shift" min="-90" max="90" value="7" required></label><label>New time (optional)<input type="time" name="time"></label></div><div class="v116-form-error" role="alert"></div><div class="v122-bulk-preview"></div><div class="v116-form-actions"><button type="button" data-v122-back>Back</button><button type="button" data-v122-preview>Preview</button><button type="submit" class="v116-primary">Save all changes</button></div></form></div>`;
+ const form=dlg.querySelector('form'),error=dlg.querySelector('.v116-form-error'),preview=dlg.querySelector('.v122-bulk-preview');
+ function propose(){
+  const f=new FormData(form),shiftDays=Number(f.get('shift')),time=String(f.get('time')||'');
+  if(!Number.isInteger(shiftDays)||shiftDays < -90||shiftDays > 90)throw Error('Choose a day shift between -90 and 90.');
+  if(time&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))throw Error('Invalid time.');
+  const proposals=list.map(a=>({...a,date:shift(a.date,shiftDays),time:time||a.time}));
+  const others=data().filter(a=>!list.includes(a));
+  const issues=[];
+  proposals.forEach((a,i)=>{
+   const c=others.find(b=>b.id!==a.id&&b.date===a.date&&b.therapist===a.therapist&&isActive(a)&&isActive(b)&&minutes(a.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(a.time)+duration(a));
+   const room=others.find(b=>b.id!==a.id&&a.room&&b.room===a.room&&b.date===a.date&&isActive(a)&&isActive(b)&&minutes(a.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(a.time)+duration(a));
+   const problem=c?'Therapist overlap':room?'Room overlap':availabilityIssueForBulk(a);
+   if(problem)issues.push({i,problem});
+  });
+  for(let i=0;i<proposals.length;i++)for(let j=i+1;j<proposals.length;j++){
+   const a=proposals[i],b=proposals[j];if(a.date!==b.date||!isActive(a)||!isActive(b))continue;
+   const overlap=minutes(a.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(a.time)+duration(a);
+   if(overlap&&(a.therapist===b.therapist||(a.room&&a.room===b.room)))issues.push({i:j,problem:'Internal overlap'});
+  }
+  return {proposals,issues};
+ }
+ function availabilityIssueForBulk(a){
+  const cfg=settings(),start=minutes(a.time),end=start+duration(a),staff=staffConfig(a.therapist);
+  if(start<minutes(cfg.start)||end>minutes(cfg.end))return 'Outside clinic hours';
+  if(!staff.days.includes(dayIndex(a.date))||start<minutes(staff.start)||end>minutes(staff.end))return 'Therapist unavailable';
+  const closed=resources().closures.find(c=>c.date===a.date&&(c.staff==='all'||c.staff===a.therapist));
+  return closed?'Closure / leave':null;
+ }
+ function check(){error.textContent='';try{const r=propose();const m=new Map(r.issues.map(x=>[x.i,x.problem]));preview.innerHTML=`<div class="v122-preview-title">${r.proposals.length} sessions · ${r.issues.length} conflicts</div><div class="v122-session-list">${r.proposals.map((a,i)=>`<div class="v122-session ${m.has(i)?'v122-issue':''}"><span><b>${safe(a.date)} · ${safe(a.time)}</b><small>${safe(a.patient)}</small></span><small>${safe(m.get(i)||'Available')}</small></div>`).join('')}</div>`;if(r.issues.length)error.textContent='Resolve conflicts before saving.';return r;}catch(ex){error.textContent=ex.message;return null}}
+ dlg.onclick=e=>{if(e.target===dlg||e.target.closest('[data-v122-close]'))dlg.hidden=true;else if(e.target.closest('[data-v122-back]'))showPlanDetail(id);else if(e.target.closest('[data-v122-preview]'))check()};
+ form.onsubmit=e=>{e.preventDefault();const result=check();if(!result||result.issues.length)return;if(!confirm(`Reschedule ${result.proposals.length} sessions?`))return;
+  result.proposals.forEach(next=>{const old=list.find(a=>a.id===next.id);if(old){old.date=next.date;old.time=next.time}});save();showPlanDetail(id);
+ };
+}
+
+function showSeries(){
+ const dlg=document.querySelector('#v116-dialog');if(!dlg)return;
+ const patients=(db.patients||[]).map(p=>p.name).filter(Boolean);
+ const names=[...new Set(patients)];
+ const staff=[...new Set([...allStaff(),...Object.keys(resources().staff)])];
+ const rooms=resources().rooms;
+ const weekdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+ dlg.hidden=false;
+ dlg.innerHTML=`<div class="v116-dialog-card v121-series" role="dialog" aria-modal="true" aria-label="Treatment session series">
+ <div class="v116-dialog-head"><div><div class="v116-eyebrow">TREATMENT PLAN SCHEDULER</div><h3>Book a series of sessions</h3></div><button type="button" data-v121-close>✕</button></div>
+ <p class="v117-help">Create multiple appointments together. All proposed sessions are checked before anything is saved.</p>
+ <form id="v121-form"><div class="v116-form-grid">
+ <label>Patient<select name="patient" required><option value="">Select patient</option>${names.map(n=>`<option value="${safe(n)}">${safe(n)}</option>`).join('')}</select></label>
+ <label>Therapist<input name="therapist" list="v121-staff-list" required><datalist id="v121-staff-list">${staff.map(n=>`<option value="${safe(n)}">`).join('')}</datalist></label>
+ <label>Service<input name="service" value="Physiotherapy Session" required></label>
+ <label>Room<select name="room"><option value="">Unassigned</option>${rooms.map(n=>`<option value="${safe(n)}">${safe(n)}</option>`).join('')}</select></label>
+ <label>Start date<input type="date" name="start" required value="${state.date}"></label>
+ <label>Start time<input type="time" name="time" required value="09:00"></label>
+ <label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="60" required></label>
+ <label>Number of sessions<input type="number" name="count" min="2" max="60" value="12" required></label>
+ </div><fieldset class="v121-weekdays"><legend>Repeat on weekdays</legend><div>${weekdays.map((d,i)=>`<label><input type="checkbox" name="weekday" value="${i}" ${[0,2,4].includes(i)?'checked':''}> ${d}</label>`).join('')}</div></fieldset>
+ <div class="v116-form-error" role="alert"></div>
+ <div class="v121-preview" aria-live="polite"></div>
+ <div class="v116-form-actions"><button type="button" data-v121-close>Cancel</button><button type="button" data-v121-preview>Preview sessions</button><button type="submit" class="v116-primary">Book all sessions</button></div></form></div>`;
+ const form=dlg.querySelector('#v121-form'),err=dlg.querySelector('.v116-form-error'),preview=dlg.querySelector('.v121-preview');
+ let draft=[],signature='';
+ const getForm=()=>{
+  const f=new FormData(form);
+  return {patient:String(f.get('patient')||''),therapist:String(f.get('therapist')||'').trim(),
+   service:String(f.get('service')||'').trim(),room:String(f.get('room')||''),
+   date:String(f.get('start')||''),time:String(f.get('time')||''),
+   duration:Number(f.get('duration')),count:Number(f.get('count')),
+   weekdays:f.getAll('weekday').map(Number)};
+ };
+ const make=()=>{
+  const f=getForm();
+  if(!f.patient||!f.therapist||!f.service||!f.date||!f.time||!Number.isInteger(f.count)||f.count<2||f.count>60||
+     !Number.isFinite(f.duration)||f.duration<5||f.duration>480||!f.weekdays.length)
+   throw Error('Complete all fields, choose weekdays and enter 2–60 sessions.');
+  if(!/^\d{4}-\d\d-\d\d$/.test(f.date)||iso(dateObj(f.date))!==f.date)throw Error('Select a valid start date.');
+  const seriesId='TS-'+Date.now().toString(36).toUpperCase();
+  const proposed=[];
+  for(let offset=0;offset<370&&proposed.length<f.count;offset++){
+   const day=shift(f.date,offset);
+   if(!f.weekdays.includes(dayIndex(day)))continue;
+   proposed.push({id:seriesId+'-'+String(proposed.length+1).padStart(2,'0'),
+    seriesId,seriesNumber:proposed.length+1,seriesTotal:f.count,patient:f.patient,
+    therapist:f.therapist,service:f.service,room:f.room,date:day,time:f.time,
+    duration:f.duration,status:'Scheduled',notes:''});
+  }
+  if(proposed.length!==f.count)throw Error('Cannot fit all sessions within one year.');
+  // Check existing bookings and all candidate appointments without writing any data.
+  const problems=[];
+  proposed.forEach((a,i)=>{
+   const issue=canPlace(a);
+   if(issue)problems.push({index:i,issue});
+  });
+  for(let i=0;i<proposed.length;i++)for(let j=i+1;j<proposed.length;j++){
+   const a=proposed[i],b=proposed[j];
+   if(a.date!==b.date)continue;
+   if(a.therapist===b.therapist&&minutes(a.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(a.time)+duration(a))
+    problems.push({index:j,issue:'Overlap within this treatment series'});
+   if(a.room&&a.room===b.room&&minutes(a.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(a.time)+duration(a))
+    problems.push({index:j,issue:'Room overlap within this treatment series'});
+  }
+  return {proposed,problems};
+ };
+ const show=()=>{
+  err.textContent='';
+  try{
+   const f=getForm(),result=make();draft=result.proposed;
+   signature=JSON.stringify(f);
+   const issueMap=new Map(result.problems.map(x=>[x.index,x.issue]));
+   preview.innerHTML=`<div class="v121-summary"><strong>${draft.length} proposed sessions</strong><span>${result.problems.length?result.problems.length+' conflicts — booking blocked':'No conflicts — ready to book'}</span></div>
+    <div class="v121-session-list">${draft.map((a,i)=>`<div class="${issueMap.has(i)?'v121-bad':''}"><b>${i+1}.</b><span>${safe(a.date)} · ${safe(a.time)}–${endTime(a)}</span><small>${safe(issueMap.get(i)||'Available')}</small></div>`).join('')}</div>`;
+   if(result.problems.length)err.textContent='Resolve all conflicts before saving. No sessions have been created.';
+   return !result.problems.length;
+  }catch(e){draft=[];signature='';preview.innerHTML='';err.textContent=e.message;return false}
+ };
+ dlg.onclick=e=>{
+  if(e.target===dlg||e.target.closest('[data-v121-close]')){dlg.hidden=true;return}
+  if(e.target.closest('[data-v121-preview]'))show();
+ };
+ form.oninput=()=>{signature='';preview.innerHTML='';err.textContent='Preview again after changing the plan.'};
+ form.onchange=()=>{signature='';preview.innerHTML='';err.textContent='Preview again after changing the plan.'};
+ form.onsubmit=e=>{
+  e.preventDefault();
+  // Re-run validation immediately before committing. Never partially create a series.
+  if(!show())return;
+  if(!confirm(`Create all ${draft.length} appointments for ${draft[0].patient}?`))return;
+  const result=make();
+  if(result.problems.length){show();return}
+  data().push(...result.proposed);save();state.date=result.proposed[0].date;state.view='week';render();
+  if(typeof window.toast==='function')window.toast(`${result.proposed.length} sessions booked`);
+ };
+}
+
 function showHours(){
  const dlg=document.querySelector('#v116-dialog');if(!dlg)return;
  const cfg=settings();dlg.hidden=false;
@@ -17180,9 +17370,15 @@ style.textContent+=`
 style.textContent+=`
 .v120-profile-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:15px 0}.v120-profile-metrics>div{border:1px solid #e2eef0;background:#f7fbfc;border-radius:10px;padding:12px}.v120-profile-metrics small{display:block;color:#77939a;font-size:10px}.v120-profile-metrics strong{display:block;font-size:24px;color:#086f7d;margin-top:5px}.v120-patient-modal h4{font-size:13px;color:#285d68;margin:18px 0 9px}.v120-selected{background:#eaf8f8;border:1px solid #d6ecef;border-radius:10px;padding:13px;display:flex;flex-direction:column;gap:6px;font-size:12px}.v120-history{max-height:260px;overflow-y:auto;border:1px solid #e2eaed;border-radius:10px}.v120-history>div{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #e9eff1;font-size:11px}.v120-history small{display:block;color:#8199a0;margin-top:4px}.v120-warning{background:#fff7e7;border:1px solid #efdba8;padding:10px;border-radius:8px;color:#8b6b26;font-size:11px}@media(max-width:520px){.v120-profile-metrics{grid-template-columns:1fr 1fr}.v120-history>div{flex-wrap:wrap}}
 `;
+style.textContent+=`
+.v121-series{width:min(760px,100%)}.v121-weekdays{border:1px solid #e0edef;border-radius:10px;margin:14px 0;padding:12px}.v121-weekdays legend{font-size:12px;font-weight:800;color:#396c76}.v121-weekdays>div{display:flex;gap:10px;flex-wrap:wrap}.v121-weekdays label{font-size:11px;white-space:nowrap}.v121-preview{margin-top:14px}.v121-summary{display:flex;justify-content:space-between;gap:12px;padding:11px;background:#edf9f9;border-radius:9px;font-size:12px;color:#116c78}.v121-session-list{max-height:240px;overflow-y:auto;border:1px solid #e2edef;border-radius:9px;margin-top:8px}.v121-session-list>div{display:flex;gap:12px;align-items:center;padding:9px 12px;border-bottom:1px solid #edf2f3;font-size:11px}.v121-session-list>div span{flex:1}.v121-session-list small{color:#40815c}.v121-session-list .v121-bad{background:#fff0f0}.v121-session-list .v121-bad small{color:#b04747}
+`;
+style.textContent+=`
+.v122-modal{width:min(780px,100%)}.v122-plans{max-height:480px;overflow:auto;display:grid;gap:10px}.v122-plan{display:grid;grid-template-columns:1fr auto;gap:8px;text-align:left;background:#f9fcfc;border:1px solid #dce9eb;border-radius:12px;padding:14px;color:#235c67}.v122-plan strong,.v122-plan small{display:block}.v122-plan small{font-size:10px;color:#78959d;margin-top:5px}.v122-plan-count{text-align:right}.v122-progress{grid-column:1/-1;background:#e2eeee;height:7px;border-radius:10px;overflow:hidden}.v122-progress i{display:block;background:#16999a;height:100%}.v122-empty{padding:30px;text-align:center;color:#8ca2a9}.v122-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:15px 0}.v122-summary>div{background:#eef8f8;border-radius:10px;padding:12px}.v122-summary small{display:block;font-size:10px;color:#78959d}.v122-summary strong{display:block;font-size:24px;color:#147884}.v122-session-list{max-height:350px;overflow:auto;border:1px solid #e1edef;border-radius:10px;margin:14px 0}.v122-session{display:flex;gap:10px;align-items:center;padding:11px;border-bottom:1px solid #eaf0f1;font-size:11px}.v122-session>span:first-child{flex:1}.v122-session small{display:block;color:#78939a;margin-top:4px}.v122-session button{background:#e9f7f8;color:#137683;border:0;border-radius:7px;padding:7px 11px}.v122-issue{background:#fff1f1}.v122-issue>small{color:#b74747}.v122-preview-title{font-size:12px;font-weight:800;margin-top:16px}@media(max-width:550px){.v122-summary{grid-template-columns:repeat(2,1fr)}.v122-session{flex-wrap:wrap}}
+`;
 document.head.appendChild(style);
 function mount(){if(document.getElementById(PAGE))render()}
 document.addEventListener('click',e=>{if(e.target.closest('.nav-item[data-page="appointments"]'))setTimeout(mount,0)},true);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
-window.MYAIMS_APPOINTMENTS_VERSION='V120';
+window.MYAIMS_APPOINTMENTS_VERSION='V122';
 })();
