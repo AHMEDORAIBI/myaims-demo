@@ -1667,7 +1667,8 @@ render();
     btn.onclick=()=>openUsersAudit();
 
     const settings = [...nav.querySelectorAll('a,button')].find(x => (x.textContent||'').toLowerCase().includes('settings'));
-    if (settings) nav.insertBefore(btn, settings);
+    if (settings && settings.parentElement === nav) nav.insertBefore(btn, settings);
+    else if (settings && settings.parentElement) settings.parentElement.insertBefore(btn, settings);
     else nav.appendChild(btn);
   }
 
@@ -16834,6 +16835,7 @@ function shell(){
  let host=document.getElementById(ID);
  if(!host){host=document.createElement('section');host.id=ID;p.prepend(host);}
  p.querySelectorAll(':scope > :not(#v116-scheduler)').forEach(n=>{n.classList.add('v116-old-appointment-ui')});
+ host.style.setProperty('display','block','important');
  return host;
 }
 function appointmentCard(a){
@@ -17455,6 +17457,12 @@ style.textContent+=`
 style.textContent+=`
 .v123-modal{width:min(1050px,100%)}.v123-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:14px 0 20px}.v123-controls label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:#607d87}.v123-controls input,.v123-controls select{padding:9px;border:1px solid #d7e6e9;border-radius:8px;min-width:145px}.v123-controls button{padding:10px 13px;border:1px solid #bddde1;border-radius:8px;background:#e9f7f8;color:#086f7c;font-size:12px;font-weight:750}.v123-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.v123-metric{border:1px solid #e0ebee;background:#f8fcfc;border-radius:12px;padding:14px}.v123-metric small,.v123-metric span{display:block;color:#718e97;font-size:10px}.v123-metric strong{display:block;font-size:27px;color:#096c7a;margin:8px 0}.v123-note{font-size:10px;color:#8498a0;line-height:1.6;margin:10px 0}.v123-panels{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:14px}.v123-panels section,.v123-staff{border:1px solid #e1ecee;border-radius:12px;padding:15px;min-width:0}.v123-panels h4,.v123-staff h4{font-size:13px;color:#235c68;margin:0 0 15px}.v123-bar{margin-bottom:12px}.v123-bar-label{display:flex;justify-content:space-between;gap:9px;font-size:11px;margin-bottom:5px;color:#567882}.v123-track{height:8px;background:#e8f1f2;border-radius:8px;overflow:hidden}.v123-track i{display:block;height:100%;background:#1d9ca7;border-radius:8px}.v123-chart{display:flex;gap:4px;align-items:end;min-height:185px;max-height:185px;overflow-x:auto;padding:10px 0 0}.v123-daybar{min-width:16px;flex:1;max-width:30px;height:165px;display:flex;align-items:center;justify-content:flex-end;flex-direction:column;gap:5px}.v123-daybar i{display:block;background:linear-gradient(#26aab2,#0d7584);width:70%;border-radius:4px 4px 0 0;min-height:4px}.v123-daybar small{font-size:9px;color:#8ba0a6}.v123-empty{font-size:11px;color:#91a3a8}.v123-staff{margin-top:14px}.v123-table-wrap{overflow-x:auto}.v123-staff table{width:100%;border-collapse:collapse;font-size:11px}.v123-staff td,.v123-staff th{padding:10px;border-bottom:1px solid #e9eff1;text-align:left}.v123-staff th{color:#527682;background:#f5fafa}@media(max-width:760px){.v123-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.v123-panels{grid-template-columns:1fr}}
 `;
+style.textContent+=`
+/* V123 integration: the validated scheduler is the only visible appointment interface. */
+#page-appointments #v116-scheduler{display:block!important;visibility:visible!important}
+#page-appointments #v22-orbit-calendar{display:none!important}
+#page-appointments > .page-title{display:none!important}
+`;
 document.head.appendChild(style);
 function mount(){if(document.getElementById(PAGE))render()}
 document.addEventListener('click',e=>{if(e.target.closest('.nav-item[data-page="appointments"]'))setTimeout(mount,0)},true);
@@ -17484,5 +17492,5 @@ document.addEventListener('submit',function(e){
 const oldAppointmentModal=document.getElementById('appointmentModal');
 if(oldAppointmentModal)oldAppointmentModal.setAttribute('aria-hidden','true');
 
-window.MYAIMS_APPOINTMENTS_VERSION='V123-STABLE';
+window.MYAIMS_APPOINTMENTS_VERSION='V123-INTEGRATION-FIX';
 })();
