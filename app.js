@@ -16812,12 +16812,12 @@ const availabilityIssue=record=>{
  const closure=resources().closures.find(c=>c.date===record.date&&(c.staff==='all'||c.staff===record.therapist));
  if(closure)return 'Therapist unavailable: '+(closure.reason||'day off');
  if(record.room){
-  const roomOverlap=data().find(b=>b!==record&&b.id!==record.id&&b.date===record.date&&b.room===record.room&&!['Cancelled','No Show'].includes(b.status)&&start<minutes(b.time)+duration(b)&&minutes(b.time)<end);
+  const roomOverlap=data().find(b=>b!==record&&b.id!==record.id&&b.date===record.date&&b.room===record.room&&!b.archivedAt&&!['Cancelled','No Show'].includes(b.status)&&start<minutes(b.time)+duration(b)&&minutes(b.time)<end);
   if(roomOverlap)return 'Room occupied by '+roomOverlap.patient+' at '+roomOverlap.time;
  }
  return '';
 };
-const isActive=a=>!['Cancelled','No Show'].includes(a.status);
+const isActive=a=>!a.archivedAt&&!['Cancelled','No Show'].includes(a.status);
 const canPlace=(record,skip)=>{
  const c=data().find(b=>b!==skip&&b.id!==record.id&&b.date===record.date&&b.therapist===record.therapist&&isActive(b)&&isActive(record)&&minutes(record.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(record.time)+duration(record));
  return c?`Therapist overlap with ${c.patient} at ${c.time}`:availabilityIssue(record);
@@ -16826,8 +16826,8 @@ const statuses=['Scheduled','Confirmed','Checked In','In Progress','Completed','
 const duration=a=>Math.max(5,Math.min(480,Number(a.duration)||60));
 const minutes=x=>{const p=String(x||'00:00').split(':').map(Number);return (p[0]||0)*60+(p[1]||0)};
 const endTime=a=>{const m=minutes(a.time)+duration(a);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
-const filtered=()=>data().filter(a=>(state.staff==='all'||a.therapist===state.staff)&&(state.status==='all'||a.status===state.status)&&(!state.search||[a.patient,a.therapist,a.service,a.id].join(' ').toLowerCase().includes(state.search.toLowerCase())));
-const conflict=a=>data().some(b=>b!==a&&b.id!==a.id&&b.date===a.date&&b.therapist===a.therapist&&!['Cancelled','No Show'].includes(b.status)&&!['Cancelled','No Show'].includes(a.status)&&minutes(a.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(a.time)+duration(a));
+const filtered=()=>data().filter(a=>(state.showArchived?!!a.archivedAt:!a.archivedAt)&&(state.staff==='all'||a.therapist===state.staff)&&(state.status==='all'||a.status===state.status)&&(!state.search||[a.patient,a.therapist,a.service,a.id].join(' ').toLowerCase().includes(state.search.toLowerCase())));
+const conflict=a=>data().some(b=>b!==a&&b.id!==a.id&&b.date===a.date&&b.therapist===a.therapist&&!b.archivedAt&&!a.archivedAt&&!['Cancelled','No Show'].includes(b.status)&&!['Cancelled','No Show'].includes(a.status)&&minutes(a.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(a.time)+duration(a));
 const themeStatus=x=>String(x||'Scheduled').toLowerCase().replace(/\s+/g,'-');
 const heading=()=>state.view==='month'?dateObj(state.date).toLocaleDateString(undefined,{month:'long',year:'numeric'}):state.view==='week'?`${weekStart(state.date)} — ${shift(weekStart(state.date),6)}`:state.date;
 function shell(){
@@ -16866,7 +16866,7 @@ function monthContent(){
 }
 function listContent(){
  const a=filtered().slice().sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time));
- return `<div class="v116-table-scroll"><table class="v116-table"><thead><tr><th>Date / Time</th><th>Patient</th><th>Service</th><th>Therapist</th><th>Status</th><th>Duration</th><th></th></tr></thead><tbody>${a.map(x=>`<tr><td>${safe(x.date)}<br><b>${safe(x.time)}</b></td><td><b>${safe(x.patient)}</b></td><td>${safe(x.service)}</td><td>${safe(x.therapist)}</td><td><span class="v116-pill v116-${themeStatus(x.status)}">${safe(x.status)}</span></td><td>${duration(x)} min</td><td><button type="button" data-v116-edit="${data().indexOf(x)}">Edit</button></td></tr>`).join('')||'<tr><td colspan="7">No appointments found</td></tr>'}</tbody></table></div>`;
+ return `<div class="v116-table-scroll"><table class="v116-table"><thead><tr><th>Date / Time</th><th>Patient</th><th>Service</th><th>Therapist</th><th>Status</th><th>Duration</th><th></th></tr></thead><tbody>${a.map(x=>`<tr><td>${safe(x.date)}<br><b>${safe(x.time)}</b></td><td><b>${safe(x.patient)}</b></td><td>${safe(x.service)}</td><td>${safe(x.therapist)}</td><td><span class="v116-pill v116-${themeStatus(x.status)}">${safe(x.status)}</span>${x.archivedAt?' <small>Archived</small>':''}</td><td>${duration(x)} min</td><td><button type="button" data-v116-edit="${data().indexOf(x)}">Edit</button></td></tr>`).join('')||'<tr><td colspan="7">No appointments found</td></tr>'}</tbody></table></div>`;
 }
 function receptionContent(){
  const today=state.date;
@@ -16892,12 +16892,12 @@ function receptionContent(){
 }
 function render(){
  const host=shell();if(!host)return;
- const all=data(),today=iso(new Date()),todays=all.filter(a=>a.date===today);
- const conflictCount=all.filter(conflict).length;
+ const all=data(),today=iso(new Date()),todays=all.filter(a=>!a.archivedAt&&a.date===today);
+ const conflictCount=all.filter(a=>!a.archivedAt&&conflict(a)).length;
  host.innerHTML=`<header class="v116-head"><div class="v125-hero-copy"><div class="v125-brandline"><span class="v125-mark">✦</span><span class="v116-eyebrow">MY AIMS · CLINICAL OPERATIONS</span></div><h2>Appointments <em>Command Center</em></h2><p>A clearer, calmer way to manage every patient visit, clinical team and treatment schedule.</p><div class="v125-hero-tags"><span>◉ Live clinic overview</span><span>◇ Therapist scheduling</span><span>✓ Conflict-aware booking</span></div></div><div class="v116-top-actions"><button type="button" data-v116-export>Export CSV</button><button type="button" class="v116-primary" data-v116-new>+ New Appointment</button></div></header>
  <div class="v116-kpis"><div class="v125-stat"><div class="v125-stat-top"><span>Today's appointments</span><i>▣</i></div><strong>${todays.length}</strong><small>${today}</small></div><div class="v125-stat"><div class="v125-stat-top"><span>Confirmed</span><i>✓</i></div><strong>${todays.filter(a=>a.status==='Confirmed').length}</strong><small>Ready for treatment</small></div><div class="v125-stat"><div class="v125-stat-top"><span>In progress</span><i>◷</i></div><strong>${todays.filter(a=>a.status==='In Progress').length}</strong><small>Active sessions</small></div><div class="v125-stat"><div class="v125-stat-top"><span>Schedule conflicts</span><i>!</i></div><strong>${conflictCount}</strong><small>${conflictCount?'Requires attention':'No overlapping bookings'}</small></div></div>
  <div class="v125-section-heading"><div><span>YOUR CLINIC AT A GLANCE</span><h3>Schedule overview</h3></div><small>● Updated from current appointments</small></div><div class="v116-toolbar"><div class="v116-switch">${['day','week','month','list','reception'].map(x=>`<button type="button" data-v116-view="${x}" class="${state.view===x?'active':''}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div><div class="v116-date-controls"><button data-v116-prev type="button">‹</button><button data-v116-today type="button">Today</button><button data-v116-next type="button">›</button><input aria-label="Selected date" type="date" data-v116-date value="${state.date}"><b>${heading()}</b></div></div>
- <div class="v125-section-heading"><div><span>MANAGE & ORGANIZE</span><h3>Quick management tools</h3></div></div><div class="v117-extras"><button type="button" data-v123-analytics>▥ Analytics</button><button type="button" data-v122-manage>▦ Manage plans</button><button type="button" data-v121-series>↻ Treatment series</button><button type="button" data-v117-waitlist>◷ Waiting list <b>${waitlist().length}</b></button><button type="button" data-v117-hours>⚙ Clinic hours</button><button type="button" data-v118-resources>◫ Rooms & therapists</button><button type="button" data-v118-leave>▣ Time off</button><span>Drag an appointment to another day or time slot to reschedule</span></div>
+ <div class="v125-section-heading"><div><span>MANAGE & ORGANIZE</span><h3>Quick management tools</h3></div></div><div class="v117-extras"><button type="button" data-v123-analytics>▥ Analytics</button><button type="button" data-v122-manage>▦ Manage plans</button><button type="button" data-v121-series>↻ Treatment series</button><button type="button" data-v117-waitlist>◷ Waiting list <b>${waitlist().length}</b></button><button type="button" data-v117-hours>⚙ Clinic hours</button><button type="button" data-v118-resources>◫ Rooms & therapists</button><button type="button" data-v118-leave>▣ Time off</button><button type="button" data-v139-archive-view class="v139-archive-toggle">${state.showArchived?'↩ Active appointments':'▣ Archived ('+data().filter(x=>x.archivedAt).length+')'}</button><span>Drag an appointment to another day or time slot to reschedule</span></div>
  <div class="v116-filters"><input type="search" data-v116-search placeholder="Search patient, service or ID..." value="${safe(state.search)}"><select data-v116-staff><option value="all">All therapists</option>${allStaff().map(x=>`<option value="${safe(x)}" ${state.staff===x?'selected':''}>${safe(x)}</option>`).join('')}</select><select data-v116-status><option value="all">All statuses</option>${statuses.map(x=>`<option ${state.status===x?'selected':''}>${x}</option>`).join('')}</select><span>${filtered().length} appointments</span></div>
  <div class="v125-section-heading"><div><span>APPOINTMENT WORKSPACE</span><h3>Calendar & patient visits</h3></div><small>${filtered().length} appointments in current filter</small></div><div class="v116-board">${state.view==='day'?dayContent(state.date):state.view==='week'?weekContent():state.view==='month'?monthContent():state.view==='reception'?receptionContent():listContent()}</div>
  <div class="v126-legend-title">APPOINTMENT STATUS KEY</div><div class="v116-legend">${statuses.map(x=>`<span><i class="v116-dot v116-${themeStatus(x)}"></i>${x}</span>`).join('')}</div>
@@ -16913,6 +16913,7 @@ function render(){
  }
  if(b.hasAttribute('data-v120-patient')){showPatientCard(Number(b.dataset.v120Patient));return}
  if(b.hasAttribute('data-v120-reschedule')){showQuickReschedule(Number(b.dataset.v120Reschedule));return}
+ if(b.hasAttribute('data-v139-archive-view')){state.showArchived=!state.showArchived;state.view='list';render();return}
  if(b.hasAttribute('data-v116-view')){state.view=b.dataset.v116View;render();return}
  if(b.hasAttribute('data-v116-prev')||b.hasAttribute('data-v116-next')){const n=b.hasAttribute('data-v116-next')?1:-1;state.date=state.view==='month'?iso(new Date(dateObj(state.date).getFullYear(),dateObj(state.date).getMonth()+n,1)):shift(state.date,n*(state.view==='week'?7:1));render();return}
  if(b.hasAttribute('data-v116-today')){state.date=iso(new Date());render();return}
@@ -16973,7 +16974,7 @@ function showPatientCard(idx){
  <p class="v117-help">Appointment history only. This panel does not display clinical notes, diagnoses or a verified medical record.</p>
  <div class="v131-action-title">QUICK ACTIONS · FROM THIS APPOINTMENT</div>
  <div class="v131-actions">
- <button type="button" data-v131-action="invoice">＋ Create invoice</button>
+ <button type="button" data-v139-followup>↻ Schedule follow-up</button><button type="button" data-v131-action="invoice">＋ Create invoice</button>
  <button type="button" data-v131-action="assessment">✚ Clinical assessment</button>
  <button type="button" data-v131-action="notes">▤ Clinical notes</button>
  <button type="button" data-v131-action="profile">◉ Patient profile</button>
@@ -16985,6 +16986,7 @@ function showPatientCard(idx){
  dlg.onclick=e=>{
   if(e.target===dlg||e.target.closest('[data-v120-close]')){dlg.hidden=true;return}
   if(e.target.closest('[data-v120-reschedule-from-card]')){showQuickReschedule(idx);return}
+  if(e.target.closest('[data-v139-followup]')){edit(-1,appt.time||'09:00',appt.therapist||'',appt);return}
   const action=e.target.closest('[data-v131-action]')?.dataset.v131Action;
   if(!action)return;
   if(!patient){const msg=dlg.querySelector('.v131-action-message');if(msg)msg.textContent='A unique patient record is required. Duplicate names must be resolved before accessing clinical or financial information.';return}
@@ -17070,7 +17072,7 @@ function openV132CalendarDrawer(idx,patient,initial='overview'){
   }
   if(e.target.closest('[data-v138-next-appointment]')){
    close();
-   edit(-1);
+   edit(-1,appt.time||'09:00',appt.therapist||'',appt);
    return;
   }
   const sessionNote=e.target.closest('[data-v134-session-note]');
@@ -17138,16 +17140,32 @@ function showQuickReschedule(idx){
   Object.assign(a,proposed);save();state.date=a.date;render();
  };
 }
-function edit(idx,time='09:00',staff=''){
+function edit(idx,time='09:00',staff='',followup=null){
  const host=document.getElementById(ID),dlg=host?.querySelector('#v116-dialog');if(!dlg)return;
  const old=idx>=0?data()[idx]:null;
- const a=old||{date:state.date,time,therapist:staff,patient:'',service:'Physiotherapy Session',status:'Scheduled',duration:60,room:'',notes:''};
+ const a=old||{date:state.date,time,therapist:staff,patient:followup?.patient||'',patientId:followup?.patientId||'',service:followup?.service||'Physiotherapy Session',status:'Scheduled',duration:followup?.duration||60,room:followup?.room||'',notes:''};
+ const lockedPatient=!!followup&&!old;
+ const linkedPatient=lockedPatient?((db.patients||[]).find(p=>followup.patientId&&String(p.id)===String(followup.patientId))||((db.patients||[]).filter(p=>String(p.name||'')===String(followup.patient||'')).length===1?(db.patients||[]).find(p=>String(p.name||'')===String(followup.patient||'')):null)):null;
+ if(lockedPatient&&(!linkedPatient||String(linkedPatient.name)!==String(followup.patient))){alert('Patient record could not be verified. Reopen the patient appointment.');return}
  const opts=(arr,value)=>arr.map(x=>`<option value="${safe(x)}" ${x===value?'selected':''}>${safe(x)}</option>`).join('');
- dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card v127-booking-dialog" role="dialog" aria-modal="true" aria-label="Appointment details"><div class="v116-dialog-head v127-booking-head"><div><span class="v127-booking-eyebrow">MY AIMS · APPOINTMENT MANAGEMENT</span><h3>${old?'Edit appointment':'New appointment'}</h3><p>Patient details, clinical resources and session timing in one place.</p></div><button type="button" data-v116-close aria-label="Close booking form">✕</button></div><form id="v116-form"><div class="v127-form-section"><span class="v127-section-icon">01</span><div><strong>Patient & clinical team</strong><small>Select the patient and assigned therapist</small></div></div><div class="v116-form-grid"><label>Patient<select name="patient" required><option value="">Select patient</option>${opts([...new Set([...db.patients.map(p=>p.name),a.patient].filter(Boolean))],a.patient)}</select></label><label>Therapist<input name="therapist" list="v116-staff-list" required value="${safe(a.therapist)}"><datalist id="v116-staff-list">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label></div><div class="v127-form-section"><span class="v127-section-icon">02</span><div><strong>Session schedule</strong><small>Choose a suitable date and treatment time</small></div></div><div class="v116-form-grid"><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="${duration(a)}"></label></div><div class="v127-form-section"><span class="v127-section-icon">03</span><div><strong>Treatment details</strong><small>Service, room and booking status</small></div></div><div class="v116-form-grid"><label>Service<input name="service" required value="${safe(a.service)}"></label><label>Room<select name="room"><option value="">Unassigned</option>${opts(resources().rooms,a.room||'')}</select></label><label>Status<select name="status">${opts([...new Set([...statuses,a.status].filter(Boolean))],a.status)}</select></label><label class="v116-notes">Notes<textarea name="notes" rows="3">${safe(a.notes)}</textarea></label></div>${old?'<div class="v131-editor-shortcut"><button type="button" data-v131-open-actions>◉ Patient actions · Invoice · Assessment · Notes · Payment</button></div>':''}<div class="v127-booking-tip">✓ Therapist availability, room occupancy and scheduling rules are checked before saving.</div><div class="v116-form-error" aria-live="polite"></div><div class="v116-form-actions">${old?'<button type="button" data-v116-delete class="v116-danger">Delete</button>':''}<button type="button" data-v116-close>Cancel</button><button class="v116-primary" type="submit">Save appointment</button></div></form></div>`;
+ dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card v127-booking-dialog" role="dialog" aria-modal="true" aria-label="Appointment details"><div class="v116-dialog-head v127-booking-head"><div><span class="v127-booking-eyebrow">MY AIMS · APPOINTMENT MANAGEMENT</span><h3>${old?'Edit appointment':'New appointment'}</h3><p>Patient details, clinical resources and session timing in one place.</p></div><button type="button" data-v116-close aria-label="Close booking form">✕</button></div><form id="v116-form"><div class="v127-form-section"><span class="v127-section-icon">01</span><div><strong>Patient & clinical team</strong><small>Select the patient and assigned therapist</small></div></div><div class="v116-form-grid">${lockedPatient?`<label>Patient · linked automatically<input type="text" value="${safe(linkedPatient.name)}" readonly class="v139-locked-patient"><input type="hidden" name="patient" value="${safe(linkedPatient.name)}"><small>Follow-up for the same patient record · ID ${safe(linkedPatient.id)}</small></label>`:`<label>Patient<select name="patient" required><option value="">Select patient</option>${opts([...new Set([...db.patients.map(p=>p.name),a.patient].filter(Boolean))],a.patient)}</select></label>`}<label>Therapist<input name="therapist" list="v116-staff-list" required value="${safe(a.therapist)}"><datalist id="v116-staff-list">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label></div><div class="v127-form-section"><span class="v127-section-icon">02</span><div><strong>Session schedule</strong><small>Choose a suitable date and treatment time</small></div></div><div class="v116-form-grid"><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="${duration(a)}"></label></div><div class="v127-form-section"><span class="v127-section-icon">03</span><div><strong>Treatment details</strong><small>Service, room and booking status</small></div></div><div class="v116-form-grid"><label>Service<input name="service" required value="${safe(a.service)}"></label><label>Room<select name="room"><option value="">Unassigned</option>${opts(resources().rooms,a.room||'')}</select></label><label>Status<select name="status">${opts([...new Set([...statuses,a.status].filter(Boolean))],a.status)}</select></label><label class="v116-notes">Notes<textarea name="notes" rows="3">${safe(a.notes)}</textarea></label></div>${old?'<div class="v131-editor-shortcut"><button type="button" data-v131-open-actions>◉ Patient actions · Invoice · Assessment · Notes · Payment</button></div>':''}<div class="v127-booking-tip">✓ Therapist availability, room occupancy and scheduling rules are checked before saving.</div><div class="v116-form-error" aria-live="polite"></div><div class="v116-form-actions">${old?`<button type="button" data-v139-archive>${old.archivedAt?'Restore appointment':'Archive appointment'}</button><button type="button" data-v116-delete class="v116-danger">Delete permanently</button>`:''}<button type="button" data-v116-close>Cancel</button><button class="v116-primary" type="submit">Save appointment</button></div></form></div>`;
  dlg.onclick=e=>{
   if(e.target===dlg||e.target.closest('[data-v116-close]')){dlg.hidden=true;return}
   if(e.target.closest('[data-v131-open-actions]')&&old){showPatientCard(idx);return}
-  if(e.target.closest('[data-v116-delete]')&&old&&confirm('Delete this appointment?')){data().splice(idx,1);save();render()}
+  if(e.target.closest('[data-v139-archive]')&&old){
+   if(old.archivedAt){delete old.archivedAt;save();render();return}
+   if(!confirm('Archive this appointment? It will be hidden from the active calendar and can be restored later.'))return;
+   old.archivedAt=new Date().toISOString();save();render();return;
+  }
+  if(e.target.closest('[data-v116-delete]')&&old){
+   const id=String(old.id||'');
+   const collections=['invoices','receipts','sessionNotes','clinicalNotes','assessments','treatmentPlans','treatmentGoals','clinicalUpdates'];
+   const clinical=window.state||window.appState||{};
+   const linked=collections.some(k=>[...(Array.isArray(db[k])?db[k]:[]),...(Array.isArray(clinical[k])?clinical[k]:[])].some(r=>id&&String(r.appointmentId||r.sessionAppointmentId||'')===id));
+   if(linked){alert('This appointment is linked to financial or clinical records. Archive it instead of deleting it.');return}
+   if(!confirm('Permanently delete this appointment? This cannot be undone.'))return;
+   data().splice(idx,1);save();render();return;
+  }
  };
  dlg.querySelector('form').onsubmit=e=>{
   e.preventDefault();const f=new FormData(e.currentTarget);
@@ -17156,9 +17174,10 @@ function edit(idx,time='09:00',staff=''){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(record.date)||iso(dateObj(record.date))!==record.date||!/^([01]\d|2[0-3]):[0-5]\d$/.test(record.time)){dlg.querySelector('.v116-form-error').textContent='Enter a valid date and time';return}
   if(!Number.isFinite(record.duration)||record.duration<5||record.duration>480){dlg.querySelector('.v116-form-error').textContent='Duration must be 5–480 minutes';return}
   const issue=canPlace(record,old);if(issue){dlg.querySelector('.v116-form-error').textContent=issue;return}
-  const matches=(db.patients||[]).filter(p=>String(p.name||'')===record.patient);
+  const matches=lockedPatient?[linkedPatient]:(db.patients||[]).filter(p=>String(p.name||'')===record.patient);
   if(matches.length!==1){dlg.querySelector('.v116-form-error').textContent='Select a unique patient record before saving. Duplicate names must be resolved.';return}
   record.patientId=String(matches[0].id);
+  if(lockedPatient)record.followUpOf=String(followup.id||'');
   if(old)Object.assign(old,record);
   else{record.id='A-'+Date.now().toString(36).toUpperCase();data().push(record)}
   save();render();
@@ -18104,3 +18123,11 @@ window.MYAIMS_APPOINTMENTS_VERSION='V133-IDENTITY-LINKED-WORKFLOW';
  `;document.head.appendChild(el);
  window.MYAIMS_CLINICAL_VERSION='V138-SESSION-SUMMARY';
 })();
+
+/* V139 — contextual follow-up booking and reversible appointment archive. */
+(function(){'use strict';if(document.getElementById('myaims-v139-style'))return;const st=document.createElement('style');st.id='myaims-v139-style';st.textContent=`
+#v116-scheduler .v139-locked-patient{background:#eaf5f5;color:#155e6b;font-weight:800;border-color:#b8d9de;cursor:default}
+#v116-scheduler [data-v139-archive]{border:1px solid #d8c6a4;background:#fffaf0;color:#88652f;border-radius:9px;padding:10px 13px;font-weight:750;cursor:pointer}
+#v116-scheduler [data-v139-archive-view]{border-color:#b8d9de;background:#edf7f8;color:#126777}
+#v116-scheduler .v131-actions [data-v139-followup]{background:#eaf4f4;color:#116577;border:1px solid #b8d9de}
+`;document.head.appendChild(st);window.MYAIMS_UI_VERSION='V139-CONTEXTUAL-FOLLOWUP-ARCHIVE';})();
