@@ -16841,7 +16841,7 @@ function shell(){
 function appointmentCard(a){
  const idx=data().indexOf(a);
  return `<button draggable="true" class="v116-appt v116-${themeStatus(a.status)}" type="button" data-v116-edit="${idx}" title="${safe(a.patient)}">
- <span class="v116-card-time">${safe(a.time)}–${endTime(a)}</span><strong>${safe(a.patient)}</strong><span>${safe(a.service||'Session')}</span><small>${safe(a.therapist||'—')}${a.room?' · '+safe(a.room):''}</small>${conflict(a)?'<b class="v116-conflict">⚠ Conflict</b>':''}</button>`;
+ <span class="v126-appt-head"><span class="v116-card-time">${safe(a.time)}–${endTime(a)}</span><span class="v126-status-indicator" title="${safe(a.status)}"></span></span><span class="v126-patient-row"><span class="v126-avatar">${safe(String(a.patient||'?').trim().split(/\s+/).slice(0,2).map(x=>x.charAt(0)).join('').toUpperCase())}</span><strong>${safe(a.patient)}</strong></span><span class="v126-service">${safe(a.service||'Session')}</span><small class="v126-therapist">${safe(a.therapist||'—')}${a.room?' · '+safe(a.room):''}</small>${conflict(a)?'<b class="v116-conflict">⚠ Conflict</b>':''}</button>`;
 }
 function dayContent(day){
  const people=state.staff==='all'?allStaff():[state.staff];
@@ -16855,14 +16855,14 @@ function dayContent(day){
 function weekContent(){
  const first=weekStart(state.date);
  return `<div class="v116-week">${Array.from({length:7},(_,i)=>{const day=shift(first,i),a=filtered().filter(x=>x.date===day).sort((x,y)=>x.time.localeCompare(y.time));
- return `<div class="v116-week-col" data-v117-drop-day="${day}"><button type="button" class="v116-week-day" data-v116-day="${day}"><span>${dateObj(day).toLocaleDateString(undefined,{weekday:'short'})}</span><strong>${dateObj(day).getDate()}</strong><small>${a.length} sessions</small></button><div class="v116-week-items">${a.map(appointmentCard).join('')||'<div class="v116-empty-day">Available</div>'}<button class="v116-add-day" data-v116-add="${day}" type="button">+ Add</button></div></div>`}).join('')}</div>`;
+ return `<div class="v116-week-col ${day===iso(new Date())?'v126-today-col':''}" data-v117-drop-day="${day}"><button type="button" class="v116-week-day" data-v116-day="${day}"><span>${dateObj(day).toLocaleDateString(undefined,{weekday:'short'})}</span><strong>${dateObj(day).getDate()}</strong><small>${a.length} sessions</small></button><div class="v116-week-items">${a.map(appointmentCard).join('')||'<div class="v116-empty-day">Available</div>'}<button class="v116-add-day" data-v116-add="${day}" type="button">+ Add</button></div></div>`}).join('')}</div>`;
 }
 function monthContent(){
  const d=dateObj(state.date),first=new Date(d.getFullYear(),d.getMonth(),1),offset=(first.getDay()+6)%7,days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
  return `<div class="v116-month">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<div class="v116-month-label">${x}</div>`).join('')}${Array.from({length:Math.ceil((days+offset)/7)*7},(_,i)=>{
  const n=i-offset+1;if(n<1||n>days)return '<div class="v116-month-empty"></div>';
  const day=iso(new Date(d.getFullYear(),d.getMonth(),n)),a=filtered().filter(x=>x.date===day);
- return `<button class="v116-month-day" type="button" data-v117-drop-day="${day}" data-v116-day="${day}"><strong>${n}</strong><span>${a.length?a.length+' appointments':'—'}</span><div>${a.slice(0,3).map(x=>`<small class="v116-dot v116-${themeStatus(x.status)}">${safe(x.time)} ${safe(x.patient)}</small>`).join('')}</div></button>`}).join('')}</div>`;
+ return `<button class="v116-month-day ${day===iso(new Date())?'v126-today-month':''}" type="button" data-v117-drop-day="${day}" data-v116-day="${day}"><strong>${n}</strong><span>${a.length?a.length+' appointments':'—'}</span><div>${a.slice(0,3).map(x=>`<small class="v116-dot v116-${themeStatus(x.status)}">${safe(x.time)} ${safe(x.patient)}</small>`).join('')}</div></button>`}).join('')}</div>`;
 }
 function listContent(){
  const a=filtered().slice().sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time));
@@ -16878,7 +16878,7 @@ function receptionContent(){
   {name:'Finished',statuses:['Completed'],color:'finished'}
  ];
  const clock=new Date();const isToday=today===iso(clock),now=clock.getHours()*60+clock.getMinutes();
- return `<div class="v119-reception-head"><div><strong>Live Reception Board</strong><small>Operational status · ${safe(today)}</small></div><div class="v119-reception-clock">${isToday?clock.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'Selected date'}</div></div>
+ return `<div class="v119-reception-head"><div><span class="v128-kicker">MY AIMS · PATIENT FLOW</span><strong>Live Reception Board</strong><small>Operational status · ${safe(today)}</small></div><div class="v119-reception-clock">${isToday?clock.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'Selected date'}</div></div>
  <div class="v119-reception-stats"><span><b>${entries.length}</b> total</span><span><b>${entries.filter(a=>a.status==='Checked In').length}</b> arrived</span><span><b>${entries.filter(a=>a.status==='In Progress').length}</b> in session</span><span><b>${entries.filter(a=>a.status==='Completed').length}</b> completed</span><span><b>${entries.filter(a=>['Scheduled','Confirmed'].includes(a.status)&&isToday&&minutes(a.time)+10<now).length}</b> overdue*</span></div>
  <div class="v119-kanban">${columns.map(col=>{
  const items=entries.filter(a=>col.statuses.includes(a.status));
@@ -16894,13 +16894,13 @@ function render(){
  const host=shell();if(!host)return;
  const all=data(),today=iso(new Date()),todays=all.filter(a=>a.date===today);
  const conflictCount=all.filter(conflict).length;
- host.innerHTML=`<header class="v116-head"><div><div class="v116-eyebrow">MY AIMS · CLINICAL OPERATIONS</div><h2>Appointments Command Center</h2><p>Manage bookings, therapists, attendance and schedules in one place</p></div><div class="v116-top-actions"><button type="button" data-v116-export>Export CSV</button><button type="button" class="v116-primary" data-v116-new>+ New Appointment</button></div></header>
- <div class="v116-kpis"><div><span>Today's appointments</span><strong>${todays.length}</strong><small>${today}</small></div><div><span>Confirmed</span><strong>${todays.filter(a=>a.status==='Confirmed').length}</strong><small>Ready for treatment</small></div><div><span>In progress</span><strong>${todays.filter(a=>a.status==='In Progress').length}</strong><small>Active sessions</small></div><div><span>Schedule conflicts</span><strong>${conflictCount}</strong><small>${conflictCount?'Requires attention':'No overlapping bookings'}</small></div></div>
- <div class="v116-toolbar"><div class="v116-switch">${['day','week','month','list','reception'].map(x=>`<button type="button" data-v116-view="${x}" class="${state.view===x?'active':''}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div><div class="v116-date-controls"><button data-v116-prev type="button">‹</button><button data-v116-today type="button">Today</button><button data-v116-next type="button">›</button><input aria-label="Selected date" type="date" data-v116-date value="${state.date}"><b>${heading()}</b></div></div>
- <div class="v117-extras"><button type="button" data-v123-analytics>▥ Analytics</button><button type="button" data-v122-manage>▦ Manage plans</button><button type="button" data-v121-series>↻ Treatment series</button><button type="button" data-v117-waitlist>◷ Waiting list <b>${waitlist().length}</b></button><button type="button" data-v117-hours>⚙ Clinic hours</button><button type="button" data-v118-resources>◫ Rooms & therapists</button><button type="button" data-v118-leave>▣ Time off</button><span>Drag an appointment to another day or time slot to reschedule</span></div>
+ host.innerHTML=`<header class="v116-head"><div class="v125-hero-copy"><div class="v125-brandline"><span class="v125-mark">✦</span><span class="v116-eyebrow">MY AIMS · CLINICAL OPERATIONS</span></div><h2>Appointments <em>Command Center</em></h2><p>A clearer, calmer way to manage every patient visit, clinical team and treatment schedule.</p><div class="v125-hero-tags"><span>◉ Live clinic overview</span><span>◇ Therapist scheduling</span><span>✓ Conflict-aware booking</span></div></div><div class="v116-top-actions"><button type="button" data-v116-export>Export CSV</button><button type="button" class="v116-primary" data-v116-new>+ New Appointment</button></div></header>
+ <div class="v116-kpis"><div class="v125-stat"><div class="v125-stat-top"><span>Today's appointments</span><i>▣</i></div><strong>${todays.length}</strong><small>${today}</small></div><div class="v125-stat"><div class="v125-stat-top"><span>Confirmed</span><i>✓</i></div><strong>${todays.filter(a=>a.status==='Confirmed').length}</strong><small>Ready for treatment</small></div><div class="v125-stat"><div class="v125-stat-top"><span>In progress</span><i>◷</i></div><strong>${todays.filter(a=>a.status==='In Progress').length}</strong><small>Active sessions</small></div><div class="v125-stat"><div class="v125-stat-top"><span>Schedule conflicts</span><i>!</i></div><strong>${conflictCount}</strong><small>${conflictCount?'Requires attention':'No overlapping bookings'}</small></div></div>
+ <div class="v125-section-heading"><div><span>YOUR CLINIC AT A GLANCE</span><h3>Schedule overview</h3></div><small>● Updated from current appointments</small></div><div class="v116-toolbar"><div class="v116-switch">${['day','week','month','list','reception'].map(x=>`<button type="button" data-v116-view="${x}" class="${state.view===x?'active':''}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div><div class="v116-date-controls"><button data-v116-prev type="button">‹</button><button data-v116-today type="button">Today</button><button data-v116-next type="button">›</button><input aria-label="Selected date" type="date" data-v116-date value="${state.date}"><b>${heading()}</b></div></div>
+ <div class="v125-section-heading"><div><span>MANAGE & ORGANIZE</span><h3>Quick management tools</h3></div></div><div class="v117-extras"><button type="button" data-v123-analytics>▥ Analytics</button><button type="button" data-v122-manage>▦ Manage plans</button><button type="button" data-v121-series>↻ Treatment series</button><button type="button" data-v117-waitlist>◷ Waiting list <b>${waitlist().length}</b></button><button type="button" data-v117-hours>⚙ Clinic hours</button><button type="button" data-v118-resources>◫ Rooms & therapists</button><button type="button" data-v118-leave>▣ Time off</button><span>Drag an appointment to another day or time slot to reschedule</span></div>
  <div class="v116-filters"><input type="search" data-v116-search placeholder="Search patient, service or ID..." value="${safe(state.search)}"><select data-v116-staff><option value="all">All therapists</option>${allStaff().map(x=>`<option value="${safe(x)}" ${state.staff===x?'selected':''}>${safe(x)}</option>`).join('')}</select><select data-v116-status><option value="all">All statuses</option>${statuses.map(x=>`<option ${state.status===x?'selected':''}>${x}</option>`).join('')}</select><span>${filtered().length} appointments</span></div>
- <div class="v116-board">${state.view==='day'?dayContent(state.date):state.view==='week'?weekContent():state.view==='month'?monthContent():state.view==='reception'?receptionContent():listContent()}</div>
- <div class="v116-legend">${statuses.map(x=>`<span><i class="v116-dot v116-${themeStatus(x)}"></i>${x}</span>`).join('')}</div>
+ <div class="v125-section-heading"><div><span>APPOINTMENT WORKSPACE</span><h3>Calendar & patient visits</h3></div><small>${filtered().length} appointments in current filter</small></div><div class="v116-board">${state.view==='day'?dayContent(state.date):state.view==='week'?weekContent():state.view==='month'?monthContent():state.view==='reception'?receptionContent():listContent()}</div>
+ <div class="v126-legend-title">APPOINTMENT STATUS KEY</div><div class="v116-legend">${statuses.map(x=>`<span><i class="v116-dot v116-${themeStatus(x)}"></i>${x}</span>`).join('')}</div>
  <div id="v116-dialog" class="v116-dialog" hidden></div>`;
  host.onclick=e=>{
  const b=e.target.closest('button');if(!b)return;
@@ -17000,7 +17000,7 @@ function edit(idx,time='09:00',staff=''){
  const old=idx>=0?data()[idx]:null;
  const a=old||{date:state.date,time,therapist:staff,patient:'',service:'Physiotherapy Session',status:'Scheduled',duration:60,room:'',notes:''};
  const opts=(arr,value)=>arr.map(x=>`<option value="${safe(x)}" ${x===value?'selected':''}>${safe(x)}</option>`).join('');
- dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card" role="dialog" aria-modal="true" aria-label="Appointment details"><div class="v116-dialog-head"><h3>${old?'Edit appointment':'New appointment'}</h3><button type="button" data-v116-close>✕</button></div><form id="v116-form"><div class="v116-form-grid"><label>Patient<select name="patient" required><option value="">Select patient</option>${opts([...new Set([...db.patients.map(p=>p.name),a.patient].filter(Boolean))],a.patient)}</select></label><label>Therapist<input name="therapist" list="v116-staff-list" required value="${safe(a.therapist)}"><datalist id="v116-staff-list">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="${duration(a)}"></label><label>Service<input name="service" required value="${safe(a.service)}"></label><label>Room<select name="room"><option value="">Unassigned</option>${opts(resources().rooms,a.room||'')}</select></label><label>Status<select name="status">${opts([...new Set([...statuses,a.status].filter(Boolean))],a.status)}</select></label><label class="v116-notes">Notes<textarea name="notes" rows="3">${safe(a.notes)}</textarea></label></div><div class="v116-form-error" aria-live="polite"></div><div class="v116-form-actions">${old?'<button type="button" data-v116-delete class="v116-danger">Delete</button>':''}<button type="button" data-v116-close>Cancel</button><button class="v116-primary" type="submit">Save appointment</button></div></form></div>`;
+ dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card v127-booking-dialog" role="dialog" aria-modal="true" aria-label="Appointment details"><div class="v116-dialog-head v127-booking-head"><div><span class="v127-booking-eyebrow">MY AIMS · APPOINTMENT MANAGEMENT</span><h3>${old?'Edit appointment':'New appointment'}</h3><p>Patient details, clinical resources and session timing in one place.</p></div><button type="button" data-v116-close aria-label="Close booking form">✕</button></div><form id="v116-form"><div class="v127-form-section"><span class="v127-section-icon">01</span><div><strong>Patient & clinical team</strong><small>Select the patient and assigned therapist</small></div></div><div class="v116-form-grid"><label>Patient<select name="patient" required><option value="">Select patient</option>${opts([...new Set([...db.patients.map(p=>p.name),a.patient].filter(Boolean))],a.patient)}</select></label><label>Therapist<input name="therapist" list="v116-staff-list" required value="${safe(a.therapist)}"><datalist id="v116-staff-list">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label></div><div class="v127-form-section"><span class="v127-section-icon">02</span><div><strong>Session schedule</strong><small>Choose a suitable date and treatment time</small></div></div><div class="v116-form-grid"><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="${duration(a)}"></label></div><div class="v127-form-section"><span class="v127-section-icon">03</span><div><strong>Treatment details</strong><small>Service, room and booking status</small></div></div><div class="v116-form-grid"><label>Service<input name="service" required value="${safe(a.service)}"></label><label>Room<select name="room"><option value="">Unassigned</option>${opts(resources().rooms,a.room||'')}</select></label><label>Status<select name="status">${opts([...new Set([...statuses,a.status].filter(Boolean))],a.status)}</select></label><label class="v116-notes">Notes<textarea name="notes" rows="3">${safe(a.notes)}</textarea></label></div><div class="v127-booking-tip">✓ Therapist availability, room occupancy and scheduling rules are checked before saving.</div><div class="v116-form-error" aria-live="polite"></div><div class="v116-form-actions">${old?'<button type="button" data-v116-delete class="v116-danger">Delete</button>':''}<button type="button" data-v116-close>Cancel</button><button class="v116-primary" type="submit">Save appointment</button></div></form></div>`;
  dlg.onclick=e=>{
   if(e.target===dlg||e.target.closest('[data-v116-close]')){dlg.hidden=true;return}
   if(e.target.closest('[data-v116-delete]')&&old&&confirm('Delete this appointment?')){data().splice(idx,1);save();render()}
@@ -17509,6 +17509,126 @@ style.textContent+=`
 @media(max-width:600px){#page-appointments{padding:15px 12px 28px}#v116-scheduler .v116-head{padding:22px 17px;border-radius:17px}#v116-scheduler .v116-head h2{font-size:25px}#v116-scheduler .v116-kpis{gap:9px}#v116-scheduler .v116-kpis>div{padding:15px 12px;border-radius:13px}#v116-scheduler .v116-kpis strong{font-size:27px}#v116-scheduler .v116-toolbar{padding:10px}#v116-scheduler .v116-switch{flex-wrap:wrap}#v116-scheduler .v116-filters input{min-width:100%}#v116-scheduler .v117-extras{padding:10px}#v116-scheduler .v117-extras button{flex:1 1 auto}}
 @media(prefers-reduced-motion:reduce){#v116-scheduler .v116-kpis>div,#v116-scheduler .v116-appt,#v116-scheduler .v117-extras button{transition:none}}
 `;
+
+style.textContent+=`
+#v116-scheduler .v116-head{min-height:230px;padding:34px 36px;gap:26px}
+#v116-scheduler .v125-hero-copy{max-width:690px;position:relative;z-index:1}
+#v116-scheduler .v125-brandline{display:flex;align-items:center;gap:11px}
+#v116-scheduler .v125-mark{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;border:1px solid rgba(245,219,161,.4);background:rgba(244,211,144,.12);color:#f0d399;font-size:16px}
+#v116-scheduler .v116-head h2{font-weight:850;line-height:1.16;margin:15px 0 10px;letter-spacing:-.045em}
+#v116-scheduler .v116-head h2 em{font-style:normal;color:#e5c485}
+#v116-scheduler .v116-head p{max-width:520px;font-size:13px;color:#d1e7e9}
+#v116-scheduler .v125-hero-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+#v116-scheduler .v125-hero-tags span{font-size:10px;font-weight:650;padding:7px 10px;border:1px solid rgba(255,255,255,.19);border-radius:100px;background:rgba(255,255,255,.075);color:#e1f0f1}
+#v116-scheduler .v116-top-actions{display:flex;align-items:stretch;flex-direction:column;min-width:170px}
+#v116-scheduler .v116-top-actions button{justify-content:center;min-height:42px}
+#v116-scheduler .v116-kpis>.v125-stat{padding:20px 21px;min-height:148px}
+#v116-scheduler .v125-stat-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#v116-scheduler .v125-stat-top span{font-size:12px;color:#68828b}
+#v116-scheduler .v125-stat-top i{display:grid;place-items:center;font-size:17px;font-style:normal;font-weight:800;color:#b4873c;background:#faf3e8;width:36px;height:36px;border-radius:11px}
+#v116-scheduler .v125-stat:nth-child(2) .v125-stat-top i{color:#16846c;background:#e8f6f1}
+#v116-scheduler .v125-stat:nth-child(3) .v125-stat-top i{color:#5876ba;background:#edf1fc}
+#v116-scheduler .v125-stat:nth-child(4) .v125-stat-top i{color:#b6675a;background:#fdf0ec}
+#v116-scheduler .v125-stat strong{margin:6px 0 8px;font-size:36px}
+#v116-scheduler .v125-section-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:25px 2px 12px}
+#v116-scheduler .v125-section-heading span{display:block;color:#b78c48;font-size:10px;font-weight:850;letter-spacing:.15em}
+#v116-scheduler .v125-section-heading h3{margin:5px 0 0;color:#174653;font-size:19px;letter-spacing:-.02em}
+#v116-scheduler .v125-section-heading small{font-size:11px;color:#698892}
+#v116-scheduler .v116-board{overflow:hidden;background:#fff}
+#v116-scheduler .v116-week-col{border-color:#e9eff0}
+#v116-scheduler .v116-week-items{min-height:190px}
+#v116-scheduler .v116-week-day{padding:16px 8px}
+#v116-scheduler .v116-week-day strong{font-size:24px}
+#v116-scheduler .v116-appt{border-left:3px solid #2a97a3}
+#v116-scheduler .v116-appt strong{font-weight:800}
+#v116-scheduler .v116-add-day{margin-top:9px;border-style:dashed}
+@media(max-width:900px){#v116-scheduler .v116-head{align-items:flex-start}#v116-scheduler .v116-top-actions{flex-direction:row;min-width:0}#v116-scheduler .v116-top-actions button{flex:1}}
+@media(max-width:600px){#v116-scheduler .v116-head{padding:23px 18px;min-height:0}#v116-scheduler .v125-hero-tags{gap:5px}#v116-scheduler .v125-hero-tags span{font-size:9px}#v116-scheduler .v116-top-actions{flex-wrap:wrap}#v116-scheduler .v116-kpis>.v125-stat{padding:13px;min-height:132px}#v116-scheduler .v125-stat strong{font-size:29px}#v116-scheduler .v125-stat-top i{width:28px;height:28px}#v116-scheduler .v125-section-heading{align-items:flex-start;flex-direction:column;gap:5px}}
+`;
+
+style.textContent+=`
+#v116-scheduler .v116-week-col{background:linear-gradient(180deg,#fff,#fcfefe)}
+#v116-scheduler .v116-week-col.v126-today-col{background:linear-gradient(180deg,#edf9f9,#fff);box-shadow:inset 0 3px 0 #c49a51}
+#v116-scheduler .v126-today-col .v116-week-day{background:linear-gradient(140deg,#0e5969,#137989);border-radius:11px;margin:9px 8px 5px;padding:13px 6px;box-shadow:0 7px 16px rgba(9,93,109,.13)}
+#v116-scheduler .v126-today-col .v116-week-day span,#v116-scheduler .v126-today-col .v116-week-day strong,#v116-scheduler .v126-today-col .v116-week-day small{color:#fff}
+#v116-scheduler .v116-week-items{padding:9px 8px 14px;gap:9px}
+#v116-scheduler .v116-appt{display:flex;flex-direction:column;gap:8px;text-align:left;position:relative;background:#fff;border:1px solid #dce8ea;border-left:3px solid #2297a3;padding:12px 10px;min-width:0}
+#v116-scheduler .v126-appt-head{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%}
+#v116-scheduler .v116-appt .v116-card-time{color:#2b7b87;font-size:10px;font-weight:800}
+#v116-scheduler .v126-status-indicator{width:8px;height:8px;min-width:8px;border-radius:50%;background:#2ba884;box-shadow:0 0 0 3px #e5f5ee}
+#v116-scheduler .v126-patient-row{display:flex;align-items:center;gap:7px;min-width:0;width:100%}
+#v116-scheduler .v126-avatar{flex:none;display:grid;place-items:center;width:27px;height:27px;border-radius:9px;background:#e4f1f3;color:#1b6472;font-size:10px;font-weight:850}
+#v116-scheduler .v126-patient-row strong{font-size:11px;line-height:1.3;overflow-wrap:anywhere;color:#1b4752}
+#v116-scheduler .v126-service{font-size:10px;color:#55737b;line-height:1.4;overflow-wrap:anywhere}
+#v116-scheduler .v126-therapist{font-size:9px;color:#879ca3;line-height:1.4;overflow-wrap:anywhere}
+#v116-scheduler .v116-add-day{background:#f6fafb;border:1px dashed #b9d9de;color:#367b87;border-radius:9px;font-weight:750;padding:9px}
+#v116-scheduler .v116-month-day.v126-today-month{background:#eaf7f6;outline:2px solid #73b6b9;outline-offset:-2px}
+#v116-scheduler .v126-legend-title{font-size:10px;font-weight:800;letter-spacing:.13em;color:#a18a63;margin:20px 4px 0}
+#v116-scheduler .v116-legend{margin-top:4px;display:flex;flex-wrap:wrap;gap:9px 17px}
+#v116-scheduler .v116-legend span{font-size:10px;color:#65808a;white-space:nowrap}
+#v116-scheduler .v116-table thead{background:#f3f9f9}
+#v116-scheduler .v116-table tbody tr:hover{background:#f7fbfb}
+#v116-scheduler .v119-patient-card{border-radius:13px;box-shadow:0 5px 15px rgba(22,72,82,.055)}
+@media(max-width:800px){#v116-scheduler .v116-week{overflow-x:auto;grid-template-columns:repeat(7,minmax(155px,1fr))}#v116-scheduler .v116-week-col{min-width:155px}#v116-scheduler .v116-appt{padding:10px 8px}}
+`;
+
+style.textContent+=`
+#v116-scheduler .v127-booking-dialog{width:min(780px,100%);padding:0;overflow-y:auto;overflow-x:hidden;background:#fff;border:1px solid rgba(255,255,255,.3)}
+#v116-scheduler .v127-booking-head{padding:27px 31px;margin:0;align-items:flex-start;background:linear-gradient(112deg,#0a4555,#0d6877);color:white;position:relative;overflow:hidden}
+#v116-scheduler .v127-booking-head:after{content:"";position:absolute;right:-45px;top:-90px;width:210px;height:210px;border:1px solid rgba(255,255,255,.17);border-radius:50%;box-shadow:0 0 0 40px rgba(255,255,255,.04)}
+#v116-scheduler .v127-booking-eyebrow{color:#f1d399;font-size:10px;letter-spacing:.15em;font-weight:850}
+#v116-scheduler .v127-booking-head h3{font-size:25px;font-weight:850;letter-spacing:-.035em;margin:8px 0}
+#v116-scheduler .v127-booking-head p{font-size:12px;line-height:1.5;color:#c8e1e6;margin:0}
+#v116-scheduler .v127-booking-head button{position:relative;z-index:1;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:9px 13px;cursor:pointer}
+#v116-scheduler .v127-booking-dialog #v116-form{padding:0 30px 26px;gap:0}
+#v116-scheduler .v127-form-section{display:flex;gap:11px;align-items:center;margin:25px 0 13px}
+#v116-scheduler .v127-section-icon{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:11px;background:#e8f4f5;color:#0d7180;font-size:11px;font-weight:850}
+#v116-scheduler .v127-form-section strong{display:block;font-size:13px;color:#194957}
+#v116-scheduler .v127-form-section small{display:block;font-size:10px;color:#8199a0;margin-top:3px}
+#v116-scheduler .v127-booking-dialog .v116-form-grid{gap:13px 15px}
+#v116-scheduler .v127-booking-dialog .v116-form-grid label{color:#597781;font-size:11px;gap:7px}
+#v116-scheduler .v127-booking-dialog .v116-form-grid input,#v116-scheduler .v127-booking-dialog .v116-form-grid select,#v116-scheduler .v127-booking-dialog .v116-form-grid textarea{min-height:43px;padding:11px 12px;border-radius:10px;background:#fcfefe;border:1px solid #dce8eb}
+#v116-scheduler .v127-booking-dialog .v116-form-grid textarea{min-height:77px}
+#v116-scheduler .v127-booking-dialog .v116-form-grid input:focus,#v116-scheduler .v127-booking-dialog .v116-form-grid select:focus,#v116-scheduler .v127-booking-dialog .v116-form-grid textarea:focus{border-color:#3d9ca8;box-shadow:0 0 0 3px rgba(39,156,169,.12);outline:0}
+#v116-scheduler .v127-booking-tip{margin:21px 0 5px;background:#edf8f4;border:1px solid #d5ebe3;border-radius:11px;padding:12px 14px;color:#317864;font-size:11px;line-height:1.5}
+#v116-scheduler .v127-booking-dialog .v116-form-error:not(:empty){background:#fff0ee;border:1px solid #f1cfca;padding:11px 12px;border-radius:9px;margin-top:10px;color:#aa5145}
+#v116-scheduler .v127-booking-dialog .v116-form-actions{border-top:1px solid #e8eff1;padding-top:17px;margin-top:22px}
+#v116-scheduler .v127-booking-dialog .v116-form-actions button{min-height:41px;padding:10px 17px;border-radius:10px}
+#v116-scheduler .v127-booking-dialog .v116-form-actions .v116-primary{background:#0d7280;color:#fff;border-color:#0d7280;box-shadow:0 5px 13px rgba(13,114,128,.15)}
+@media(max-width:650px){#v116-scheduler .v127-booking-head{padding:22px 19px}#v116-scheduler .v127-booking-dialog #v116-form{padding:0 18px 22px}#v116-scheduler .v127-booking-head h3{font-size:21px}#v116-scheduler .v127-booking-dialog .v116-form-grid{grid-template-columns:1fr}#v116-scheduler .v127-booking-dialog .v116-form-actions button{flex:1}}
+`;
+
+style.textContent+=`
+#v116-scheduler .v119-reception-head{padding:27px 29px;background:linear-gradient(112deg,#0a4555,#107383);color:#fff;position:relative;overflow:hidden}
+#v116-scheduler .v119-reception-head:after{content:"";position:absolute;right:12%;top:-100px;width:260px;height:260px;border:1px solid rgba(255,255,255,.16);border-radius:50%;box-shadow:0 0 0 45px rgba(255,255,255,.04);pointer-events:none}
+#v116-scheduler .v128-kicker{display:block;font-size:10px;letter-spacing:.16em;font-weight:850;color:#e9c990;margin-bottom:10px}
+#v116-scheduler .v119-reception-head strong{color:#fff;font-size:26px;letter-spacing:-.025em}
+#v116-scheduler .v119-reception-head small{color:#c7e4e8;margin-top:7px;display:block}
+#v116-scheduler .v119-reception-clock{color:#f4d69c;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:12px 17px;z-index:1}
+#v116-scheduler .v119-reception-stats{gap:10px;padding:17px;background:#f7fbfb;border-bottom:1px solid #e4ecee}
+#v116-scheduler .v119-reception-stats span{flex:1;min-width:115px;border-radius:12px;background:#fff;padding:13px 12px;box-shadow:0 5px 15px rgba(15,74,87,.045);border:1px solid #e0e9ec}
+#v116-scheduler .v119-reception-stats b{font-size:21px;color:#165765;margin-right:7px}
+#v116-scheduler .v119-kanban{gap:14px;padding:18px;background:#f5f9fa}
+#v116-scheduler .v119-lane{border:1px solid #e0e9ec;border-radius:16px;box-shadow:0 6px 22px rgba(22,71,83,.05)}
+#v116-scheduler .v119-lane>header{padding:18px 15px;background:#fff;font-size:13px}
+#v116-scheduler .v119-lane>header strong{font-weight:850;color:#244f5b}
+#v116-scheduler .v119-lane>header span{font-weight:850;color:#245b66}
+#v116-scheduler .v119-lane-list{padding:12px;gap:12px;background:#fcfefe}
+#v116-scheduler .v119-patient-card{background:#fff;border:1px solid #e0eaec;border-radius:13px;padding:15px;box-shadow:0 5px 16px rgba(21,69,81,.05);transition:transform .18s ease,box-shadow .18s ease}
+#v116-scheduler .v119-patient-card:hover{transform:translateY(-2px);box-shadow:0 9px 22px rgba(21,69,81,.1)}
+#v116-scheduler .v119-patient-time{font-size:11px;color:#247a87;display:flex;align-items:center;gap:6px}
+#v116-scheduler .v119-patient-card>strong{font-size:14px;margin:14px 0 9px;color:#174754;line-height:1.4;overflow-wrap:anywhere}
+#v116-scheduler .v119-patient-card>small{font-size:10px;line-height:1.5;color:#718d95}
+#v116-scheduler .v119-patient-card>small:nth-of-type(2){background:#f3f8f9;border-radius:8px;padding:9px 10px;margin-top:10px}
+#v116-scheduler .v119-card-actions{gap:6px;margin-top:15px}
+#v116-scheduler .v119-card-actions button{flex:1 1 auto;border-radius:8px;padding:9px 8px;transition:background .15s ease}
+#v116-scheduler .v119-card-actions button:hover{background:#e8f4f5}
+#v116-scheduler .v119-card-actions button:first-child{background:#0d7180;color:white;flex-basis:100%}
+#v116-scheduler .v119-card-actions button:first-child:hover{background:#095966}
+#v116-scheduler .v119-footer{padding:16px 19px;background:#fff;border-top:1px solid #e6edef;line-height:1.5}
+@media(max-width:700px){#v116-scheduler .v119-reception-head{padding:21px 18px;gap:10px;flex-wrap:wrap}#v116-scheduler .v119-reception-head strong{font-size:22px}#v116-scheduler .v119-reception-stats span{min-width:125px}#v116-scheduler .v119-kanban{padding:11px;gap:10px}}
+@media(prefers-reduced-motion:reduce){#v116-scheduler .v119-patient-card{transition:none}}
+`;
 document.head.appendChild(style);
 function mount(){if(document.getElementById(PAGE))render()}
 document.addEventListener('click',e=>{if(e.target.closest('.nav-item[data-page="appointments"]'))setTimeout(mount,0)},true);
@@ -17538,5 +17658,5 @@ document.addEventListener('submit',function(e){
 const oldAppointmentModal=document.getElementById('appointmentModal');
 if(oldAppointmentModal)oldAppointmentModal.setAttribute('aria-hidden','true');
 
-window.MYAIMS_APPOINTMENTS_VERSION='V124-VISUAL-REFINEMENT';
+window.MYAIMS_APPOINTMENTS_VERSION='V128-RECEPTION-DESIGN';
 })();
