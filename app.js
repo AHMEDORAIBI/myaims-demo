@@ -16971,10 +16971,55 @@ function showPatientCard(idx){
  <h4>Selected appointment</h4><div class="v120-selected"><strong>${safe(appt.date)} · ${safe(appt.time)}–${endTime(appt)}</strong><span>${safe(appt.service)} · ${safe(appt.therapist||'Unassigned')}</span><span>${safe(appt.status)}${appt.room?' · '+safe(appt.room):''}</span></div>
  <h4>Appointment history</h4><div class="v120-history">${related.map(a=>`<div><span><b>${safe(a.date)} · ${safe(a.time)}</b><small>${safe(a.service)} · ${safe(a.therapist||'Unassigned')}</small></span><span class="v116-pill v116-${themeStatus(a.status)}">${safe(a.status)}</span></div>`).join('')}</div>
  <p class="v117-help">Appointment history only. This panel does not display clinical notes, diagnoses or a verified medical record.</p>
+ <div class="v131-action-title">QUICK ACTIONS · FROM THIS APPOINTMENT</div>
+ <div class="v131-actions">
+ <button type="button" data-v131-action="invoice">＋ Create invoice</button>
+ <button type="button" data-v131-action="assessment">✚ Clinical assessment</button>
+ <button type="button" data-v131-action="notes">▤ Clinical notes</button>
+ <button type="button" data-v131-action="profile">◉ Patient profile</button>
+ <button type="button" data-v131-action="billing">▣ Patient invoices</button>
+ <button type="button" data-v131-action="receipt">✓ Record payment</button>
+ </div>
+ <div class="v131-action-message" role="status" aria-live="polite"></div>
  <div class="v116-form-actions"><button type="button" data-v120-close>Close</button><button type="button" class="v116-primary" data-v120-reschedule-from-card>Reschedule appointment</button></div></div>`;
  dlg.onclick=e=>{
   if(e.target===dlg||e.target.closest('[data-v120-close]')){dlg.hidden=true;return}
-  if(e.target.closest('[data-v120-reschedule-from-card]'))showQuickReschedule(idx);
+  if(e.target.closest('[data-v120-reschedule-from-card]')){showQuickReschedule(idx);return}
+  const action=e.target.closest('[data-v131-action]')?.dataset.v131Action;
+  if(!action)return;
+  const msg=dlg.querySelector('.v131-action-message');
+  const warn=message=>{if(msg)msg.textContent=message};
+  if(!patient){warn('Select a unique patient record first. A matching name alone is not sufficient to open clinical or financial records.');return}
+  const patientName=String(patient.name||'');
+  if(['invoice','receipt'].includes(action)){
+   dlg.hidden=true;
+   if(action==='invoice'){
+    const modal=document.getElementById('invoiceModal'),form=document.getElementById('invoiceForm');
+    if(!modal||!form){dlg.hidden=false;warn('Invoice form is not available.');return}
+    modal.classList.add('open');
+    const sel=form.querySelector('[name="patient"]');
+    if(sel){sel.value=patientName;sel.dispatchEvent(new Event('change',{bubbles:true}))}
+    const service=form.querySelector('[name="service"]');
+    if(service)service.value=appt.service||service.value;
+    const amount=form.querySelector('[name="amount"]');if(amount){amount.value='';amount.focus()}
+    return;
+   }
+   const invoices=(db.invoices||[]).map((inv,i)=>({inv,i})).filter(x=>x.inv.patient===patientName);
+   const outstanding=invoices.find(x=>typeof invBalance==='function'&&invBalance(x.inv)>0.0001);
+   if(outstanding&&typeof window.payInvoice==='function'){window.payInvoice(outstanding.i);return}
+   dlg.hidden=false;warn('No outstanding invoice was found for this patient. Create an invoice first or open Billing.');return;
+  }
+  if(action==='billing'){
+   dlg.hidden=true;
+   document.querySelector('[data-page="billing"]')?.click();
+   const search=document.querySelector('#page-billing input[type="search"],#page-billing input[placeholder*="Search"]');
+   if(search){search.value=patientName;search.dispatchEvent(new Event('input',{bubbles:true}))}
+   return;
+  }
+  if(typeof window.openV31PatientWorkspace!=='function'){warn('The patient clinical workspace is unavailable in this version.');return}
+  dlg.hidden=true;
+  const tab=action==='assessment'?'assessment':action==='notes'?'notes':'overview';
+  window.openV31PatientWorkspace(patient.id,tab);
  };
 }
 function showQuickReschedule(idx){
@@ -17000,9 +17045,10 @@ function edit(idx,time='09:00',staff=''){
  const old=idx>=0?data()[idx]:null;
  const a=old||{date:state.date,time,therapist:staff,patient:'',service:'Physiotherapy Session',status:'Scheduled',duration:60,room:'',notes:''};
  const opts=(arr,value)=>arr.map(x=>`<option value="${safe(x)}" ${x===value?'selected':''}>${safe(x)}</option>`).join('');
- dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card v127-booking-dialog" role="dialog" aria-modal="true" aria-label="Appointment details"><div class="v116-dialog-head v127-booking-head"><div><span class="v127-booking-eyebrow">MY AIMS · APPOINTMENT MANAGEMENT</span><h3>${old?'Edit appointment':'New appointment'}</h3><p>Patient details, clinical resources and session timing in one place.</p></div><button type="button" data-v116-close aria-label="Close booking form">✕</button></div><form id="v116-form"><div class="v127-form-section"><span class="v127-section-icon">01</span><div><strong>Patient & clinical team</strong><small>Select the patient and assigned therapist</small></div></div><div class="v116-form-grid"><label>Patient<select name="patient" required><option value="">Select patient</option>${opts([...new Set([...db.patients.map(p=>p.name),a.patient].filter(Boolean))],a.patient)}</select></label><label>Therapist<input name="therapist" list="v116-staff-list" required value="${safe(a.therapist)}"><datalist id="v116-staff-list">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label></div><div class="v127-form-section"><span class="v127-section-icon">02</span><div><strong>Session schedule</strong><small>Choose a suitable date and treatment time</small></div></div><div class="v116-form-grid"><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="${duration(a)}"></label></div><div class="v127-form-section"><span class="v127-section-icon">03</span><div><strong>Treatment details</strong><small>Service, room and booking status</small></div></div><div class="v116-form-grid"><label>Service<input name="service" required value="${safe(a.service)}"></label><label>Room<select name="room"><option value="">Unassigned</option>${opts(resources().rooms,a.room||'')}</select></label><label>Status<select name="status">${opts([...new Set([...statuses,a.status].filter(Boolean))],a.status)}</select></label><label class="v116-notes">Notes<textarea name="notes" rows="3">${safe(a.notes)}</textarea></label></div><div class="v127-booking-tip">✓ Therapist availability, room occupancy and scheduling rules are checked before saving.</div><div class="v116-form-error" aria-live="polite"></div><div class="v116-form-actions">${old?'<button type="button" data-v116-delete class="v116-danger">Delete</button>':''}<button type="button" data-v116-close>Cancel</button><button class="v116-primary" type="submit">Save appointment</button></div></form></div>`;
+ dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card v127-booking-dialog" role="dialog" aria-modal="true" aria-label="Appointment details"><div class="v116-dialog-head v127-booking-head"><div><span class="v127-booking-eyebrow">MY AIMS · APPOINTMENT MANAGEMENT</span><h3>${old?'Edit appointment':'New appointment'}</h3><p>Patient details, clinical resources and session timing in one place.</p></div><button type="button" data-v116-close aria-label="Close booking form">✕</button></div><form id="v116-form"><div class="v127-form-section"><span class="v127-section-icon">01</span><div><strong>Patient & clinical team</strong><small>Select the patient and assigned therapist</small></div></div><div class="v116-form-grid"><label>Patient<select name="patient" required><option value="">Select patient</option>${opts([...new Set([...db.patients.map(p=>p.name),a.patient].filter(Boolean))],a.patient)}</select></label><label>Therapist<input name="therapist" list="v116-staff-list" required value="${safe(a.therapist)}"><datalist id="v116-staff-list">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label></div><div class="v127-form-section"><span class="v127-section-icon">02</span><div><strong>Session schedule</strong><small>Choose a suitable date and treatment time</small></div></div><div class="v116-form-grid"><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="${duration(a)}"></label></div><div class="v127-form-section"><span class="v127-section-icon">03</span><div><strong>Treatment details</strong><small>Service, room and booking status</small></div></div><div class="v116-form-grid"><label>Service<input name="service" required value="${safe(a.service)}"></label><label>Room<select name="room"><option value="">Unassigned</option>${opts(resources().rooms,a.room||'')}</select></label><label>Status<select name="status">${opts([...new Set([...statuses,a.status].filter(Boolean))],a.status)}</select></label><label class="v116-notes">Notes<textarea name="notes" rows="3">${safe(a.notes)}</textarea></label></div>${old?'<div class="v131-editor-shortcut"><button type="button" data-v131-open-actions>◉ Patient actions · Invoice · Assessment · Notes · Payment</button></div>':''}<div class="v127-booking-tip">✓ Therapist availability, room occupancy and scheduling rules are checked before saving.</div><div class="v116-form-error" aria-live="polite"></div><div class="v116-form-actions">${old?'<button type="button" data-v116-delete class="v116-danger">Delete</button>':''}<button type="button" data-v116-close>Cancel</button><button class="v116-primary" type="submit">Save appointment</button></div></form></div>`;
  dlg.onclick=e=>{
   if(e.target===dlg||e.target.closest('[data-v116-close]')){dlg.hidden=true;return}
+  if(e.target.closest('[data-v131-open-actions]')&&old){showPatientCard(idx);return}
   if(e.target.closest('[data-v116-delete]')&&old&&confirm('Delete this appointment?')){data().splice(idx,1);save();render()}
  };
  dlg.querySelector('form').onsubmit=e=>{
@@ -17686,6 +17732,25 @@ style.textContent+=`
 #v116-scheduler .v123-modal>.v116-form-actions{padding:16px 25px 22px;border-top:1px solid #e3edef;background:#fff}
 @media(max-width:850px){#v116-scheduler .v129-status-layout{flex-direction:column;align-items:stretch}#v116-scheduler .v129-donut{align-self:center}#v116-scheduler .v123-controls button{margin-left:0}}
 @media(max-width:600px){#v116-scheduler .v123-modal{width:100%;max-height:96vh;border-radius:14px}#v116-scheduler .v129-analytics-head{padding:23px 18px}#v116-scheduler .v123-controls{padding:14px 17px}#v116-scheduler .v123-modal [data-v123-content]{padding:14px}#v116-scheduler .v123-metric{padding:15px}#v116-scheduler .v123-metric strong{font-size:27px}#v116-scheduler .v123-panels>section,#v116-scheduler .v123-staff{padding:16px}#v116-scheduler .v123-controls label{flex:1 1 125px}#v116-scheduler .v123-controls input,#v116-scheduler .v123-controls select{width:100%}}
+`;
+
+style.textContent+=`
+/* V131 connected workflow: appointment -> patient, invoice and clinical actions */
+#v116-scheduler .v120-patient-modal{width:min(760px,100%);overflow-y:auto;max-height:min(92vh,960px)}
+#v116-scheduler .v120-patient-modal .v116-dialog-head{background:linear-gradient(110deg,#0b4b5a,#117483);color:white;padding:22px 24px;border-radius:15px 15px 0 0}
+#v116-scheduler .v120-patient-modal .v116-dialog-head h3{color:white}
+#v116-scheduler .v120-patient-modal .v116-dialog-head button{color:white;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.25);border-radius:9px}
+#v116-scheduler .v131-action-title{font-size:10px;letter-spacing:.13em;color:#a37e40;font-weight:850;margin:22px 0 12px}
+#v116-scheduler .v131-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#v116-scheduler .v131-actions button{display:flex;align-items:center;justify-content:center;min-height:63px;text-align:center;background:#f4fafb;color:#185d6b;border:1px solid #dcebed;border-radius:12px;padding:11px;font-size:12px;font-weight:750;cursor:pointer;transition:background .15s ease,transform .15s ease}
+#v116-scheduler .v131-actions button:hover{background:#e5f3f4;transform:translateY(-1px);border-color:#a6d2d8}
+#v116-scheduler .v131-actions button:first-child{background:#0e7180;color:white;border-color:#0e7180}
+#v116-scheduler .v131-actions button:nth-child(2){background:#fcf7ed;color:#8b6429;border-color:#eddfc3}
+#v116-scheduler .v131-action-message:not(:empty){background:#fff5e8;color:#8b5c22;border:1px solid #f0ddba;padding:11px 13px;border-radius:9px;margin-top:12px;font-size:12px}
+#v116-scheduler .v131-editor-shortcut{margin:17px 0 4px}
+#v116-scheduler .v131-editor-shortcut button{width:100%;border:1px solid #c8e2e5;border-radius:11px;background:#eef8f8;color:#126778;padding:13px;font-size:12px;font-weight:800;cursor:pointer}
+#v116-scheduler .v131-editor-shortcut button:hover{background:#e0f1f3}
+@media(max-width:680px){#v116-scheduler .v131-actions{grid-template-columns:repeat(2,minmax(0,1fr))}#v116-scheduler .v131-actions button{font-size:11px;min-height:58px}}
 `;
 document.head.appendChild(style);
 function mount(){if(document.getElementById(PAGE))render()}
