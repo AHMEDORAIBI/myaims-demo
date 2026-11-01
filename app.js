@@ -16958,7 +16958,7 @@ function render(){
 function showPatientCard(idx){
  const appt=data()[idx],dlg=document.querySelector('#v116-dialog');if(!appt||!dlg)return;
  const matching=(db.patients||[]).filter(p=>String(p.name||'').trim().toLowerCase()===String(appt.patient||'').trim().toLowerCase());
- const patient=matching.length===1?matching[0]:null;
+ const patient=matching.length===1 && (!appt.patientId || String(matching[0].id)===String(appt.patientId))?matching[0]:null;
  // Name matching is display-only; never infer a patient identity from duplicate names.
  const related=data().filter(a=>a.patient===appt.patient).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
  const past=related.filter(a=>a.date<iso(new Date()));
@@ -16987,40 +16987,66 @@ function showPatientCard(idx){
   if(e.target.closest('[data-v120-reschedule-from-card]')){showQuickReschedule(idx);return}
   const action=e.target.closest('[data-v131-action]')?.dataset.v131Action;
   if(!action)return;
-  const msg=dlg.querySelector('.v131-action-message');
-  const warn=message=>{if(msg)msg.textContent=message};
-  if(!patient){warn('Select a unique patient record first. A matching name alone is not sufficient to open clinical or financial records.');return}
-  const patientName=String(patient.name||'');
-  if(['invoice','receipt'].includes(action)){
-   dlg.hidden=true;
-   if(action==='invoice'){
-    const modal=document.getElementById('invoiceModal'),form=document.getElementById('invoiceForm');
-    if(!modal||!form){dlg.hidden=false;warn('Invoice form is not available.');return}
-    modal.classList.add('open');
-    const sel=form.querySelector('[name="patient"]');
-    if(sel){sel.value=patientName;sel.dispatchEvent(new Event('change',{bubbles:true}))}
-    const service=form.querySelector('[name="service"]');
-    if(service)service.value=appt.service||service.value;
-    const amount=form.querySelector('[name="amount"]');if(amount){amount.value='';amount.focus()}
-    return;
-   }
-   const invoices=(db.invoices||[]).map((inv,i)=>({inv,i})).filter(x=>x.inv.patient===patientName);
-   const outstanding=invoices.find(x=>typeof invBalance==='function'&&invBalance(x.inv)>0.0001);
-   if(outstanding&&typeof window.payInvoice==='function'){window.payInvoice(outstanding.i);return}
-   dlg.hidden=false;warn('No outstanding invoice was found for this patient. Create an invoice first or open Billing.');return;
-  }
-  if(action==='billing'){
-   dlg.hidden=true;
-   document.querySelector('[data-page="billing"]')?.click();
-   const search=document.querySelector('#page-billing input[type="search"],#page-billing input[placeholder*="Search"]');
-   if(search){search.value=patientName;search.dispatchEvent(new Event('input',{bubbles:true}))}
-   return;
-  }
-  if(typeof window.openV31PatientWorkspace!=='function'){warn('The patient clinical workspace is unavailable in this version.');return}
+  if(!patient){const msg=dlg.querySelector('.v131-action-message');if(msg)msg.textContent='A unique patient record is required. Duplicate names must be resolved before accessing clinical or financial information.';return}
   dlg.hidden=true;
-  const tab=action==='assessment'?'assessment':action==='notes'?'notes':'overview';
-  window.openV31PatientWorkspace(patient.id,tab);
+  openV132CalendarDrawer(idx,patient,action);
+
  };
+}
+function openV132CalendarDrawer(idx,patient,initial='overview'){
+ const appt=data()[idx];if(!appt||!patient)return;
+ const existing=document.getElementById('v132-drawer');if(existing)existing.remove();
+ const shell=document.createElement('div');shell.id='v132-drawer';shell.className='v132-overlay';
+ const name=String(patient.name||'');
+ const identity=String(patient.id||'');
+ const invoices=()=>db.invoices.map((v,i)=>({v,i})).filter(x=>x.v.patient===name);
+ const receiptBalance=v=>{allocatePayments();return invBalance(v)};
+ const money3=n=>Number(n||0).toFixed(3)+' BHD';
+ const notify=(text,kind='ok')=>{const m=shell.querySelector('.v132-notice');if(m){m.textContent=text;m.dataset.kind=kind}};
+ const renderPanel=mode=>{
+  const area=shell.querySelector('.v132-content');if(!area)return;
+  shell.querySelectorAll('[data-v132-tab]').forEach(b=>b.classList.toggle('active',b.dataset.v132Tab===mode));
+  if(mode==='invoice')area.innerHTML=`<h3>Create invoice</h3><p>Linked to ${safe(name)} · ${safe(appt.service||'Treatment')}</p><form id="v132-invoice-form"><label>Service / Description<input name="service" required value="${safe(appt.service||'Rehabilitation Service')}"></label><div class="v132-fields"><label>Total amount (BHD)<input name="amount" type="number" min="0.001" step="0.001" required placeholder="0.000"></label><label>Insurance covered (BHD)<input name="insurance" type="number" min="0" step="0.001" value="0"></label></div><div class="v132-info">The invoice is created only after you press Save. Review VAT classification separately before issuing a tax invoice.</div><button class="v132-save" type="submit">Save invoice</button></form>`;
+  else if(mode==='receipt'){
+   const pending=invoices().filter(x=>receiptBalance(x.v)>0.0001);
+   area.innerHTML=`<h3>Record payment</h3><p>Select the exact invoice to prevent applying a payment to another balance.</p>${pending.length?`<form id="v132-payment-form"><label>Outstanding invoice<select name="invoice" required>${pending.map(x=>`<option value="${safe(x.v.no)}">${safe(x.v.no)} · ${money3(receiptBalance(x.v))} due</option>`).join('')}</select></label><div class="v132-fields"><label>Payment amount (BHD)<input name="amount" type="number" min="0.001" step="0.001" required></label><label>Method<select name="method"><option>BenefitPay</option><option>Cash</option><option>Bank Transfer</option><option>Card</option></select></label></div><button class="v132-save" type="submit">Save linked receipt</button></form>`:'<div class="v132-empty">No outstanding invoice. Create an invoice first.</div>'}`;
+  }else if(mode==='billing'){
+   const rows=invoices();area.innerHTML=`<h3>Patient invoices</h3><p>${rows.length} invoice(s) associated with this patient</p><div class="v132-invoice-list">${rows.map(x=>`<div><div><strong>${safe(x.v.no)}</strong><small>${safe(x.v.service||'Service')} · ${safe(x.v.date)}</small></div><div><strong>${money3(x.v.amount)}</strong><small>Due ${money3(receiptBalance(x.v))}</small></div><button type="button" data-v132-print="${x.i}">Print</button></div>`).join('')||'<div class="v132-empty">No invoices recorded.</div>'}</div>`;
+  }else if(mode==='overview'){
+   const related=data().filter(x=>x.patient===name);area.innerHTML=`<h3>Appointment overview</h3><div class="v132-summary"><div><small>Selected visit</small><strong>${safe(appt.date)} · ${safe(appt.time)}</strong></div><div><small>Therapist</small><strong>${safe(appt.therapist||'Unassigned')}</strong></div><div><small>Service</small><strong>${safe(appt.service||'Treatment')}</strong></div><div><small>Recorded appointments</small><strong>${related.length}</strong></div></div><div class="v132-info">Clinical records are opened through the existing patient workspace. No clinical information is generated automatically.</div>`;
+  }else{
+   area.innerHTML=`<h3>${mode==='assessment'?'Clinical assessment':mode==='notes'?'Clinical notes':'Patient clinical profile'}</h3><p>Open the verified patient workspace in this side panel. Clinical information is saved using the existing clinical tools.</p><button class="v132-save" type="button" data-v132-clinical="${mode}">Open clinical workspace</button><div class="v132-clinical-slot"></div>`;
+  }
+ };
+ shell.innerHTML=`<div class="v132-shade" data-v132-close></div><aside class="v132-panel" role="dialog" aria-modal="true" aria-label="Appointment workspace"><header><div><small>MY AIMS · CONNECTED WORKFLOW</small><h2>Patient workspace</h2><p>${safe(name)} · ${safe(identity)}</p></div><button type="button" data-v132-close aria-label="Close">✕</button></header><div class="v132-context"><span>${safe(appt.date)} · ${safe(appt.time)}</span><strong>${safe(appt.service||'Treatment')}</strong><small>${safe(appt.therapist||'Unassigned')}</small></div><nav class="v132-tabs">${[['overview','Overview'],['invoice','Invoice'],['receipt','Payment'],['billing','Invoices'],['assessment','Assessment'],['notes','Notes'],['profile','Profile']].map(([k,v])=>`<button type="button" data-v132-tab="${k}">${v}</button>`).join('')}</nav><div class="v132-notice" role="status" aria-live="polite"></div><div class="v132-content"></div><footer>Changes are saved only when you submit a form. Close to return to the calendar.</footer></aside>`;
+ document.body.appendChild(shell);
+ const originalWorkspace=document.getElementById('v31-workspace');const originalParent=originalWorkspace?.parentNode;
+ const close=()=>{if(originalWorkspace&&originalParent&&originalWorkspace.parentNode!==originalParent){originalParent.appendChild(originalWorkspace);if(typeof window.closeV31PatientWorkspace==='function')window.closeV31PatientWorkspace()}shell.remove()};
+ shell.addEventListener('click',e=>{
+  if(e.target.closest('[data-v132-close]')){close();return}
+  const tab=e.target.closest('[data-v132-tab]');if(tab){renderPanel(tab.dataset.v132Tab);return}
+  const print=e.target.closest('[data-v132-print]');if(print){window.printInvoice?.(Number(print.dataset.v132Print));return}
+  const clinical=e.target.closest('[data-v132-clinical]');if(clinical){
+   if(typeof window.openV31PatientWorkspace!=='function'){notify('Clinical workspace is unavailable.','error');return}
+   const tab=clinical.dataset.v132Clinical==='notes'?'sessions':'overview';
+   window.openV31PatientWorkspace(identity,tab);
+   const w=document.getElementById('v31-workspace');const slot=shell.querySelector('.v132-clinical-slot');
+   if(w&&slot&&w.classList.contains('open')){slot.appendChild(w);notify('Clinical workspace opened. Use the existing clinical controls to save assessments and notes.')}else notify('Patient record could not be opened. Verify the patient identifier.','error');
+  }
+ });
+ shell.addEventListener('submit',e=>{
+  if(e.target.id==='v132-invoice-form'){
+   e.preventDefault();const f=new FormData(e.target);const amount=Number(f.get('amount'));const insurance=Number(f.get('insurance')||0);
+   if(!Number.isFinite(amount)||amount<=0||!Number.isFinite(insurance)||insurance<0||insurance>amount){notify('Enter a positive amount and insurance coverage between zero and the invoice total.','error');return}
+   const no=nextNo('INV',db.invoices,'no');db.invoices.push({no,patient:name,date:today(),service:String(f.get('service')||'Rehabilitation Service'),amount,insuranceCovered:insurance,paid:0});save();render();renderPanel('billing');notify('Invoice '+no+' saved and linked to the patient.');return;
+  }
+  if(e.target.id==='v132-payment-form'){
+   e.preventDefault();const f=new FormData(e.target);const inv=db.invoices.find(x=>x.no===f.get('invoice')&&x.patient===name);const amount=Number(f.get('amount'));
+   if(!inv||!Number.isFinite(amount)||amount<=0||amount>receiptBalance(inv)+0.00001){notify('Select a valid invoice and enter an amount not exceeding its outstanding balance.','error');return}
+   const no=nextNo('REC',db.receipts,'no');db.receipts.push({no,patient:name,date:today(),method:String(f.get('method')||'BenefitPay'),amount,invoiceNo:inv.no});save();render();renderPanel('billing');notify('Receipt '+no+' saved against invoice '+inv.no+'.');return;
+  }
+ });
+ renderPanel(initial);
 }
 function showQuickReschedule(idx){
  const a=data()[idx],dlg=document.querySelector('#v116-dialog');if(!a||!dlg)return;
@@ -17781,7 +17807,7 @@ document.addEventListener('submit',function(e){
 const oldAppointmentModal=document.getElementById('appointmentModal');
 if(oldAppointmentModal)oldAppointmentModal.setAttribute('aria-hidden','true');
 
-window.MYAIMS_APPOINTMENTS_VERSION='V129-ANALYTICS-DESIGN';
+window.MYAIMS_APPOINTMENTS_VERSION='V132-IN-CALENDAR-WORKSPACE';
 })();
 
 
@@ -17823,3 +17849,42 @@ window.MYAIMS_APPOINTMENTS_VERSION='V129-ANALYTICS-DESIGN';
   document.head.appendChild(css);
   window.MYAIMS_UI_VERSION='V130-UNIFIED-PATIENTS-BILLING-RECEIPTS';
 })();
+
+
+(function(){const style=document.createElement('style');style.textContent=`
+#v132-drawer{position:fixed;inset:0;z-index:999999;display:flex;justify-content:flex-end;font-family:inherit}
+#v132-drawer .v132-shade{position:absolute;inset:0;background:rgba(5,30,39,.56);backdrop-filter:blur(3px)}
+#v132-drawer .v132-panel{position:relative;width:min(700px,100vw);height:100%;background:#f7fafb;display:flex;flex-direction:column;box-shadow:-25px 0 80px rgba(7,43,55,.23);overflow:auto;color:#184955}
+#v132-drawer header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:26px 28px;background:linear-gradient(110deg,#093e4e,#0c7483);color:white}
+#v132-drawer header small{color:#edcd91;letter-spacing:.13em;font-size:10px;font-weight:800}
+#v132-drawer header h2{margin:9px 0 5px;font-size:27px;color:#fff}
+#v132-drawer header p{margin:0;color:#d3e8eb;font-size:12px}
+#v132-drawer header button{background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:9px 12px;cursor:pointer}
+#v132-drawer .v132-context{padding:17px 27px;background:white;border-bottom:1px solid #e1eaed;display:flex;flex-wrap:wrap;align-items:center;gap:9px 15px;font-size:12px}
+#v132-drawer .v132-context span{color:#ad7f3a;font-weight:800}#v132-drawer .v132-context strong{color:#174b59}#v132-drawer .v132-context small{color:#78929a}
+#v132-drawer .v132-tabs{display:flex;gap:6px;overflow-x:auto;padding:13px 23px;background:white;border-bottom:1px solid #e1eaed;flex-shrink:0}
+#v132-drawer .v132-tabs button{flex-shrink:0;background:#f3f8f9;color:#527681;border:1px solid #e1ebed;border-radius:9px;padding:10px 12px;font-size:11px;font-weight:750;cursor:pointer}
+#v132-drawer .v132-tabs button.active{background:#0d6d7c;color:white;border-color:#0d6d7c}
+#v132-drawer .v132-content{padding:25px 28px;flex:1;min-height:0;overflow-y:auto}
+#v132-drawer .v132-content h3{font-size:21px;color:#174956;margin:0 0 9px}
+#v132-drawer .v132-content>p{font-size:12px;color:#78939b;line-height:1.6;margin:0 0 22px}
+#v132-drawer form{display:flex;flex-direction:column;gap:16px}
+#v132-drawer label{display:flex;flex-direction:column;gap:7px;color:#55757e;font-size:12px;font-weight:700}
+#v132-drawer input,#v132-drawer select{min-height:44px;border:1px solid #d5e3e7;border-radius:10px;padding:10px 12px;background:white;color:#183d47;font:inherit;max-width:100%}
+#v132-drawer input:focus,#v132-drawer select:focus{outline:3px solid #d6edef;border-color:#2b9aaa}
+#v132-drawer .v132-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#v132-drawer .v132-save{border:0;border-radius:11px;background:#0b7180;color:white;padding:13px 18px;font-weight:800;cursor:pointer;align-self:flex-start}
+#v132-drawer .v132-info,#v132-drawer .v132-empty{background:#eaf6f5;border:1px solid #d4e9e7;border-radius:11px;padding:14px;color:#3e7b7a;font-size:12px;line-height:1.6}
+#v132-drawer .v132-notice:not(:empty){margin:15px 27px 0;background:#eaf7ee;border:1px solid #cbe7d3;padding:12px;border-radius:10px;font-size:12px;color:#26734d}
+#v132-drawer .v132-notice[data-kind=error]{background:#fff0ed;color:#a04a40;border-color:#f1ccc7}
+#v132-drawer .v132-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:15px 0}
+#v132-drawer .v132-summary>div{background:white;border:1px solid #e1ebed;padding:17px;border-radius:12px;display:flex;flex-direction:column;gap:8px}
+#v132-drawer .v132-summary small{color:#8399a1}#v132-drawer .v132-summary strong{color:#195464}
+#v132-drawer .v132-invoice-list{display:flex;flex-direction:column;gap:9px}
+#v132-drawer .v132-invoice-list>div{background:white;border:1px solid #e0eaed;border-radius:12px;padding:14px;display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+#v132-drawer .v132-invoice-list>div>div{display:flex;flex-direction:column;gap:6px}#v132-drawer .v132-invoice-list small{color:#78939b}
+#v132-drawer .v132-invoice-list button{border:1px solid #b9d9df;border-radius:9px;padding:9px 12px;color:#176979;background:#f1f9fa;cursor:pointer}
+#v132-drawer .v132-clinical-slot{margin-top:15px}#v132-drawer .v132-clinical-slot #v31-workspace{display:block!important}
+#v132-drawer footer{border-top:1px solid #e1eaed;background:white;padding:14px 26px;color:#8499a0;font-size:11px}
+@media(max-width:650px){#v132-drawer header{padding:20px}#v132-drawer .v132-content{padding:18px}#v132-drawer .v132-fields{grid-template-columns:1fr}#v132-drawer .v132-summary{grid-template-columns:1fr}#v132-drawer .v132-notice:not(:empty){margin:12px 18px 0}}
+`;document.head.appendChild(style)})();
