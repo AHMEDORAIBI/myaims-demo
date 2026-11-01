@@ -16883,7 +16883,7 @@ function receptionContent(){
  return `<section class="v119-lane v119-${col.color}"><header><strong>${col.name}</strong><span>${items.length}</span></header><div class="v119-lane-list">${items.map(a=>{
  const idx=data().indexOf(a),late=isToday&&['Scheduled','Confirmed'].includes(a.status)&&minutes(a.time)+10<now;
  const next=a.status==='Scheduled'?'Confirmed':a.status==='Confirmed'?'Checked In':a.status==='Checked In'?'In Progress':a.status==='In Progress'?'Completed':null;
- return `<article class="v119-patient-card"><div class="v119-patient-time">${safe(a.time)} – ${endTime(a)} ${late?'<b class="v119-late">Overdue*</b>':''}</div><strong>${safe(a.patient)}</strong><small>${safe(a.service||'Treatment')}</small><small>${safe(a.therapist||'Unassigned')}${a.room?' · '+safe(a.room):''}</small><div class="v119-card-actions">${next?`<button type="button" data-v119-next="${idx}" data-v119-target="${next}">${next==='Checked In'?'Check in':next==='In Progress'?'Start session':next==='Completed'?'Complete':'Confirm'}</button>`:''}<button type="button" data-v116-edit="${idx}">Details</button></div></article>`;
+ return `<article class="v119-patient-card"><div class="v119-patient-time">${safe(a.time)} – ${endTime(a)} ${late?'<b class="v119-late">Overdue*</b>':''}</div><strong>${safe(a.patient)}</strong><small>${safe(a.service||'Treatment')}</small><small>${safe(a.therapist||'Unassigned')}${a.room?' · '+safe(a.room):''}</small><div class="v119-card-actions">${next?`<button type="button" data-v119-next="${idx}" data-v119-target="${next}">${next==='Checked In'?'Check in':next==='In Progress'?'Start session':next==='Completed'?'Complete':'Confirm'}</button>`:''}<button type="button" data-v120-patient="${idx}">Patient</button><button type="button" data-v120-reschedule="${idx}">Reschedule</button><button type="button" data-v116-edit="${idx}">Edit</button></div></article>`;
  }).join('')||'<div class="v119-lane-empty">No patients in this stage</div>'}</div></section>`;
  }).join('')}</div>
  <div class="v119-footer">* Overdue is a visual indicator when the scheduled start time is more than 10 minutes past and the patient is not checked in. It does not prove the patient is absent.</div>`;
@@ -16909,6 +16909,8 @@ function render(){
   if(!confirm('Change '+a.patient+' status to '+target+'?'))return;
   a.status=target;save();render();return;
  }
+ if(b.hasAttribute('data-v120-patient')){showPatientCard(Number(b.dataset.v120Patient));return}
+ if(b.hasAttribute('data-v120-reschedule')){showQuickReschedule(Number(b.dataset.v120Reschedule));return}
  if(b.hasAttribute('data-v116-view')){state.view=b.dataset.v116View;render();return}
  if(b.hasAttribute('data-v116-prev')||b.hasAttribute('data-v116-next')){const n=b.hasAttribute('data-v116-next')?1:-1;state.date=state.view==='month'?iso(new Date(dateObj(state.date).getFullYear(),dateObj(state.date).getMonth()+n,1)):shift(state.date,n*(state.view==='week'?7:1));render();return}
  if(b.hasAttribute('data-v116-today')){state.date=iso(new Date());render();return}
@@ -16947,6 +16949,46 @@ function render(){
  host.querySelector('[data-v116-search]').oninput=e=>{const caret=e.target.selectionStart;state.search=e.target.value;render();const next=document.querySelector('#v116-scheduler [data-v116-search]');next?.focus();next?.setSelectionRange(caret,caret)};
  host.querySelector('[data-v116-staff]').onchange=e=>{state.staff=e.target.value;render()};
  host.querySelector('[data-v116-status]').onchange=e=>{state.status=e.target.value;render()};
+}
+function showPatientCard(idx){
+ const appt=data()[idx],dlg=document.querySelector('#v116-dialog');if(!appt||!dlg)return;
+ const matching=(db.patients||[]).filter(p=>String(p.name||'').trim().toLowerCase()===String(appt.patient||'').trim().toLowerCase());
+ const patient=matching.length===1?matching[0]:null;
+ // Name matching is display-only; never infer a patient identity from duplicate names.
+ const related=data().filter(a=>a.patient===appt.patient).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+ const past=related.filter(a=>a.date<iso(new Date()));
+ const upcoming=related.filter(a=>a.date>=iso(new Date()));
+ dlg.hidden=false;
+ dlg.innerHTML=`<div class="v116-dialog-card v120-patient-modal" role="dialog" aria-modal="true" aria-label="Patient appointment overview">
+ <div class="v116-dialog-head"><div><div class="v116-eyebrow">PATIENT APPOINTMENT OVERVIEW</div><h3>${safe(appt.patient)}</h3></div><button type="button" data-v120-close>✕</button></div>
+ <div class="v120-profile-metrics"><div><small>Recorded appointments</small><strong>${related.length}</strong></div><div><small>Past appointments</small><strong>${past.length}</strong></div><div><small>Upcoming appointments</small><strong>${upcoming.length}</strong></div></div>
+ ${matching.length>1?'<p class="v120-warning">More than one patient record has this name. Verify the patient identity before accessing their medical record.</p>':!patient?'<p class="v120-warning">No unique patient record matched. Appointments below are grouped by the recorded name only.</p>':''}
+ <h4>Selected appointment</h4><div class="v120-selected"><strong>${safe(appt.date)} · ${safe(appt.time)}–${endTime(appt)}</strong><span>${safe(appt.service)} · ${safe(appt.therapist||'Unassigned')}</span><span>${safe(appt.status)}${appt.room?' · '+safe(appt.room):''}</span></div>
+ <h4>Appointment history</h4><div class="v120-history">${related.map(a=>`<div><span><b>${safe(a.date)} · ${safe(a.time)}</b><small>${safe(a.service)} · ${safe(a.therapist||'Unassigned')}</small></span><span class="v116-pill v116-${themeStatus(a.status)}">${safe(a.status)}</span></div>`).join('')}</div>
+ <p class="v117-help">Appointment history only. This panel does not display clinical notes, diagnoses or a verified medical record.</p>
+ <div class="v116-form-actions"><button type="button" data-v120-close>Close</button><button type="button" class="v116-primary" data-v120-reschedule-from-card>Reschedule appointment</button></div></div>`;
+ dlg.onclick=e=>{
+  if(e.target===dlg||e.target.closest('[data-v120-close]')){dlg.hidden=true;return}
+  if(e.target.closest('[data-v120-reschedule-from-card]'))showQuickReschedule(idx);
+ };
+}
+function showQuickReschedule(idx){
+ const a=data()[idx],dlg=document.querySelector('#v116-dialog');if(!a||!dlg)return;
+ dlg.hidden=false;
+ dlg.innerHTML=`<div class="v116-dialog-card v120-reschedule-modal" role="dialog" aria-modal="true" aria-label="Reschedule appointment">
+ <div class="v116-dialog-head"><div><div class="v116-eyebrow">QUICK RESCHEDULING</div><h3>${safe(a.patient)}</h3></div><button type="button" data-v120-close>✕</button></div>
+ <p class="v117-help">Current appointment: ${safe(a.date)} at ${safe(a.time)} · ${safe(a.therapist||'Unassigned')}</p>
+ <form id="v120-reschedule-form"><div class="v116-form-grid"><label>New date<input name="date" type="date" required value="${safe(a.date)}"></label><label>New time<input name="time" type="time" required value="${safe(a.time)}"></label><label>Therapist<input name="therapist" list="v120-therapists" required value="${safe(a.therapist||'')}"><datalist id="v120-therapists">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label><label>Room<select name="room"><option value="">Unassigned</option>${resources().rooms.map(x=>`<option value="${safe(x)}" ${a.room===x?'selected':''}>${safe(x)}</option>`).join('')}</select></label></div>
+ <div class="v116-form-error" role="alert"></div><div class="v116-form-actions"><button type="button" data-v120-close>Cancel</button><button type="submit" class="v116-primary">Confirm new appointment time</button></div></form></div>`;
+ dlg.onclick=e=>{if(e.target===dlg||e.target.closest('[data-v120-close]'))dlg.hidden=true};
+ dlg.querySelector('form').onsubmit=e=>{
+  e.preventDefault();const f=new FormData(e.currentTarget);
+  const proposed={...a,date:String(f.get('date')),time:String(f.get('time')),therapist:String(f.get('therapist')).trim(),room:String(f.get('room')||'')};
+  const issue=canPlace(proposed,a);
+  if(issue){dlg.querySelector('.v116-form-error').textContent=issue;return}
+  if(!confirm('Move '+a.patient+' to '+proposed.date+' '+proposed.time+'?'))return;
+  Object.assign(a,proposed);save();state.date=a.date;render();
+ };
 }
 function edit(idx,time='09:00',staff=''){
  const host=document.getElementById(ID),dlg=host?.querySelector('#v116-dialog');if(!dlg)return;
@@ -17135,9 +17177,12 @@ style.textContent+=`\n.v118-textarea{width:100%;padding:10px;border:1px solid #d
 style.textContent+=`
 .v119-reception-head{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:19px 20px;background:linear-gradient(115deg,#eaf7f7,#fff);border-bottom:1px solid #d9e9ea}.v119-reception-head strong{display:block;font-size:20px;color:#15505c}.v119-reception-head small{font-size:11px;color:#77929a}.v119-reception-clock{font-size:14px;font-weight:800;color:#127e89}.v119-reception-stats{display:flex;flex-wrap:wrap;gap:8px;padding:14px;background:#fff}.v119-reception-stats span{border:1px solid #e0ecee;border-radius:30px;padding:7px 13px;font-size:11px;color:#607c85}.v119-reception-stats b{font-size:14px;color:#0a6e7b;margin-right:3px}.v119-kanban{display:grid;grid-template-columns:repeat(4,minmax(205px,1fr));gap:12px;padding:14px;min-width:850px;background:#f7fbfb}.v119-lane{border:1px solid #e1ebed;border-radius:12px;background:#fff;overflow:hidden}.v119-lane>header{display:flex;justify-content:space-between;align-items:center;padding:14px;border-bottom:1px solid #eaf1f2;color:#2c6973;font-size:12px}.v119-lane>header span{background:#eaf5f6;border-radius:20px;padding:3px 9px}.v119-arrived>header{border-top:4px solid #4b9bc8}.v119-expected>header{border-top:4px solid #d9a44a}.v119-treatment>header{border-top:4px solid #8b77ce}.v119-finished>header{border-top:4px solid #50a981}.v119-lane-list{display:flex;flex-direction:column;gap:9px;padding:10px;min-height:210px}.v119-patient-card{padding:12px;background:#fcfefe;border:1px solid #e1ecee;border-radius:10px;box-shadow:0 3px 10px #123d4b08}.v119-patient-card strong,.v119-patient-card small{display:block;margin-top:6px}.v119-patient-card strong{font-size:13px;color:#1c5662}.v119-patient-card small{font-size:10px;color:#78949c}.v119-patient-time{font-size:11px;font-weight:800;color:#0a7d8a}.v119-late{color:#b34b43;background:#fff0ec;border-radius:5px;padding:3px 5px;font-size:9px;margin-left:5px}.v119-card-actions{display:flex;gap:5px;margin-top:12px;flex-wrap:wrap}#v116-scheduler .v119-card-actions button{border:1px solid #d8e8eb;border-radius:7px;padding:7px 9px;font-size:10px;font-weight:750;background:#fff;color:#3c7580}#v116-scheduler .v119-card-actions button:first-child{background:#087d89;color:#fff;border-color:#087d89}.v119-lane-empty{font-size:11px;color:#9bb0b6;padding:22px 8px;text-align:center}.v119-footer{padding:12px 17px;font-size:10px;color:#8ba0a6;background:#fff}
 `;
+style.textContent+=`
+.v120-profile-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:15px 0}.v120-profile-metrics>div{border:1px solid #e2eef0;background:#f7fbfc;border-radius:10px;padding:12px}.v120-profile-metrics small{display:block;color:#77939a;font-size:10px}.v120-profile-metrics strong{display:block;font-size:24px;color:#086f7d;margin-top:5px}.v120-patient-modal h4{font-size:13px;color:#285d68;margin:18px 0 9px}.v120-selected{background:#eaf8f8;border:1px solid #d6ecef;border-radius:10px;padding:13px;display:flex;flex-direction:column;gap:6px;font-size:12px}.v120-history{max-height:260px;overflow-y:auto;border:1px solid #e2eaed;border-radius:10px}.v120-history>div{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #e9eff1;font-size:11px}.v120-history small{display:block;color:#8199a0;margin-top:4px}.v120-warning{background:#fff7e7;border:1px solid #efdba8;padding:10px;border-radius:8px;color:#8b6b26;font-size:11px}@media(max-width:520px){.v120-profile-metrics{grid-template-columns:1fr 1fr}.v120-history>div{flex-wrap:wrap}}
+`;
 document.head.appendChild(style);
 function mount(){if(document.getElementById(PAGE))render()}
 document.addEventListener('click',e=>{if(e.target.closest('.nav-item[data-page="appointments"]'))setTimeout(mount,0)},true);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
-window.MYAIMS_APPOINTMENTS_VERSION='V119';
+window.MYAIMS_APPOINTMENTS_VERSION='V120';
 })();
