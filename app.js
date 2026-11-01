@@ -17311,6 +17311,11 @@ function showAnalytics(){
   const m=metrics(),n=m.rows.length,card=(label,value,note)=>`<div class="v123-metric"><small>${label}</small><strong>${value}</strong><span>${note}</span></div>`;
   const statusNames=['Scheduled','Confirmed','Checked In','In Progress','Completed','Cancelled','No Show'];
   const maxStatus=Math.max(1,...statusNames.map(x=>m.statuses[x]||0));
+  const statusPalette=['#6d9da8','#267c9a','#9d8ccf','#d2a253','#2c9d81','#cf7b78','#a8a1a0'];
+  const totalStatus=statusNames.reduce((sum,x)=>sum+(m.statuses[x]||0),0);
+  let offset=0;
+  const segments=statusNames.map((x,i)=>{const next=offset+(totalStatus?(m.statuses[x]||0)/totalStatus*100:0);const item=`${statusPalette[i]} ${offset.toFixed(3)}% ${next.toFixed(3)}%`;offset=next;return item});
+  const donutStyle=totalStatus?`conic-gradient(${segments.join(',')})`:'conic-gradient(#e8eff0 0% 100%)';
   const maxStaff=Math.max(1,...m.staff.map(x=>x.count));
   const days=Object.entries(m.days).sort((a,b)=>a[0].localeCompare(b[0]));
   const maxDay=Math.max(1,...days.map(x=>x[1]));
@@ -17318,12 +17323,12 @@ function showAnalytics(){
   dlg.querySelector('[data-v123-content]').innerHTML=`
    <div class="v123-metrics">${card('Total appointments',fmt(n),'All recorded statuses')}${card('Completed',fmt(m.completed),percentage(m.completed,n)+' of all bookings')}${card('Attendance recorded',fmt(m.attendance),percentage(m.attendance,n)+' of all bookings')}${card('Cancellation / No-show',fmt(m.cancelled+m.noShow),percentage(m.cancelled+m.noShow,n)+' of all bookings')}</div>
    <div class="v123-note">Attendance is based on appointment statuses. It is not a verified patient check-in record. Percentages use all appointments in the selected period as the denominator.</div>
-   <div class="v123-panels"><section><h4>Appointment status breakdown</h4>${statusNames.map(x=>bar(m.statuses[x]||0,maxStatus,x)).join('')}</section>
-   <section><h4>Daily booking volume</h4><div class="v123-chart">${chart}</div></section></div>
-   <section class="v123-staff"><h4>Therapist workload</h4><div class="v123-table-wrap"><table><thead><tr><th>Therapist</th><th>Appointments</th><th>Completed</th><th>Booked hours</th></tr></thead><tbody>${m.staff.map(x=>`<tr><td>${safe(x.name)}</td><td>${x.count}</td><td>${x.completed}</td><td>${(x.booked/60).toFixed(1)}</td></tr>`).join('')||'<tr><td colspan="4">No therapist bookings</td></tr>'}</tbody></table></div><p class="v123-note">Booked hours exclude cancelled and no-show appointments. Appointments without a saved duration are assumed to be 60 minutes. These figures are not actual staff utilization.</p></section>`;
+   <div class="v123-panels"><section><div class="v129-panel-heading"><div><span>BOOKING DISTRIBUTION</span><h4>Appointment status breakdown</h4></div><small>${fmt(n)} total</small></div><div class="v129-status-layout"><div class="v129-donut" style="background:${donutStyle}" role="img" aria-label="Appointment status distribution"><div><strong>${fmt(n)}</strong><small>Bookings</small></div></div><div class="v129-status-bars">${statusNames.map((x,i)=>`<div class="v129-status-line"><i style="background:${statusPalette[i]}"></i>${bar(m.statuses[x]||0,maxStatus,x)}</div>`).join('')}</div></div></section>
+   <section><div class="v129-panel-heading"><div><span>DAILY ACTIVITY</span><h4>Daily booking volume</h4></div><small>${days.length} active days</small></div><div class="v123-chart">${chart}</div><p class="v129-chart-caption">Appointments by booking date within the selected period.</p></section></div>
+   <section class="v123-staff"><div class="v129-panel-heading"><div><span>TEAM PERFORMANCE</span><h4>Therapist workload</h4></div><small>${m.staff.length} therapists</small></div><div class="v123-table-wrap"><table><thead><tr><th>Therapist</th><th>Appointments</th><th>Completed</th><th>Booked hours</th></tr></thead><tbody>${m.staff.map(x=>`<tr><td>${safe(x.name)}</td><td>${x.count}</td><td>${x.completed}</td><td>${(x.booked/60).toFixed(1)}</td></tr>`).join('')||'<tr><td colspan="4">No therapist bookings</td></tr>'}</tbody></table></div><p class="v123-note">Booked hours exclude cancelled and no-show appointments. Appointments without a saved duration are assumed to be 60 minutes. These figures are not actual staff utilization.</p></section>`;
  };
  dlg.hidden=false;
- dlg.innerHTML=`<div class="v116-dialog-card v123-modal" role="dialog" aria-modal="true" aria-label="Appointments analytics"><div class="v116-dialog-head"><div><div class="v116-eyebrow">MY AIMS · APPOINTMENT INTELLIGENCE</div><h3>Scheduling Analytics</h3></div><button type="button" data-v123-close>✕</button></div>
+ dlg.innerHTML=`<div class="v116-dialog-card v123-modal" role="dialog" aria-modal="true" aria-label="Appointments analytics"><div class="v116-dialog-head v129-analytics-head"><div><div class="v116-eyebrow">MY AIMS · APPOINTMENT INTELLIGENCE</div><h3>Scheduling Analytics</h3><p>Clinical scheduling insights, attendance trends and therapist workload.</p></div><button type="button" data-v123-close aria-label="Close analytics">✕</button></div>
  <div class="v123-controls"><label>From<input type="date" data-v123-from value="${range.from}"></label><label>To<input type="date" data-v123-to value="${range.to}"></label><label>Therapist<select data-v123-staff><option value="all">All therapists</option>${therapists.map(x=>`<option value="${safe(x)}">${safe(x)}</option>`).join('')}</select></label><button type="button" data-v123-csv>Export analytics CSV</button></div><div data-v123-error class="v116-form-error"></div><div data-v123-content></div><div class="v116-form-actions"><button type="button" data-v123-close>Close</button></div></div>`;
  const refresh=()=>{
   const from=dlg.querySelector('[data-v123-from]').value,to=dlg.querySelector('[data-v123-to]').value;
@@ -17629,6 +17634,59 @@ style.textContent+=`
 @media(max-width:700px){#v116-scheduler .v119-reception-head{padding:21px 18px;gap:10px;flex-wrap:wrap}#v116-scheduler .v119-reception-head strong{font-size:22px}#v116-scheduler .v119-reception-stats span{min-width:125px}#v116-scheduler .v119-kanban{padding:11px;gap:10px}}
 @media(prefers-reduced-motion:reduce){#v116-scheduler .v119-patient-card{transition:none}}
 `;
+
+style.textContent+=`
+/* V129 Analytics: visual enhancement; all metrics remain computed from saved appointments */
+#v116-scheduler .v123-modal{width:min(1180px,96vw);max-width:1180px;padding:0;overflow:auto;max-height:min(92vh,980px);background:#f6f9fa;border-radius:20px}
+#v116-scheduler .v129-analytics-head{background:linear-gradient(110deg,#0a4556,#0e6c7a);padding:28px 30px;color:#fff;position:relative;overflow:hidden;margin:0}
+#v116-scheduler .v129-analytics-head:after{content:"";position:absolute;right:-35px;top:-110px;width:290px;height:290px;border:1px solid rgba(255,255,255,.15);border-radius:50%;box-shadow:0 0 0 48px rgba(255,255,255,.035),0 0 0 90px rgba(255,255,255,.02);pointer-events:none}
+#v116-scheduler .v129-analytics-head .v116-eyebrow{color:#e8c88d;letter-spacing:.17em}
+#v116-scheduler .v129-analytics-head h3{font-size:27px;color:#fff;letter-spacing:-.03em;margin:8px 0}
+#v116-scheduler .v129-analytics-head p{font-size:12px;color:#c9e5e9;margin:0}
+#v116-scheduler .v129-analytics-head button{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:white;border-radius:10px;padding:9px 12px;z-index:1}
+#v116-scheduler .v123-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:18px 25px;background:#fff;border-bottom:1px solid #e3edef;margin:0}
+#v116-scheduler .v123-controls label{display:flex;flex-direction:column;gap:6px;color:#587680;font-size:11px;font-weight:700}
+#v116-scheduler .v123-controls input,#v116-scheduler .v123-controls select{background:#fbfdfd;border:1px solid #dce8eb;border-radius:10px;min-height:40px;padding:9px 11px;color:#1d5260}
+#v116-scheduler .v123-controls button{background:#0c7180;color:#fff;border:1px solid #0c7180;border-radius:10px;padding:11px 15px;min-height:40px;margin-left:auto}
+#v116-scheduler .v123-modal [data-v123-content]{padding:21px 25px 10px}
+#v116-scheduler .v123-metrics{gap:13px;margin-bottom:15px}
+#v116-scheduler .v123-metric{position:relative;overflow:hidden;background:#fff;border:1px solid #e1ebed;border-radius:15px;padding:21px;box-shadow:0 6px 20px rgba(14,65,77,.045)}
+#v116-scheduler .v123-metric:before{content:"";position:absolute;left:20px;top:0;height:3px;width:42px;background:#c19a54;border-radius:0 0 5px 5px}
+#v116-scheduler .v123-metric:nth-child(2):before{background:#329e85}
+#v116-scheduler .v123-metric:nth-child(3):before{background:#668fc2}
+#v116-scheduler .v123-metric:nth-child(4):before{background:#d47d7a}
+#v116-scheduler .v123-metric small{color:#6c8790;font-size:11px;font-weight:700}
+#v116-scheduler .v123-metric strong{display:block;font-size:34px;color:#164e5b;letter-spacing:-.04em;margin:12px 0 8px}
+#v116-scheduler .v123-metric span{color:#8299a1;font-size:11px}
+#v116-scheduler .v123-note{font-size:10px;color:#81959d;line-height:1.7}
+#v116-scheduler .v123-panels{gap:14px;margin:17px 0}
+#v116-scheduler .v123-panels>section,#v116-scheduler .v123-staff{border:1px solid #e1ebed;background:#fff;border-radius:16px;padding:22px;box-shadow:0 6px 20px rgba(14,65,77,.04)}
+#v116-scheduler .v129-panel-heading{display:flex;justify-content:space-between;align-items:end;gap:10px;margin-bottom:21px}
+#v116-scheduler .v129-panel-heading span{font-size:9px;letter-spacing:.14em;color:#b28a49;font-weight:850}
+#v116-scheduler .v129-panel-heading h4{margin:5px 0 0;font-size:16px;color:#194b58;letter-spacing:-.015em}
+#v116-scheduler .v129-panel-heading small{color:#8299a1;font-size:10px;white-space:nowrap}
+#v116-scheduler .v129-status-layout{display:flex;gap:24px;align-items:center}
+#v116-scheduler .v129-donut{height:160px;width:160px;min-width:160px;border-radius:50%;display:grid;place-items:center;position:relative}
+#v116-scheduler .v129-donut>div{display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative;z-index:1;height:114px;width:114px;background:#fff;border-radius:50%;box-shadow:inset 0 0 0 1px #e8eff0}
+#v116-scheduler .v129-donut strong{font-size:30px;color:#184f5d}
+#v116-scheduler .v129-donut small{font-size:10px;color:#8a9da4}
+#v116-scheduler .v129-status-bars{flex:1;min-width:0}
+#v116-scheduler .v129-status-line{display:flex;gap:9px;align-items:center}
+#v116-scheduler .v129-status-line>i{width:8px;height:8px;min-width:8px;border-radius:3px}
+#v116-scheduler .v129-status-line .v123-bar{flex:1;min-width:0;margin-bottom:9px}
+#v116-scheduler .v123-track{background:#edf2f3;border-radius:20px;overflow:hidden}
+#v116-scheduler .v123-track i{background:linear-gradient(90deg,#1e7e8d,#57b6b5);border-radius:20px}
+#v116-scheduler .v123-chart{min-height:195px;padding:18px 7px 5px;background:linear-gradient(180deg,#fbfdfd,#fff);border-radius:12px;border:1px solid #edf2f3}
+#v116-scheduler .v123-daybar i{background:linear-gradient(180deg,#36a6ab,#126a80);border-radius:5px 5px 1px 1px}
+#v116-scheduler .v129-chart-caption{color:#90a2a8;font-size:10px;margin:12px 0 0}
+#v116-scheduler .v123-staff table{width:100%;border-collapse:collapse}
+#v116-scheduler .v123-staff th{background:#f1f7f8;color:#567580;font-size:11px;text-align:left;padding:13px}
+#v116-scheduler .v123-staff td{padding:13px;border-bottom:1px solid #eef2f3;color:#365e68;font-size:11px}
+#v116-scheduler .v123-staff tbody tr:hover{background:#f8fbfb}
+#v116-scheduler .v123-modal>.v116-form-actions{padding:16px 25px 22px;border-top:1px solid #e3edef;background:#fff}
+@media(max-width:850px){#v116-scheduler .v129-status-layout{flex-direction:column;align-items:stretch}#v116-scheduler .v129-donut{align-self:center}#v116-scheduler .v123-controls button{margin-left:0}}
+@media(max-width:600px){#v116-scheduler .v123-modal{width:100%;max-height:96vh;border-radius:14px}#v116-scheduler .v129-analytics-head{padding:23px 18px}#v116-scheduler .v123-controls{padding:14px 17px}#v116-scheduler .v123-modal [data-v123-content]{padding:14px}#v116-scheduler .v123-metric{padding:15px}#v116-scheduler .v123-metric strong{font-size:27px}#v116-scheduler .v123-panels>section,#v116-scheduler .v123-staff{padding:16px}#v116-scheduler .v123-controls label{flex:1 1 125px}#v116-scheduler .v123-controls input,#v116-scheduler .v123-controls select{width:100%}}
+`;
 document.head.appendChild(style);
 function mount(){if(document.getElementById(PAGE))render()}
 document.addEventListener('click',e=>{if(e.target.closest('.nav-item[data-page="appointments"]'))setTimeout(mount,0)},true);
@@ -17658,5 +17716,45 @@ document.addEventListener('submit',function(e){
 const oldAppointmentModal=document.getElementById('appointmentModal');
 if(oldAppointmentModal)oldAppointmentModal.setAttribute('aria-hidden','true');
 
-window.MYAIMS_APPOINTMENTS_VERSION='V128-RECEPTION-DESIGN';
+window.MYAIMS_APPOINTMENTS_VERSION='V129-ANALYTICS-DESIGN';
+})();
+
+
+/* V130 — unified premium visual language for Patients, Billing and Receipts.
+   Presentation-only enhancement: no data model, event handlers or storage changes. */
+(function(){
+  'use strict';
+  if(document.getElementById('myaims-v130-style'))return;
+  const css=document.createElement('style');
+  css.id='myaims-v130-style';
+  css.textContent=`
+  :root{--my130-deep:#104b5a;--my130-teal:#137888;--my130-gold:#c49b57;--my130-soft:#f4f8f9;--my130-border:#e0e9ec;--my130-ink:#1c4855}
+  #page-patients,#page-billing,#page-receipts{background:linear-gradient(180deg,#f1f7f8 0%,#f7fafb 380px,#f7fafb 100%);min-height:calc(100vh - 100px);padding-bottom:35px}
+  #page-patients>.page-title,#page-billing>.page-title,#page-receipts>.page-title{position:relative;isolation:isolate;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;padding:29px 31px;margin-bottom:20px;border-radius:21px;background:linear-gradient(112deg,#0a4353 0%,#106b79 75%,#16818c 100%);box-shadow:0 15px 34px rgba(8,71,86,.15);color:#fff}
+  #page-patients>.page-title:after,#page-billing>.page-title:after,#page-receipts>.page-title:after{content:"";position:absolute;z-index:-1;right:-45px;top:-115px;width:300px;height:300px;border:1px solid rgba(255,255,255,.15);border-radius:50%;box-shadow:0 0 0 45px rgba(255,255,255,.035),0 0 0 90px rgba(255,255,255,.025);pointer-events:none}
+  #page-patients>.page-title h1,#page-billing>.page-title h1,#page-receipts>.page-title h1,#page-patients>.page-title h2,#page-billing>.page-title h2,#page-receipts>.page-title h2{color:#fff;font-size:clamp(24px,2.3vw,32px);letter-spacing:-.035em;margin:0}
+  #page-patients>.page-title h1:before,#page-billing>.page-title h1:before,#page-receipts>.page-title h1:before,#page-patients>.page-title h2:before,#page-billing>.page-title h2:before,#page-receipts>.page-title h2:before{content:"MY AIMS  ·  CLINICAL OPERATIONS";display:block;color:#e8c68a;font-size:10px;font-weight:800;letter-spacing:.17em;margin-bottom:11px}
+  #page-patients>.page-title p,#page-billing>.page-title p,#page-receipts>.page-title p{color:#d2e8eb}
+  #page-patients>.page-title button,#page-billing>.page-title button,#page-receipts>.page-title button{min-height:42px;padding:11px 17px;border-radius:11px;font-weight:750;background:#c69b55;color:#fff;border:1px solid #c69b55;box-shadow:0 5px 16px rgba(0,0,0,.12);transition:transform .18s ease,box-shadow .18s ease}
+  #page-patients>.page-title button:hover,#page-billing>.page-title button:hover,#page-receipts>.page-title button:hover{transform:translateY(-2px);box-shadow:0 9px 19px rgba(0,0,0,.16)}
+  #page-patients .panel,#page-billing .panel,#page-receipts .panel{background:#fff;border:1px solid var(--my130-border);border-radius:17px;box-shadow:0 8px 26px rgba(19,71,84,.045);overflow:hidden}
+  #page-patients .panel h2,#page-billing .panel h2,#page-receipts .panel h2,#page-patients .panel h3,#page-billing .panel h3,#page-receipts .panel h3{color:var(--my130-ink);letter-spacing:-.02em}
+  #page-patients .table-wrap,#page-billing .table-wrap,#page-receipts .table-wrap{overflow-x:auto;scrollbar-width:thin}
+  #page-patients table,#page-billing table,#page-receipts table{border-collapse:separate;border-spacing:0;width:100%}
+  #page-patients table th,#page-billing table th,#page-receipts table th{background:#f0f7f8;color:#4d7280;font-size:11px;font-weight:800;letter-spacing:.015em;padding:14px 13px;border-bottom:1px solid #dce9ec;white-space:nowrap}
+  #page-patients table td,#page-billing table td,#page-receipts table td{padding:13px;border-bottom:1px solid #ecf1f2;color:#3b606b;font-size:12px;vertical-align:middle}
+  #page-patients table tbody tr:hover,#page-billing table tbody tr:hover,#page-receipts table tbody tr:hover{background:#f7fbfb}
+  #page-patients table tbody tr:last-child td,#page-billing table tbody tr:last-child td,#page-receipts table tbody tr:last-child td{border-bottom:0}
+  #page-patients input,#page-patients select,#page-billing input,#page-billing select,#page-receipts input,#page-receipts select{border-radius:10px;border-color:#d9e6e9}
+  #page-patients input:focus,#page-patients select:focus,#page-billing input:focus,#page-billing select:focus,#page-receipts input:focus,#page-receipts select:focus{outline:3px solid rgba(42,152,163,.12);border-color:#4da4af}
+  #page-patients button,#page-billing button,#page-receipts button{transition:background .16s ease,transform .16s ease}
+  #page-patients button:focus-visible,#page-billing button:focus-visible,#page-receipts button:focus-visible{outline:3px solid #d7b16f;outline-offset:2px}
+  #page-patients .stats,#page-billing .stats,#page-receipts .stats,#page-patients .kpis,#page-billing .kpis,#page-receipts .kpis{gap:13px}
+  #page-patients .stat-card,#page-billing .stat-card,#page-receipts .stat-card,#page-patients .kpi,#page-billing .kpi,#page-receipts .kpi{border:1px solid #e0e9ec;border-radius:15px;background:#fff;box-shadow:0 5px 20px rgba(20,71,82,.05)}
+  #page-patients .stat-card strong,#page-billing .stat-card strong,#page-receipts .stat-card strong{color:#165767}
+  @media(max-width:760px){#page-patients>.page-title,#page-billing>.page-title,#page-receipts>.page-title{padding:22px 18px;border-radius:16px}#page-patients>.page-title button,#page-billing>.page-title button,#page-receipts>.page-title button{width:100%}#page-patients table,#page-billing table,#page-receipts table{min-width:560px}}
+  @media(prefers-reduced-motion:reduce){#page-patients button,#page-billing button,#page-receipts button{transition:none}}
+  `;
+  document.head.appendChild(css);
+  window.MYAIMS_UI_VERSION='V130-UNIFIED-PATIENTS-BILLING-RECEIPTS';
 })();
