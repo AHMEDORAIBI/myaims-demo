@@ -16783,7 +16783,7 @@ window.MYAIMS_4D_FOUNDATION_VERSION='DISABLED_V115';
 })();
 
 
-/* V117 — myAIMS Appointments Command Center (local demo data) */
+/* V118 — myAIMS Appointments Command Center (local demo data) */
 (function(){
 'use strict';
 const PAGE='page-appointments',ID='v116-scheduler';
@@ -16798,10 +16798,28 @@ const data=()=>Array.isArray(db?.appointments)?db.appointments:[];
 const allStaff=()=>[...new Set(data().map(a=>a.therapist).filter(Boolean))].sort();
 const settings=()=>{db.schedulerSettings=db.schedulerSettings||{start:'08:00',end:'20:00',slot:30};return db.schedulerSettings};
 const waitlist=()=>{db.appointmentWaitlist=db.appointmentWaitlist||[];return db.appointmentWaitlist};
+const resources=()=>{db.schedulerResources=db.schedulerResources||{rooms:['Treatment Room 1','Treatment Room 2','Assessment Room'],staff:{},closures:[]};return db.schedulerResources};
+const staffConfig=name=>resources().staff[name]||{days:[0,1,2,3,4,5,6],start:settings().start,end:settings().end};
+const dayIndex=date=>dateObj(date).getDay();
+const availabilityIssue=record=>{
+ if(!record||['Cancelled','No Show'].includes(record.status))return '';
+ const cfg=settings(),start=minutes(record.time),end=start+duration(record);
+ if(start<minutes(cfg.start)||end>minutes(cfg.end))return 'Outside clinic working hours';
+ const staff=staffConfig(record.therapist);
+ if(!staff.days.includes(dayIndex(record.date)))return 'Therapist is not working on this weekday';
+ if(start<minutes(staff.start)||end>minutes(staff.end))return 'Outside therapist working hours';
+ const closure=resources().closures.find(c=>c.date===record.date&&(c.staff==='all'||c.staff===record.therapist));
+ if(closure)return 'Therapist unavailable: '+(closure.reason||'day off');
+ if(record.room){
+  const roomOverlap=data().find(b=>b!==record&&b.id!==record.id&&b.date===record.date&&b.room===record.room&&!['Cancelled','No Show'].includes(b.status)&&start<minutes(b.time)+duration(b)&&minutes(b.time)<end);
+  if(roomOverlap)return 'Room occupied by '+roomOverlap.patient+' at '+roomOverlap.time;
+ }
+ return '';
+};
 const isActive=a=>!['Cancelled','No Show'].includes(a.status);
 const canPlace=(record,skip)=>{
  const c=data().find(b=>b!==skip&&b.id!==record.id&&b.date===record.date&&b.therapist===record.therapist&&isActive(b)&&isActive(record)&&minutes(record.time)<minutes(b.time)+duration(b)&&minutes(b.time)<minutes(record.time)+duration(record));
- return c?`Therapist overlap with ${c.patient} at ${c.time}`:'';
+ return c?`Therapist overlap with ${c.patient} at ${c.time}`:availabilityIssue(record);
 };
 const statuses=['Scheduled','Confirmed','Checked In','In Progress','Completed','Cancelled','No Show'];
 const duration=a=>Math.max(5,Math.min(480,Number(a.duration)||60));
@@ -16821,7 +16839,7 @@ function shell(){
 function appointmentCard(a){
  const idx=data().indexOf(a);
  return `<button draggable="true" class="v116-appt v116-${themeStatus(a.status)}" type="button" data-v116-edit="${idx}" title="${safe(a.patient)}">
- <span class="v116-card-time">${safe(a.time)}–${endTime(a)}</span><strong>${safe(a.patient)}</strong><span>${safe(a.service||'Session')}</span><small>${safe(a.therapist||'—')}</small>${conflict(a)?'<b class="v116-conflict">⚠ Conflict</b>':''}</button>`;
+ <span class="v116-card-time">${safe(a.time)}–${endTime(a)}</span><strong>${safe(a.patient)}</strong><span>${safe(a.service||'Session')}</span><small>${safe(a.therapist||'—')}${a.room?' · '+safe(a.room):''}</small>${conflict(a)?'<b class="v116-conflict">⚠ Conflict</b>':''}</button>`;
 }
 function dayContent(day){
  const people=state.staff==='all'?allStaff():[state.staff];
@@ -16848,20 +16866,49 @@ function listContent(){
  const a=filtered().slice().sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time));
  return `<div class="v116-table-scroll"><table class="v116-table"><thead><tr><th>Date / Time</th><th>Patient</th><th>Service</th><th>Therapist</th><th>Status</th><th>Duration</th><th></th></tr></thead><tbody>${a.map(x=>`<tr><td>${safe(x.date)}<br><b>${safe(x.time)}</b></td><td><b>${safe(x.patient)}</b></td><td>${safe(x.service)}</td><td>${safe(x.therapist)}</td><td><span class="v116-pill v116-${themeStatus(x.status)}">${safe(x.status)}</span></td><td>${duration(x)} min</td><td><button type="button" data-v116-edit="${data().indexOf(x)}">Edit</button></td></tr>`).join('')||'<tr><td colspan="7">No appointments found</td></tr>'}</tbody></table></div>`;
 }
+function receptionContent(){
+ const today=state.date;
+ const entries=filtered().filter(a=>a.date===today).sort((a,b)=>a.time.localeCompare(b.time));
+ const columns=[
+  {name:'Expected',statuses:['Scheduled','Confirmed'],color:'expected'},
+  {name:'Arrived',statuses:['Checked In'],color:'arrived'},
+  {name:'In treatment',statuses:['In Progress'],color:'treatment'},
+  {name:'Finished',statuses:['Completed'],color:'finished'}
+ ];
+ const clock=new Date();const isToday=today===iso(clock),now=clock.getHours()*60+clock.getMinutes();
+ return `<div class="v119-reception-head"><div><strong>Live Reception Board</strong><small>Operational status · ${safe(today)}</small></div><div class="v119-reception-clock">${isToday?clock.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'Selected date'}</div></div>
+ <div class="v119-reception-stats"><span><b>${entries.length}</b> total</span><span><b>${entries.filter(a=>a.status==='Checked In').length}</b> arrived</span><span><b>${entries.filter(a=>a.status==='In Progress').length}</b> in session</span><span><b>${entries.filter(a=>a.status==='Completed').length}</b> completed</span><span><b>${entries.filter(a=>['Scheduled','Confirmed'].includes(a.status)&&isToday&&minutes(a.time)+10<now).length}</b> overdue*</span></div>
+ <div class="v119-kanban">${columns.map(col=>{
+ const items=entries.filter(a=>col.statuses.includes(a.status));
+ return `<section class="v119-lane v119-${col.color}"><header><strong>${col.name}</strong><span>${items.length}</span></header><div class="v119-lane-list">${items.map(a=>{
+ const idx=data().indexOf(a),late=isToday&&['Scheduled','Confirmed'].includes(a.status)&&minutes(a.time)+10<now;
+ const next=a.status==='Scheduled'?'Confirmed':a.status==='Confirmed'?'Checked In':a.status==='Checked In'?'In Progress':a.status==='In Progress'?'Completed':null;
+ return `<article class="v119-patient-card"><div class="v119-patient-time">${safe(a.time)} – ${endTime(a)} ${late?'<b class="v119-late">Overdue*</b>':''}</div><strong>${safe(a.patient)}</strong><small>${safe(a.service||'Treatment')}</small><small>${safe(a.therapist||'Unassigned')}${a.room?' · '+safe(a.room):''}</small><div class="v119-card-actions">${next?`<button type="button" data-v119-next="${idx}" data-v119-target="${next}">${next==='Checked In'?'Check in':next==='In Progress'?'Start session':next==='Completed'?'Complete':'Confirm'}</button>`:''}<button type="button" data-v116-edit="${idx}">Details</button></div></article>`;
+ }).join('')||'<div class="v119-lane-empty">No patients in this stage</div>'}</div></section>`;
+ }).join('')}</div>
+ <div class="v119-footer">* Overdue is a visual indicator when the scheduled start time is more than 10 minutes past and the patient is not checked in. It does not prove the patient is absent.</div>`;
+}
 function render(){
  const host=shell();if(!host)return;
  const all=data(),today=iso(new Date()),todays=all.filter(a=>a.date===today);
  const conflictCount=all.filter(conflict).length;
  host.innerHTML=`<header class="v116-head"><div><div class="v116-eyebrow">MY AIMS · CLINICAL OPERATIONS</div><h2>Appointments Command Center</h2><p>Manage bookings, therapists, attendance and schedules in one place</p></div><div class="v116-top-actions"><button type="button" data-v116-export>Export CSV</button><button type="button" class="v116-primary" data-v116-new>+ New Appointment</button></div></header>
  <div class="v116-kpis"><div><span>Today's appointments</span><strong>${todays.length}</strong><small>${today}</small></div><div><span>Confirmed</span><strong>${todays.filter(a=>a.status==='Confirmed').length}</strong><small>Ready for treatment</small></div><div><span>In progress</span><strong>${todays.filter(a=>a.status==='In Progress').length}</strong><small>Active sessions</small></div><div><span>Schedule conflicts</span><strong>${conflictCount}</strong><small>${conflictCount?'Requires attention':'No overlapping bookings'}</small></div></div>
- <div class="v116-toolbar"><div class="v116-switch">${['day','week','month','list'].map(x=>`<button type="button" data-v116-view="${x}" class="${state.view===x?'active':''}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div><div class="v116-date-controls"><button data-v116-prev type="button">‹</button><button data-v116-today type="button">Today</button><button data-v116-next type="button">›</button><input aria-label="Selected date" type="date" data-v116-date value="${state.date}"><b>${heading()}</b></div></div>
- <div class="v117-extras"><button type="button" data-v117-waitlist>◷ Waiting list <b>${waitlist().length}</b></button><button type="button" data-v117-hours>⚙ Clinic hours</button><span>Drag an appointment to another day or time slot to reschedule</span></div>
+ <div class="v116-toolbar"><div class="v116-switch">${['day','week','month','list','reception'].map(x=>`<button type="button" data-v116-view="${x}" class="${state.view===x?'active':''}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div><div class="v116-date-controls"><button data-v116-prev type="button">‹</button><button data-v116-today type="button">Today</button><button data-v116-next type="button">›</button><input aria-label="Selected date" type="date" data-v116-date value="${state.date}"><b>${heading()}</b></div></div>
+ <div class="v117-extras"><button type="button" data-v117-waitlist>◷ Waiting list <b>${waitlist().length}</b></button><button type="button" data-v117-hours>⚙ Clinic hours</button><button type="button" data-v118-resources>◫ Rooms & therapists</button><button type="button" data-v118-leave>▣ Time off</button><span>Drag an appointment to another day or time slot to reschedule</span></div>
  <div class="v116-filters"><input type="search" data-v116-search placeholder="Search patient, service or ID..." value="${safe(state.search)}"><select data-v116-staff><option value="all">All therapists</option>${allStaff().map(x=>`<option value="${safe(x)}" ${state.staff===x?'selected':''}>${safe(x)}</option>`).join('')}</select><select data-v116-status><option value="all">All statuses</option>${statuses.map(x=>`<option ${state.status===x?'selected':''}>${x}</option>`).join('')}</select><span>${filtered().length} appointments</span></div>
- <div class="v116-board">${state.view==='day'?dayContent(state.date):state.view==='week'?weekContent():state.view==='month'?monthContent():listContent()}</div>
+ <div class="v116-board">${state.view==='day'?dayContent(state.date):state.view==='week'?weekContent():state.view==='month'?monthContent():state.view==='reception'?receptionContent():listContent()}</div>
  <div class="v116-legend">${statuses.map(x=>`<span><i class="v116-dot v116-${themeStatus(x)}"></i>${x}</span>`).join('')}</div>
  <div id="v116-dialog" class="v116-dialog" hidden></div>`;
  host.onclick=e=>{
  const b=e.target.closest('button');if(!b)return;
+ if(b.hasAttribute('data-v119-next')){
+  const idx=Number(b.dataset.v119Next),a=data()[idx],target=b.dataset.v119Target;
+  const allowed={'Scheduled':'Confirmed','Confirmed':'Checked In','Checked In':'In Progress','In Progress':'Completed'};
+  if(!a||allowed[a.status]!==target)return;
+  if(!confirm('Change '+a.patient+' status to '+target+'?'))return;
+  a.status=target;save();render();return;
+ }
  if(b.hasAttribute('data-v116-view')){state.view=b.dataset.v116View;render();return}
  if(b.hasAttribute('data-v116-prev')||b.hasAttribute('data-v116-next')){const n=b.hasAttribute('data-v116-next')?1:-1;state.date=state.view==='month'?iso(new Date(dateObj(state.date).getFullYear(),dateObj(state.date).getMonth()+n,1)):shift(state.date,n*(state.view==='week'?7:1));render();return}
  if(b.hasAttribute('data-v116-today')){state.date=iso(new Date());render();return}
@@ -16873,6 +16920,8 @@ function render(){
  if(b.hasAttribute('data-v116-export')){exportCsv();return}
  if(b.hasAttribute('data-v117-waitlist')){showWaitlist();return}
  if(b.hasAttribute('data-v117-hours')){showHours();return}
+ if(b.hasAttribute('data-v118-resources')){showResources();return}
+ if(b.hasAttribute('data-v118-leave')){showLeave();return}
  };
  // Native drag and drop, with collision checks and confirmation before saving.
  host.querySelectorAll('[data-v116-edit]').forEach(el=>{
@@ -16902,17 +16951,18 @@ function render(){
 function edit(idx,time='09:00',staff=''){
  const host=document.getElementById(ID),dlg=host?.querySelector('#v116-dialog');if(!dlg)return;
  const old=idx>=0?data()[idx]:null;
- const a=old||{date:state.date,time,therapist:staff,patient:'',service:'Physiotherapy Session',status:'Scheduled',duration:60,notes:''};
+ const a=old||{date:state.date,time,therapist:staff,patient:'',service:'Physiotherapy Session',status:'Scheduled',duration:60,room:'',notes:''};
  const opts=(arr,value)=>arr.map(x=>`<option value="${safe(x)}" ${x===value?'selected':''}>${safe(x)}</option>`).join('');
- dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card" role="dialog" aria-modal="true" aria-label="Appointment details"><div class="v116-dialog-head"><h3>${old?'Edit appointment':'New appointment'}</h3><button type="button" data-v116-close>✕</button></div><form id="v116-form"><div class="v116-form-grid"><label>Patient<select name="patient" required><option value="">Select patient</option>${opts([...new Set([...db.patients.map(p=>p.name),a.patient].filter(Boolean))],a.patient)}</select></label><label>Therapist<input name="therapist" list="v116-staff-list" required value="${safe(a.therapist)}"><datalist id="v116-staff-list">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="${duration(a)}"></label><label>Service<input name="service" required value="${safe(a.service)}"></label><label>Status<select name="status">${opts([...new Set([...statuses,a.status].filter(Boolean))],a.status)}</select></label><label class="v116-notes">Notes<textarea name="notes" rows="3">${safe(a.notes)}</textarea></label></div><div class="v116-form-error" aria-live="polite"></div><div class="v116-form-actions">${old?'<button type="button" data-v116-delete class="v116-danger">Delete</button>':''}<button type="button" data-v116-close>Cancel</button><button class="v116-primary" type="submit">Save appointment</button></div></form></div>`;
+ dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card" role="dialog" aria-modal="true" aria-label="Appointment details"><div class="v116-dialog-head"><h3>${old?'Edit appointment':'New appointment'}</h3><button type="button" data-v116-close>✕</button></div><form id="v116-form"><div class="v116-form-grid"><label>Patient<select name="patient" required><option value="">Select patient</option>${opts([...new Set([...db.patients.map(p=>p.name),a.patient].filter(Boolean))],a.patient)}</select></label><label>Therapist<input name="therapist" list="v116-staff-list" required value="${safe(a.therapist)}"><datalist id="v116-staff-list">${allStaff().map(x=>`<option value="${safe(x)}">`).join('')}</datalist></label><label>Date<input type="date" name="date" required value="${safe(a.date)}"></label><label>Time<input type="time" name="time" required value="${safe(a.time)}"></label><label>Duration (minutes)<input type="number" name="duration" min="5" max="480" step="5" value="${duration(a)}"></label><label>Service<input name="service" required value="${safe(a.service)}"></label><label>Room<select name="room"><option value="">Unassigned</option>${opts(resources().rooms,a.room||'')}</select></label><label>Status<select name="status">${opts([...new Set([...statuses,a.status].filter(Boolean))],a.status)}</select></label><label class="v116-notes">Notes<textarea name="notes" rows="3">${safe(a.notes)}</textarea></label></div><div class="v116-form-error" aria-live="polite"></div><div class="v116-form-actions">${old?'<button type="button" data-v116-delete class="v116-danger">Delete</button>':''}<button type="button" data-v116-close>Cancel</button><button class="v116-primary" type="submit">Save appointment</button></div></form></div>`;
  dlg.onclick=e=>{
   if(e.target===dlg||e.target.closest('[data-v116-close]')){dlg.hidden=true;return}
   if(e.target.closest('[data-v116-delete]')&&old&&confirm('Delete this appointment?')){data().splice(idx,1);save();render()}
  };
  dlg.querySelector('form').onsubmit=e=>{
   e.preventDefault();const f=new FormData(e.currentTarget);
-  const record={...(old||{}),patient:String(f.get('patient')),therapist:String(f.get('therapist')).trim(),date:String(f.get('date')),time:String(f.get('time')),duration:Number(f.get('duration')),service:String(f.get('service')).trim(),status:String(f.get('status')),notes:String(f.get('notes'))};
+  const record={...(old||{}),patient:String(f.get('patient')),therapist:String(f.get('therapist')).trim(),date:String(f.get('date')),time:String(f.get('time')),duration:Number(f.get('duration')),room:String(f.get('room')||''),service:String(f.get('service')).trim(),status:String(f.get('status')),notes:String(f.get('notes'))};
   if(!record.patient||!record.therapist||!record.date||!record.time||!record.service)return;
+  if(!Number.isFinite(record.duration)||record.duration<5||record.duration>480){dlg.querySelector('.v116-form-error').textContent='Duration must be 5–480 minutes';return}
   const issue=canPlace(record,old);if(issue){dlg.querySelector('.v116-form-error').textContent=issue;return}
   if(old)Object.assign(old,record);
   else{record.id='A-'+Date.now().toString(36).toUpperCase();data().push(record)}
@@ -16927,6 +16977,57 @@ function showHours(){
  dlg.onclick=e=>{if(e.target===dlg||e.target.closest('[data-v117-close]'))dlg.hidden=true};
  dlg.querySelector('form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.currentTarget);const start=String(f.get('start')),end=String(f.get('end'));if(minutes(end)<=minutes(start)){dlg.querySelector('.v116-form-error').textContent='Closing time must be after opening time';return}Object.assign(settings(),{start,end});save();render()};
 }
+
+function showResources(){
+ const dlg=document.querySelector('#v116-dialog');if(!dlg)return;
+ const r=resources(),staff=[...new Set([...allStaff(),...Object.keys(r.staff)])];
+ dlg.hidden=false;
+ dlg.innerHTML=`<div class="v116-dialog-card" role="dialog" aria-modal="true" aria-label="Rooms and therapists"><div class="v116-dialog-head"><h3>Rooms & therapist availability</h3><button type="button" data-v118-close>✕</button></div>
+ <form id="v118-rooms"><label>Rooms (one room per line)<textarea name="rooms" rows="4" class="v118-textarea">${safe(r.rooms.join('\n'))}</textarea></label><div class="v116-form-actions"><button type="submit" class="v116-primary">Save rooms</button></div></form>
+ <hr><form id="v118-staff"><div class="v116-form-grid"><label>Therapist<select name="therapist" required><option value="">Select therapist</option>${staff.map(x=>`<option value="${safe(x)}">${safe(x)}</option>`).join('')}</select></label><label>Start<input name="start" type="time" required value="${settings().start}"></label><label>End<input name="end" type="time" required value="${settings().end}"></label></div><p class="v117-help">Working weekdays</p><div class="v118-days">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((x,i)=>`<label><input type="checkbox" name="day" value="${i}" checked> ${x}</label>`).join('')}</div><div class="v116-form-error"></div><div class="v116-form-actions"><button type="button" data-v118-close>Close</button><button type="submit" class="v116-primary">Save therapist schedule</button></div></form></div>`;
+ dlg.onclick=e=>{if(e.target===dlg||e.target.closest('[data-v118-close]'))dlg.hidden=true};
+ const form=dlg.querySelector('#v118-staff');
+ form.elements.therapist.onchange=()=>{
+  const name=form.elements.therapist.value;if(!name)return;
+  const cfg=staffConfig(name);
+  form.elements.start.value=cfg.start;form.elements.end.value=cfg.end;
+  form.querySelectorAll('[name=day]').forEach(c=>c.checked=cfg.days.includes(Number(c.value)));
+ };
+ dlg.querySelector('#v118-rooms').onsubmit=e=>{
+  e.preventDefault();
+  const next=String(new FormData(e.currentTarget).get('rooms')||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(!next.length){alert('Add at least one room');return}
+  const removed=r.rooms.filter(x=>!next.includes(x));
+  if(removed.some(x=>data().some(a=>a.room===x))&&!confirm('Some appointments use removed rooms. Continue?'))return;
+  r.rooms=[...new Set(next)];save();showResources();
+ };
+ form.onsubmit=e=>{
+  e.preventDefault();const f=new FormData(form),name=String(f.get('therapist')||'');
+  const start=String(f.get('start')),end=String(f.get('end')),days=f.getAll('day').map(Number);
+  if(!name||!days.length||minutes(end)<=minutes(start)){form.querySelector('.v116-form-error').textContent='Select therapist, working days, and valid hours';return}
+  r.staff[name]={start,end,days};save();showResources();
+ };
+}
+function showLeave(){
+ const dlg=document.querySelector('#v116-dialog');if(!dlg)return;
+ const r=resources(),staff=allStaff();
+ dlg.hidden=false;dlg.innerHTML=`<div class="v116-dialog-card" role="dialog" aria-modal="true" aria-label="Therapist time off"><div class="v116-dialog-head"><h3>Time off & closures</h3><button type="button" data-v118-close>✕</button></div>
+ <form id="v118-leave"><div class="v116-form-grid"><label>Date<input name="date" type="date" required value="${state.date}"></label><label>Therapist<select name="staff"><option value="all">Entire clinic</option>${staff.map(x=>`<option value="${safe(x)}">${safe(x)}</option>`).join('')}</select></label><label class="v116-notes">Reason<input name="reason" maxlength="100" placeholder="Annual leave / public holiday"></label></div><div class="v116-form-actions"><button type="submit" class="v116-primary">Add closure</button></div></form>
+ <div class="v118-leave-list">${r.closures.slice().sort((a,b)=>a.date.localeCompare(b.date)).map((c,i)=>`<div><span><b>${safe(c.date)}</b> · ${safe(c.staff)} · ${safe(c.reason||'Unavailable')}</span><button type="button" data-v118-remove="${r.closures.indexOf(c)}">Remove</button></div>`).join('')||'<p>No closures recorded</p>'}</div><div class="v116-form-actions"><button type="button" data-v118-close>Close</button></div></div>`;
+ dlg.onclick=e=>{
+  if(e.target===dlg||e.target.closest('[data-v118-close]')){dlg.hidden=true;return}
+  const b=e.target.closest('[data-v118-remove]');if(b){r.closures.splice(Number(b.dataset.v118Remove),1);save();showLeave()}
+ };
+ dlg.querySelector('form').onsubmit=e=>{
+  e.preventDefault();const f=new FormData(e.currentTarget);
+  const date=String(f.get('date')),staff=String(f.get('staff')),reason=String(f.get('reason')||'');
+  const affected=data().filter(a=>a.date===date&&(staff==='all'||a.therapist===staff)&&isActive(a));
+  if(affected.length&&!confirm(`${affected.length} existing appointment(s) on this date will need rescheduling. Add closure?`))return;
+  if(!r.closures.some(c=>c.date===date&&c.staff===staff))r.closures.push({date,staff,reason});
+  save();showLeave();
+ };
+}
+
 function showWaitlist(){
  const dlg=document.querySelector('#v116-dialog');if(!dlg)return;
  const entries=waitlist();dlg.hidden=false;
@@ -17030,9 +17131,13 @@ const style=document.createElement('style');style.id='v116-scheduler-style';styl
 #v116-scheduler .v117-wait-row button{background:#eaf6f7;border:0;color:#116d79;padding:8px;border-radius:7px;margin-left:4px}
 @media(max-width:800px){.v116-head{align-items:flex-start;flex-direction:column}.v116-kpis{grid-template-columns:repeat(2,1fr)}.v116-form-grid{grid-template-columns:1fr}.v116-toolbar{align-items:flex-start}.v116-date-controls b{width:100%}}
 `;
+style.textContent+=`\n.v118-textarea{width:100%;padding:10px;border:1px solid #d9e6e9;border-radius:8px;margin-top:8px}.v118-days{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}.v118-days label{font-size:12px}.v118-leave-list{max-height:220px;overflow:auto;margin:16px 0}.v118-leave-list>div{display:flex;justify-content:space-between;align-items:center;padding:9px;border-bottom:1px solid #e8eeee;font-size:12px}.v118-leave-list button{border:1px solid #e9caca;color:#9d4141;border-radius:6px;background:white;padding:6px}\n`;
+style.textContent+=`
+.v119-reception-head{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:19px 20px;background:linear-gradient(115deg,#eaf7f7,#fff);border-bottom:1px solid #d9e9ea}.v119-reception-head strong{display:block;font-size:20px;color:#15505c}.v119-reception-head small{font-size:11px;color:#77929a}.v119-reception-clock{font-size:14px;font-weight:800;color:#127e89}.v119-reception-stats{display:flex;flex-wrap:wrap;gap:8px;padding:14px;background:#fff}.v119-reception-stats span{border:1px solid #e0ecee;border-radius:30px;padding:7px 13px;font-size:11px;color:#607c85}.v119-reception-stats b{font-size:14px;color:#0a6e7b;margin-right:3px}.v119-kanban{display:grid;grid-template-columns:repeat(4,minmax(205px,1fr));gap:12px;padding:14px;min-width:850px;background:#f7fbfb}.v119-lane{border:1px solid #e1ebed;border-radius:12px;background:#fff;overflow:hidden}.v119-lane>header{display:flex;justify-content:space-between;align-items:center;padding:14px;border-bottom:1px solid #eaf1f2;color:#2c6973;font-size:12px}.v119-lane>header span{background:#eaf5f6;border-radius:20px;padding:3px 9px}.v119-arrived>header{border-top:4px solid #4b9bc8}.v119-expected>header{border-top:4px solid #d9a44a}.v119-treatment>header{border-top:4px solid #8b77ce}.v119-finished>header{border-top:4px solid #50a981}.v119-lane-list{display:flex;flex-direction:column;gap:9px;padding:10px;min-height:210px}.v119-patient-card{padding:12px;background:#fcfefe;border:1px solid #e1ecee;border-radius:10px;box-shadow:0 3px 10px #123d4b08}.v119-patient-card strong,.v119-patient-card small{display:block;margin-top:6px}.v119-patient-card strong{font-size:13px;color:#1c5662}.v119-patient-card small{font-size:10px;color:#78949c}.v119-patient-time{font-size:11px;font-weight:800;color:#0a7d8a}.v119-late{color:#b34b43;background:#fff0ec;border-radius:5px;padding:3px 5px;font-size:9px;margin-left:5px}.v119-card-actions{display:flex;gap:5px;margin-top:12px;flex-wrap:wrap}#v116-scheduler .v119-card-actions button{border:1px solid #d8e8eb;border-radius:7px;padding:7px 9px;font-size:10px;font-weight:750;background:#fff;color:#3c7580}#v116-scheduler .v119-card-actions button:first-child{background:#087d89;color:#fff;border-color:#087d89}.v119-lane-empty{font-size:11px;color:#9bb0b6;padding:22px 8px;text-align:center}.v119-footer{padding:12px 17px;font-size:10px;color:#8ba0a6;background:#fff}
+`;
 document.head.appendChild(style);
 function mount(){if(document.getElementById(PAGE))render()}
 document.addEventListener('click',e=>{if(e.target.closest('.nav-item[data-page="appointments"]'))setTimeout(mount,0)},true);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
-window.MYAIMS_APPOINTMENTS_VERSION='V117';
+window.MYAIMS_APPOINTMENTS_VERSION='V119';
 })();
